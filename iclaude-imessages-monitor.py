@@ -248,59 +248,65 @@ class iMessageMonitorUnified:
 
     def extract_image_paths_from_response(self, response):
         """Extract file paths to images from Claude's response and return (paths, cleaned_response)"""
-        patterns = [
-            r'(?:saved|created|generated|wrote|found|located)\s+(?:(?:to|at|in)\s+)?["\']?([/~][^"\'\\s]+\.(?:png|jpg|jpeg|gif|heic))["\']?',
-            r'(?:image|file|photo)\s+(?:at|in|is)\s+["\']?([/~][^"\'\\s]+\.(?:png|jpg|jpeg|gif|heic))["\']?',
-            r'["\']([/~][^"\'\\s]+\.(?:png|jpg|jpeg|gif|heic))["\']',
-            r'`([/~][^`]+\.(?:png|jpg|jpeg|gif|heic))`',
-            r'\b([/~][\w/.-]+\.(?:png|jpg|jpeg|gif|heic))\b',
-        ]
+        # Match absolute paths (starting with / or ~) followed by image extension
+        # Using a more permissive pattern that captures the full path
+        pattern = r'([/~](?:[^\s<>"|*?])+\.(?:png|jpg|jpeg|gif|heic|PNG|JPG|JPEG|GIF|HEIC))'
 
         image_paths = []
-        path_spans = []  # Track spans to remove from response
+        path_spans = []  # Track (start, end, path) tuples
 
-        for pattern in patterns:
-            matches = re.finditer(pattern, response, re.IGNORECASE)
-            for match in matches:
-                path = match.group(1)
+        for match in re.finditer(pattern, response):
+            path = match.group(1)
 
-                # Expand ~ to home directory
-                if path.startswith('~'):
-                    path = str(Path(path).expanduser())
-                elif not path.startswith('/'):
-                    path = str(Path.cwd() / path)
+            # Expand ~ to home directory
+            if path.startswith('~'):
+                expanded_path = str(Path(path).expanduser())
+            else:
+                expanded_path = path
 
-                if Path(path).exists():
-                    image_paths.append(path)
-                    path_spans.append(match.span())
+            # Only include if file exists
+            if Path(expanded_path).exists():
+                image_paths.append(expanded_path)
+                path_spans.append((match.start(), match.end(), expanded_path))
 
         # Remove duplicates while preserving order
         seen = set()
         unique_paths = []
-        for p in image_paths:
-            if p not in seen:
-                seen.add(p)
-                unique_paths.append(p)
+        unique_spans = []
+        for (start, end, path) in path_spans:
+            if path not in seen:
+                seen.add(path)
+                unique_paths.append(path)
+                unique_spans.append((start, end))
 
         # Clean response by removing path references
         cleaned_response = response
         if unique_paths:
             # Sort spans in reverse order to remove from end to start
-            path_spans.sort(reverse=True)
-            for start, end in path_spans:
-                # Remove the path and clean up extra whitespace/punctuation
-                before = cleaned_response[:start].rstrip()
-                after = cleaned_response[end:].lstrip()
+            unique_spans.sort(reverse=True)
+            for start, end in unique_spans:
+                # Remove the path and clean up surrounding context
+                before = cleaned_response[:start]
+                after = cleaned_response[end:]
 
-                # Clean up common patterns around removed paths
-                if before.endswith(('at', 'to', 'in', 'is', ':')):
-                    before = before.rsplit(None, 1)[0] if before.split() else before
+                # Remove surrounding quotes/backticks if path was quoted
+                if before.endswith(('`', '"', "'")):
+                    before = before[:-1]
+                    if after.startswith(('`', '"', "'")):
+                        after = after[1:]
 
-                cleaned_response = before + ' ' + after
+                # Clean up common lead-in phrases that precede paths
+                before = re.sub(r'(?:saved|created|generated|wrote|found|located)\s+(?:to|at|in)\s*$', '', before, flags=re.IGNORECASE)
+                before = re.sub(r'(?:image|file|photo)\s+(?:at|in|is|located)\s*$', 'image', before, flags=re.IGNORECASE)
+                before = before.rstrip(' :')
 
-            # Clean up multiple spaces and empty lines
-            cleaned_response = re.sub(r' +', ' ', cleaned_response)
-            cleaned_response = re.sub(r'\n\s*\n\s*\n+', '\n\n', cleaned_response)
+                cleaned_response = before + after
+
+            # Clean up artifacts
+            cleaned_response = re.sub(r'``', '', cleaned_response)  # Remove empty backticks
+            cleaned_response = re.sub(r'""', '', cleaned_response)  # Remove empty quotes
+            cleaned_response = re.sub(r' +', ' ', cleaned_response)  # Multiple spaces
+            cleaned_response = re.sub(r'\n\s*\n\s*\n+', '\n\n', cleaned_response)  # Multiple newlines
             cleaned_response = cleaned_response.strip()
 
         return unique_paths, cleaned_response
