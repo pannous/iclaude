@@ -534,8 +534,14 @@ end run
                 new_messages = self.get_new_messages(last_id)
 
                 for message in new_messages:
-                    if self.should_process_message(message):
-                        self.process_message(message)
+                    try:
+                        if self.should_process_message(message):
+                            self.process_message(message)
+                    except SystemExit as e:
+                        # Update ID before stopping so stop command isn't re-processed on restart
+                        last_id = message['message_id']
+                        self.update_last_processed_id(last_id)
+                        raise  # Re-raise to exit outer loop
 
                     last_id = message['message_id']
                     self.update_last_processed_id(last_id)
