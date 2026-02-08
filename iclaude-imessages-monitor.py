@@ -19,7 +19,7 @@ load_dotenv()
 
 
 class iMessageMonitorUnified:
-    def __init__(self, monitored_senders=None, context_messages=10):
+    def __init__(self, monitored_senders=None, context_messages=10, custom_prompt=None):
         self.db_path = Path.home() / "Library/Messages/chat.db"
         self.state_file = Path("state.txt")
         self.sessions_dir = Path("sessions")
@@ -27,6 +27,7 @@ class iMessageMonitorUnified:
         self.monitored_senders = monitored_senders or []
         self.poll_interval = 1
         self.context_messages = context_messages
+        self.custom_prompt = custom_prompt
         self.my_contact_ids = self._get_my_contact_ids()
 
         # Supported image MIME types
@@ -269,7 +270,7 @@ class iMessageMonitorUnified:
     def execute_claude(self, message_text, previous_messages=None, chat_key=None, image_paths=None):
         """Execute claude command with context, images, and session management"""
         try:
-            cmd = ['claude']
+            cmd = ['claude','--dangerously-skip-permissions']
 
             # Check if there's an existing session for this chat
             session_id = None
@@ -302,6 +303,10 @@ class iMessageMonitorUnified:
             elif not message_text:
                 message_text = "What do you see in this image?"
 
+            # Prepend custom prompt if configured
+            if self.custom_prompt:
+                message_text = f"{self.custom_prompt}\n\n{message_text}"
+
             cmd.append(message_text)
 
             print(f"🤖 Executing: {' '.join(cmd[:3])}...")
@@ -318,7 +323,7 @@ class iMessageMonitorUnified:
                 return f"Error: {result.stderr.strip()}"
 
         except subprocess.TimeoutExpired:
-            return "Error: Claude command timed out"
+            return None  # Silent timeout
         except Exception as e:
             return f"Error executing Claude: {str(e)}"
 
@@ -464,13 +469,16 @@ end run
         date = message['date']
         msg_type = self.get_message_type(message)
         chat_key = self.get_chat_key(message)
+        recipient = self.get_reply_recipient(message)
 
         print(f"\n📨 [{date}] {msg_type}: {content or '[no text]'}")
+
+        # Send immediate acknowledgment
+        self.send_imessage(recipient, "⏳")
 
         # Check for stop command
         if self.is_stop_command(content):
             print("🛑 STOP command received - shutting down...")
-            recipient = self.get_reply_recipient(message)
             self.send_imessage(recipient, "Bot stopped.")
             raise SystemExit("Stop command received")
 
@@ -490,6 +498,11 @@ end run
 
         # Execute Claude with context, images, and session management
         response = self.execute_claude(content, previous_messages, chat_key, image_paths)
+
+        # Skip sending if timeout occurred (response is None)
+        if response is None:
+            return
+
         print(f"💬 Claude response: {response[:100]}...")
 
         # Check if Claude generated any images in the response
@@ -498,7 +511,6 @@ end run
             print(f"🖼️  Claude generated {len(generated_images)} image(s)")
 
         # Send response back with any generated images
-        recipient = self.get_reply_recipient(message)
         self.send_imessage(recipient, response, generated_images if generated_images else None)
 
     def monitor(self):
@@ -548,7 +560,15 @@ def main():
         print("Please create a .env file with MONITORED_SENDERS=sender1,sender2,sender3")
         return
 
-    monitor = iMessageMonitorUnified(monitored_senders=monitored_senders)
+    # Load custom prompt from environment variable
+    custom_prompt = os.getenv("CUSTOM_PROMPT", "").strip()
+    if custom_prompt:
+        print(f"📝 Custom prompt loaded: {custom_prompt[:50]}{'...' if len(custom_prompt) > 50 else ''}")
+
+    monitor = iMessageMonitorUnified(
+        monitored_senders=monitored_senders,
+        custom_prompt=custom_prompt if custom_prompt else None
+    )
     monitor.monitor()
 
 
