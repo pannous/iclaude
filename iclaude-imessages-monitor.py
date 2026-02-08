@@ -10,6 +10,7 @@ import re
 import sqlite3
 import subprocess
 import time
+import uuid
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -155,6 +156,14 @@ class iMessageMonitorUnified:
         """Determine if message should be processed"""
         return self.is_from_monitored_sender(message) or self.is_self_message(message)
 
+    def is_stop_command(self, message_text):
+        """Check if message is a stop command in any variant"""
+        if not message_text:
+            return False
+        # Remove all punctuation and whitespace, convert to lowercase
+        clean_text = re.sub(r'[^\w\s]', '', message_text.strip()).lower()
+        return clean_text == 'stop'
+
     def get_message_type(self, message):
         """Get a description of the message type"""
         if message['is_from_me'] == 1:
@@ -269,6 +278,12 @@ class iMessageMonitorUnified:
                 if session_id:
                     cmd.extend(['--resume', session_id])
                     print(f"🔄 Resuming session: {session_id}")
+                else:
+                    # Create new session with UUID
+                    session_id = str(uuid.uuid4())
+                    cmd.extend(['--session-id', session_id])
+                    self.save_session(chat_key, session_id)
+                    print(f"💾 Created new session: {session_id}")
 
             # Add image parameters
             if image_paths:
@@ -277,7 +292,7 @@ class iMessageMonitorUnified:
                 print(f"🖼️  Attached {len(image_paths)} image(s)")
 
             # Add context from previous messages if available and no session
-            if previous_messages and not session_id:
+            if previous_messages and not self.load_session(chat_key):
                 context = "Previous conversation:\n"
                 for msg in previous_messages:
                     sender = "Assistant" if msg['is_from_me'] else "User"
@@ -298,21 +313,7 @@ class iMessageMonitorUnified:
             )
 
             if result.returncode == 0:
-                response = result.stdout.strip()
-
-                # Try to extract session ID from output if this is a new session
-                if not session_id and chat_key and '--resume' not in cmd:
-                    if result.stderr:
-                        for line in result.stderr.split('\n'):
-                            if 'session' in line.lower() and len(line) < 50:
-                                parts = line.split()
-                                for part in parts:
-                                    if len(part) > 10 and part.replace('-', '').isalnum():
-                                        print(f"💾 Saved session: {part}")
-                                        self.save_session(chat_key, part)
-                                        break
-
-                return response
+                return result.stdout.strip()
             else:
                 return f"Error: {result.stderr.strip()}"
 
@@ -465,6 +466,13 @@ end run
         chat_key = self.get_chat_key(message)
 
         print(f"\n📨 [{date}] {msg_type}: {content or '[no text]'}")
+
+        # Check for stop command
+        if self.is_stop_command(content):
+            print("🛑 STOP command received - shutting down...")
+            recipient = self.get_reply_recipient(message)
+            self.send_imessage(recipient, "Bot stopped.")
+            raise SystemExit("Stop command received")
 
         # Get image attachments
         image_attachments = self.get_message_attachments(message['message_id'])
