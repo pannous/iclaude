@@ -36,6 +36,20 @@ class iMessageMonitorUnified:
             'image/gif', 'image/heic', 'image/heif'
         ]
 
+        # Supported file extensions for sending
+        self.sendable_extensions = [
+            # Images
+            '.jpg', '.jpeg', '.png', '.gif', '.heic', '.heif',
+            # Audio
+            '.mp3', '.m4a', '.wav', '.aac', '.flac', '.ogg',
+            # Video
+            '.mp4', '.mov', '.avi', '.mkv', '.m4v',
+            # Documents
+            '.pdf', '.doc', '.docx', '.txt', '.md',
+            # Archives
+            '.zip', '.tar', '.gz'
+        ]
+
     def _get_my_contact_ids(self):
         """Get user's own contact identifiers for self-message detection"""
         query = """
@@ -247,22 +261,32 @@ class iMessageMonitorUnified:
         session_file.write_text(session_id)
 
     def extract_image_paths_from_response(self, response):
-        """Extract file paths to images from Claude's response and return (paths, cleaned_response)"""
-        # Match image paths in different formats:
-        # 1. Quoted paths (can contain spaces): "/path/to/file.jpg" or '/path/to/file.jpg'
-        # 2. Backtick paths (can contain spaces): `/path/to/file.jpg`
-        # 3. Unquoted paths (no spaces): /path/to/file.jpg
+        """Extract file paths from Claude's response and return (paths, cleaned_response)"""
+        # Build extension pattern from supported extensions (case-insensitive)
+        # Include both lowercase and uppercase variants
+        exts = []
+        for ext in self.sendable_extensions:
+            ext_clean = ext.lstrip('.')
+            exts.append(ext_clean.lower())
+            exts.append(ext_clean.upper())
+            exts.append(ext_clean.capitalize())
+        ext_pattern = '|'.join(set(exts))  # Remove duplicates
+
+        # Match file paths starting with /, ~, or /Users/me
+        # Supports quoted, backtick-wrapped, bold-wrapped (**), and unquoted paths
         patterns = [
-            r'["\']([/~][^"\']+\.(?:png|jpg|jpeg|gif|heic|PNG|JPG|JPEG|GIF|HEIC))["\']',  # Quoted paths
-            r'`([/~][^`]+\.(?:png|jpg|jpeg|gif|heic|PNG|JPG|JPEG|GIF|HEIC))`',  # Backtick paths
-            r'([/~](?:[^\s<>"|*?])+\.(?:png|jpg|jpeg|gif|heic|PNG|JPG|JPEG|GIF|HEIC))',  # Unquoted paths
+            rf'["\']([/~][^"\']+\.(?:{ext_pattern}))["\']',  # Quoted: "/path" or '/path'
+            rf'`([/~][^`]+\.(?:{ext_pattern}))`',  # Backtick: `/path`
+            rf'\*\*([/~][^\*]+\.(?:{ext_pattern}))\*\*',  # Bold: **/path**
+            rf'(?:^|(?<=\s))((?:/Users/me|~|/[a-zA-Z])[^\s<>"|*?`\']*\.(?:{ext_pattern}))(?=\s|$)',  # Unquoted paths
         ]
 
-        image_paths = []
+        file_paths = []
         path_spans = []  # Track (start, end, path) tuples
 
-        for pattern in patterns:
+        for idx, pattern in enumerate(patterns):
             for match in re.finditer(pattern, response):
+                # Get the path from group 1
                 path = match.group(1)
 
                 # Expand ~ to home directory
@@ -273,9 +297,15 @@ class iMessageMonitorUnified:
 
                 # Only include if file exists
                 if Path(expanded_path).exists():
-                    # Use the full match span (including quotes) for removal
-                    image_paths.append(expanded_path)
-                    path_spans.append((match.start(), match.end(), expanded_path))
+                    # For quoted/backtick/bold paths, use full match span
+                    # For unquoted paths (idx=3), use group 1 span to avoid removing surrounding whitespace
+                    if idx < 3:
+                        span_start, span_end = match.start(), match.end()
+                    else:
+                        span_start, span_end = match.start(1), match.end(1)
+
+                    file_paths.append(expanded_path)
+                    path_spans.append((span_start, span_end, expanded_path))
 
         # Remove duplicates while preserving order
         seen = set()
@@ -298,8 +328,8 @@ class iMessageMonitorUnified:
                 after = cleaned_response[end:]
 
                 # Clean up common lead-in phrases that precede paths
-                before = re.sub(r'(?:saved|created|generated|wrote|found|located)\s+(?:to|at|in)\s*$', '', before, flags=re.IGNORECASE)
-                before = re.sub(r'(?:image|file|photo)\s+(?:at|in|is|located)\s*$', 'image', before, flags=re.IGNORECASE)
+                before = re.sub(r'(?:saved|created|generated|wrote|found|located|sending)\s+(?:to|at|in)\s*$', '', before, flags=re.IGNORECASE)
+                before = re.sub(r'(?:image|file|photo|song|music|audio|video|document)\s+(?:at|in|is|located)\s*$', '', before, flags=re.IGNORECASE)
                 before = before.rstrip(' :')
 
                 cleaned_response = before + after
@@ -332,22 +362,26 @@ class iMessageMonitorUnified:
                     self.save_session(chat_key, session_id)
                     print(f"💾 Created new session: {session_id}")
 
-            # Add image parameters
-            if image_paths:
-                for img_path in image_paths:
-                    cmd.extend(['--image', img_path])
-                print(f"🖼️  Attached {len(image_paths)} image(s)")
-
             # Add context from previous messages if available and no session
             if previous_messages and not self.load_session(chat_key):
                 context = "Previous conversation:\n"
                 for msg in previous_messages:
                     sender = "Assistant" if msg['is_from_me'] else "User"
                     context += f"{sender}: {msg['content']}\n"
-                context += f"\nUser: {message_text or '[Image attached]'}"
+
+                # Add image context if images were attached
+                if image_paths:
+                    img_list = "\n".join([f"- {Path(p).name}" for p in image_paths])
+                    context += f"\nUser sent {len(image_paths)} image(s):\n{img_list}\n"
+
+                context += f"\nUser: {message_text or '[Image received]'}"
                 message_text = context
-            elif not message_text:
-                message_text = "What do you see in this image?"
+            elif image_paths:
+                # For first message with images, mention them in prompt
+                img_list = "\n".join([f"- {Path(p).name}" for p in image_paths])
+                image_context = f"User sent {len(image_paths)} image(s):\n{img_list}\n\n"
+                message_text = image_context + (message_text or "What can you tell me about these images?")
+                print(f"🖼️  Mentioned {len(image_paths)} image(s) in prompt")
 
             # Prepend custom prompt if configured
             if self.custom_prompt:
@@ -380,6 +414,11 @@ class iMessageMonitorUnified:
         """Send an iMessage with optional image attachments"""
         if not recipient:
             print("⚠️  No recipient found, cannot send reply")
+            return False
+
+        # Filter out error messages that shouldn't be sent to user
+        if message and message.strip().startswith("Error:"):
+            print(f"⚠️  Suppressing error message: {message}")
             return False
 
         # Send images first if any
@@ -554,15 +593,15 @@ end run
 
         print(f"💬 Claude response: {response[:100]}...")
 
-        # Check if Claude generated any images in the response
-        generated_images, cleaned_response = self.extract_image_paths_from_response(response)
-        if generated_images:
-            print(f"🖼️  Extracted {len(generated_images)} image(s) from response:")
-            for img in generated_images:
-                print(f"   - {img}")
+        # Check if Claude generated any files in the response
+        generated_files, cleaned_response = self.extract_image_paths_from_response(response)
+        if generated_files:
+            print(f"📎 Extracted {len(generated_files)} file(s) from response:")
+            for file in generated_files:
+                print(f"   - {file}")
 
-        # Send response back with any generated images (using cleaned response)
-        self.send_imessage(recipient, cleaned_response, generated_images if generated_images else None)
+        # Send response back with any generated files (using cleaned response)
+        self.send_imessage(recipient, cleaned_response, generated_files if generated_files else None)
 
     def monitor(self):
         """Main monitoring loop"""
