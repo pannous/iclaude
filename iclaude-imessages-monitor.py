@@ -364,12 +364,15 @@ class iMessageMonitorUnified:
             if result.returncode == 0:
                 return result.stdout.strip()
             else:
-                return f"Error: {result.stderr.strip()}"
+                print(f"⚠️  Claude returned error: {result.stderr.strip()}")
+                return None
 
         except subprocess.TimeoutExpired:
-            return None  # Silent timeout
+            print("⚠️  Claude command timed out")
+            return None
         except Exception as e:
-            return f"Error executing Claude: {str(e)}"
+            print(f"⚠️  Error executing Claude: {str(e)}")
+            return None
 
     def send_imessage(self, recipient, message, image_paths=None):
         """Send an iMessage with optional image attachments"""
