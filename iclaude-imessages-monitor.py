@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-iMessage Monitor and Claude Bot - Unified Edition with Context
+iMessage Monitor and Claude Bot - Unified Edition with Context and Images
 Monitors for messages from specific senders (Karin, Willi) and self-messages
-Responds using Claude CLI with previous message context and session management
+Responds using Claude CLI with previous message context, session management, and image support
 """
 
 import os
+import re
 import sqlite3
 import subprocess
 import time
@@ -23,9 +24,15 @@ class iMessageMonitorUnified:
         self.sessions_dir = Path("sessions")
         self.sessions_dir.mkdir(exist_ok=True)
         self.monitored_senders = monitored_senders or []
-        self.poll_interval = 1  # seconds
-        self.context_messages = context_messages  # Number of previous messages to include
+        self.poll_interval = 1
+        self.context_messages = context_messages
         self.my_contact_ids = self._get_my_contact_ids()
+
+        # Supported image MIME types
+        self.image_mime_types = [
+            'image/jpeg', 'image/jpg', 'image/png',
+            'image/gif', 'image/heic', 'image/heif'
+        ]
 
     def _get_my_contact_ids(self):
         """Get user's own contact identifiers for self-message detection"""
@@ -49,7 +56,6 @@ class iMessageMonitorUnified:
         """Get the ID of the last processed message"""
         if self.state_file.exists():
             return int(self.state_file.read_text().strip())
-        # Initialize with current max message ID
         with sqlite3.connect(str(self.db_path)) as conn:
             cursor = conn.execute("SELECT MAX(ROWID) FROM message")
             max_id = cursor.fetchone()[0] or 0
@@ -61,7 +67,7 @@ class iMessageMonitorUnified:
         self.state_file.write_text(str(message_id))
 
     def get_new_messages(self, last_id):
-        """Query for all new messages"""
+        """Query for all new messages including those with attachments"""
         query = """
             SELECT
                 m.ROWID as message_id,
@@ -76,8 +82,9 @@ class iMessageMonitorUnified:
             LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
             LEFT JOIN chat c ON c.ROWID = cmj.chat_id
             WHERE m.ROWID > ?
-                AND m.text IS NOT NULL
-                AND m.text != ''
+                AND (m.text IS NOT NULL OR m.ROWID IN (
+                    SELECT message_id FROM message_attachment_join
+                ))
             ORDER BY m.date ASC
         """
 
@@ -86,27 +93,59 @@ class iMessageMonitorUnified:
             cursor = conn.execute(query, (last_id,))
             return [dict(row) for row in cursor.fetchall()]
 
+    def get_message_attachments(self, message_id):
+        """Get image attachments for a message"""
+        query = """
+            SELECT
+                a.filename,
+                a.mime_type,
+                a.transfer_name
+            FROM attachment a
+            JOIN message_attachment_join maj ON maj.attachment_id = a.ROWID
+            WHERE maj.message_id = ?
+        """
+
+        with sqlite3.connect(str(self.db_path)) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(query, (message_id,))
+            attachments = [dict(row) for row in cursor.fetchall()]
+
+        # Filter for images and resolve paths
+        image_attachments = []
+        for att in attachments:
+            if att['mime_type'] in self.image_mime_types:
+                filename = att['filename']
+                if filename and filename.startswith('~'):
+                    filename = str(Path(filename).expanduser())
+
+                if filename and Path(filename).exists():
+                    image_attachments.append({
+                        'path': filename,
+                        'mime_type': att['mime_type'],
+                        'name': att['transfer_name'] or Path(filename).name
+                    })
+
+        return image_attachments
+
     def is_from_monitored_sender(self, message):
         """Check if message is from one of the monitored senders"""
         if message['is_from_me'] == 1:
-            return False  # Not incoming
+            return False
 
         sender_id = message.get('sender_id', '')
         if not sender_id:
             return False
 
-        # Check if sender matches any monitored name
         sender_lower = sender_id.lower()
         return any(name.lower() in sender_lower for name in self.monitored_senders)
 
     def is_self_message(self, message):
         """Check if message is sent to self (not to others)"""
         if message['is_from_me'] == 0:
-            return False  # Not sent by me
+            return False
 
         chat_id = message.get('chat_identifier', '')
 
-        # If chat_identifier contains my own contact info, it's a self-message
         if chat_id:
             return any(my_id in chat_id for my_id in self.my_contact_ids if my_id and chat_id == my_id)
 
@@ -150,7 +189,6 @@ class iMessageMonitorUnified:
         chat_key = self.get_chat_key(message)
         current_msg_id = message['message_id']
 
-        # Query for previous messages in the same chat
         query = """
             SELECT
                 m.ROWID as message_id,
@@ -198,8 +236,29 @@ class iMessageMonitorUnified:
         session_file = self.get_session_file(chat_key)
         session_file.write_text(session_id)
 
-    def execute_claude(self, message_text, previous_messages=None, chat_key=None):
-        """Execute claude command with context and session management"""
+    def extract_image_paths_from_response(self, response):
+        """Extract file paths to images from Claude's response"""
+        patterns = [
+            r'(?:saved|created|generated|wrote)\s+(?:to\s+)?["\']?([^"\']+\.(?:png|jpg|jpeg|gif))["\']?',
+            r'["\']([^"\']+\.(?:png|jpg|jpeg|gif))["\']',
+            r'(?:file|image):\s*([^\s]+\.(?:png|jpg|jpeg|gif))',
+        ]
+
+        image_paths = []
+        for pattern in patterns:
+            matches = re.finditer(pattern, response, re.IGNORECASE)
+            for match in matches:
+                path = match.group(1)
+                if not path.startswith('/'):
+                    path = str(Path.cwd() / path)
+
+                if Path(path).exists():
+                    image_paths.append(path)
+
+        return list(set(image_paths))  # Remove duplicates
+
+    def execute_claude(self, message_text, previous_messages=None, chat_key=None, image_paths=None):
+        """Execute claude command with context, images, and session management"""
         try:
             cmd = ['claude']
 
@@ -211,14 +270,22 @@ class iMessageMonitorUnified:
                     cmd.extend(['--resume', session_id])
                     print(f"🔄 Resuming session: {session_id}")
 
+            # Add image parameters
+            if image_paths:
+                for img_path in image_paths:
+                    cmd.extend(['--image', img_path])
+                print(f"🖼️  Attached {len(image_paths)} image(s)")
+
             # Add context from previous messages if available and no session
             if previous_messages and not session_id:
                 context = "Previous conversation:\n"
                 for msg in previous_messages:
                     sender = "Assistant" if msg['is_from_me'] else "User"
                     context += f"{sender}: {msg['content']}\n"
-                context += f"\nUser: {message_text}"
+                context += f"\nUser: {message_text or '[Image attached]'}"
                 message_text = context
+            elif not message_text:
+                message_text = "What do you see in this image?"
 
             cmd.append(message_text)
 
@@ -235,11 +302,9 @@ class iMessageMonitorUnified:
 
                 # Try to extract session ID from output if this is a new session
                 if not session_id and chat_key and '--resume' not in cmd:
-                    # Look for session ID in stderr (Claude CLI outputs session info there)
                     if result.stderr:
                         for line in result.stderr.split('\n'):
                             if 'session' in line.lower() and len(line) < 50:
-                                # Simple heuristic: try to find session ID
                                 parts = line.split()
                                 for part in parts:
                                     if len(part) > 10 and part.replace('-', '').isalnum():
@@ -256,13 +321,21 @@ class iMessageMonitorUnified:
         except Exception as e:
             return f"Error executing Claude: {str(e)}"
 
-    def send_imessage(self, recipient, message):
-        """Send an iMessage using AppleScript with safe parameter passing"""
+    def send_imessage(self, recipient, message, image_paths=None):
+        """Send an iMessage with optional image attachments"""
         if not recipient:
             print("⚠️  No recipient found, cannot send reply")
             return False
 
-        applescript = '''
+        # Send images first if any
+        if image_paths:
+            for img_path in image_paths:
+                if not self._send_file(recipient, img_path):
+                    print(f"⚠️  Failed to send image: {img_path}")
+
+        # Then send text message if any
+        if message:
+            applescript = '''
 on run argv
     set recipient to item 1 of argv
     set theMessage to item 2 of argv
@@ -275,25 +348,61 @@ on run argv
 end run
 '''
 
+            try:
+                subprocess.run(
+                    ['osascript', '-', recipient, message],
+                    input=applescript.encode('utf-8'),
+                    check=True,
+                    capture_output=True,
+                    timeout=10
+                )
+                print(f"✅ Sent reply to {recipient}")
+                return True
+            except subprocess.CalledProcessError as e:
+                print(f"❌ Failed to send message: {e.stderr}")
+                return self._send_via_text_chat(recipient, message, image_paths)
+            except subprocess.TimeoutExpired:
+                print(f"⚠️  Send timed out (message may have been sent)")
+                return False
+
+        return True
+
+    def _send_file(self, recipient, file_path):
+        """Send a file via iMessage"""
+        applescript = '''
+on run argv
+    set recipient to item 1 of argv
+    set filePath to item 2 of argv
+
+    tell application "Messages"
+        set targetService to first service whose service type = iMessage
+        set targetBuddy to buddy recipient of targetService
+        send POSIX file filePath to targetBuddy
+    end tell
+end run
+'''
+
         try:
-            result = subprocess.run(
-                ['osascript', '-', recipient, message],
+            subprocess.run(
+                ['osascript', '-', recipient, str(Path(file_path).resolve())],
                 input=applescript.encode('utf-8'),
                 check=True,
                 capture_output=True,
-                timeout=10
+                timeout=15
             )
-            print(f"✅ Sent reply to {recipient}")
+            print(f"✅ Sent file: {Path(file_path).name}")
             return True
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Failed to send message: {e.stderr}")
-            return self._send_via_text_chat(recipient, message)
-        except subprocess.TimeoutExpired:
-            print(f"⚠️  Send timed out (message may have been sent)")
+        except Exception as e:
+            print(f"❌ Failed to send file: {str(e)}")
             return False
 
-    def _send_via_text_chat(self, recipient, message):
+    def _send_via_text_chat(self, recipient, message, image_paths=None):
         """Alternative method using text chat with safe parameter passing"""
+        # Send images first
+        if image_paths:
+            for img_path in image_paths:
+                self._send_file_via_text_chat(recipient, img_path)
+
         applescript = '''
 on run argv
     set recipient to item 1 of argv
@@ -321,37 +430,79 @@ end run
             print(f"❌ Alternative send also failed: {str(e)}")
             return False
 
+    def _send_file_via_text_chat(self, recipient, file_path):
+        """Send file via text chat"""
+        applescript = '''
+on run argv
+    set recipient to item 1 of argv
+    set filePath to item 2 of argv
+
+    tell application "Messages"
+        set targetService to first service whose service type = iMessage
+        set textChat to text chat id recipient of targetService
+        send POSIX file filePath to textChat
+    end tell
+end run
+'''
+
+        try:
+            subprocess.run(
+                ['osascript', '-', recipient, str(Path(file_path).resolve())],
+                input=applescript.encode('utf-8'),
+                check=True,
+                capture_output=True,
+                timeout=15
+            )
+            return True
+        except:
+            return False
+
     def process_message(self, message):
-        """Process a single message with context"""
-        content = message['content']
+        """Process a single message with context and images"""
+        content = message.get('content', '')
         date = message['date']
         msg_type = self.get_message_type(message)
         chat_key = self.get_chat_key(message)
 
-        print(f"\n📨 [{date}] {msg_type}: {content}")
+        print(f"\n📨 [{date}] {msg_type}: {content or '[no text]'}")
+
+        # Get image attachments
+        image_attachments = self.get_message_attachments(message['message_id'])
+        image_paths = [att['path'] for att in image_attachments]
+
+        if image_attachments:
+            print(f"🖼️  Found {len(image_attachments)} image(s):")
+            for att in image_attachments:
+                print(f"   - {att['name']} ({att['mime_type']})")
 
         # Get previous messages for context
         previous_messages = self.get_previous_messages(message)
         if previous_messages:
             print(f"📚 Loaded {len(previous_messages)} previous messages for context")
 
-        # Execute Claude with context and session management
-        response = self.execute_claude(content, previous_messages, chat_key)
+        # Execute Claude with context, images, and session management
+        response = self.execute_claude(content, previous_messages, chat_key, image_paths)
         print(f"💬 Claude response: {response[:100]}...")
 
-        # Send response back
+        # Check if Claude generated any images in the response
+        generated_images = self.extract_image_paths_from_response(response)
+        if generated_images:
+            print(f"🖼️  Claude generated {len(generated_images)} image(s)")
+
+        # Send response back with any generated images
         recipient = self.get_reply_recipient(message)
-        self.send_imessage(recipient, response)
+        self.send_imessage(recipient, response, generated_images if generated_images else None)
 
     def monitor(self):
         """Main monitoring loop"""
-        print("🔍 iMessage Claude Bot (Unified with Context) started")
+        print("🔍 iMessage Claude Bot (Unified with Context & Images) started")
         print(f"📱 Monitoring for:")
         print(f"   - Messages from: {', '.join(self.monitored_senders)}")
         print(f"   - Self-messages (messages to yourself)")
         print(f"   - Ignoring: Messages you send to others")
         print(f"📚 Context: Including up to {self.context_messages} previous messages")
         print(f"💾 Sessions: Stored in {self.sessions_dir}")
+        print(f"🖼️  Image support: Receiving and sending images")
         print("Press Ctrl+C to stop\n")
 
         last_id = self.get_last_processed_id()
