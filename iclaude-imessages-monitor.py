@@ -157,11 +157,16 @@ class iMessageMonitorUnified:
 
     def is_self_message(self, message):
         """Check if message is sent to self (not to others)"""
+        # Check if message is FROM one of your own identifiers (received from yourself)
         if message['is_from_me'] == 0:
+            sender_id = message.get('sender_id', '')
+            if sender_id:
+                # Check if sender is one of your own contact IDs
+                return sender_id in self.my_contact_ids
             return False
 
+        # Check if message is TO one of your own identifiers (sent to yourself)
         chat_id = message.get('chat_identifier', '')
-
         if chat_id:
             return any(my_id in chat_id for my_id in self.my_contact_ids if my_id and chat_id == my_id)
 
@@ -564,7 +569,7 @@ end run
         print(f"\n📨 [{date}] {msg_type}: {content or '[no text]'}")
 
         # Send immediate acknowledgment
-        self.send_imessage(recipient, "⌛ ...")
+        self.send_imessage(recipient, "⏳ ...") # ⌛
 
         # Check for stop command
         if self.is_stop_command(content):
