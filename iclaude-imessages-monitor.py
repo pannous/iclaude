@@ -247,30 +247,68 @@ class iMessageMonitorUnified:
         session_file.write_text(session_id)
 
     def extract_image_paths_from_response(self, response):
-        """Extract file paths to images from Claude's response"""
+        """Extract file paths to images from Claude's response and return (paths, cleaned_response)"""
         patterns = [
-            r'(?:saved|created|generated|wrote)\s+(?:to\s+)?["\']?([^"\']+\.(?:png|jpg|jpeg|gif))["\']?',
-            r'["\']([^"\']+\.(?:png|jpg|jpeg|gif))["\']',
-            r'(?:file|image):\s*([^\s]+\.(?:png|jpg|jpeg|gif))',
+            r'(?:saved|created|generated|wrote|found|located)\s+(?:(?:to|at|in)\s+)?["\']?([/~][^"\'\\s]+\.(?:png|jpg|jpeg|gif|heic))["\']?',
+            r'(?:image|file|photo)\s+(?:at|in|is)\s+["\']?([/~][^"\'\\s]+\.(?:png|jpg|jpeg|gif|heic))["\']?',
+            r'["\']([/~][^"\'\\s]+\.(?:png|jpg|jpeg|gif|heic))["\']',
+            r'`([/~][^`]+\.(?:png|jpg|jpeg|gif|heic))`',
+            r'\b([/~][\w/.-]+\.(?:png|jpg|jpeg|gif|heic))\b',
         ]
 
         image_paths = []
+        path_spans = []  # Track spans to remove from response
+
         for pattern in patterns:
             matches = re.finditer(pattern, response, re.IGNORECASE)
             for match in matches:
                 path = match.group(1)
-                if not path.startswith('/'):
+
+                # Expand ~ to home directory
+                if path.startswith('~'):
+                    path = str(Path(path).expanduser())
+                elif not path.startswith('/'):
                     path = str(Path.cwd() / path)
 
                 if Path(path).exists():
                     image_paths.append(path)
+                    path_spans.append(match.span())
 
-        return list(set(image_paths))  # Remove duplicates
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_paths = []
+        for p in image_paths:
+            if p not in seen:
+                seen.add(p)
+                unique_paths.append(p)
+
+        # Clean response by removing path references
+        cleaned_response = response
+        if unique_paths:
+            # Sort spans in reverse order to remove from end to start
+            path_spans.sort(reverse=True)
+            for start, end in path_spans:
+                # Remove the path and clean up extra whitespace/punctuation
+                before = cleaned_response[:start].rstrip()
+                after = cleaned_response[end:].lstrip()
+
+                # Clean up common patterns around removed paths
+                if before.endswith(('at', 'to', 'in', 'is', ':')):
+                    before = before.rsplit(None, 1)[0] if before.split() else before
+
+                cleaned_response = before + ' ' + after
+
+            # Clean up multiple spaces and empty lines
+            cleaned_response = re.sub(r' +', ' ', cleaned_response)
+            cleaned_response = re.sub(r'\n\s*\n\s*\n+', '\n\n', cleaned_response)
+            cleaned_response = cleaned_response.strip()
+
+        return unique_paths, cleaned_response
 
     def execute_claude(self, message_text, previous_messages=None, chat_key=None, image_paths=None):
         """Execute claude command with context, images, and session management"""
         try:
-            cmd = ['claude','--dangerously-skip-permissions']
+            cmd = ['claude', '-p', '--dangerously-skip-permissions']
 
             # Check if there's an existing session for this chat
             session_id = None
@@ -506,12 +544,14 @@ end run
         print(f"💬 Claude response: {response[:100]}...")
 
         # Check if Claude generated any images in the response
-        generated_images = self.extract_image_paths_from_response(response)
+        generated_images, cleaned_response = self.extract_image_paths_from_response(response)
         if generated_images:
-            print(f"🖼️  Claude generated {len(generated_images)} image(s)")
+            print(f"🖼️  Extracted {len(generated_images)} image(s) from response:")
+            for img in generated_images:
+                print(f"   - {img}")
 
-        # Send response back with any generated images
-        self.send_imessage(recipient, response, generated_images if generated_images else None)
+        # Send response back with any generated images (using cleaned response)
+        self.send_imessage(recipient, cleaned_response, generated_images if generated_images else None)
 
     def monitor(self):
         """Main monitoring loop"""
