@@ -511,6 +511,7 @@ end run
         print(f"📚 Context: Including up to {self.context_messages} previous messages")
         print(f"💾 Sessions: Stored in {self.sessions_dir}")
         print(f"🖼️  Image support: Receiving and sending images")
+        print(f"🛑 Stop command: Send 'stop' to shut down the bot")
         print("Press Ctrl+C to stop\n")
 
         last_id = self.get_last_processed_id()
@@ -529,6 +530,9 @@ end run
 
                 time.sleep(self.poll_interval)
 
+        except SystemExit as e:
+            print(f"\n\n🛑 {e}")
+            print(f"Last processed message ID: {last_id}")
         except KeyboardInterrupt:
             print("\n\n👋 Stopping unified monitor...")
             print(f"Last processed message ID: {last_id}")
