@@ -564,7 +564,7 @@ end run
         print(f"\n📨 [{date}] {msg_type}: {content or '[no text]'}")
 
         # Send immediate acknowledgment
-        self.send_imessage(recipient, "⌛")
+        self.send_imessage(recipient, "⌛ ...")
 
         # Check for stop command
         if self.is_stop_command(content):
