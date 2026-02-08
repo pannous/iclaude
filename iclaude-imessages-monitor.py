@@ -350,6 +350,7 @@ class iMessageMonitorUnified:
 
             # Check if there's an existing session for this chat
             session_id = None
+            is_new_session = False
             if chat_key:
                 session_id = self.load_session(chat_key)
                 if session_id:
@@ -360,10 +361,11 @@ class iMessageMonitorUnified:
                     session_id = str(uuid.uuid4())
                     cmd.extend(['--session-id', session_id])
                     self.save_session(chat_key, session_id)
+                    is_new_session = True
                     print(f"💾 Created new session: {session_id}")
 
-            # Add context from previous messages if available and no session
-            if previous_messages and not self.load_session(chat_key):
+            # Add context from previous messages ONLY for new sessions
+            if previous_messages and is_new_session:
                 context = "Previous conversation:\n"
                 for msg in previous_messages:
                     sender = "Assistant" if msg['is_from_me'] else "User"
@@ -562,7 +564,7 @@ end run
         print(f"\n📨 [{date}] {msg_type}: {content or '[no text]'}")
 
         # Send immediate acknowledgment
-        self.send_imessage(recipient, "⏳")
+        self.send_imessage(recipient, "⌛")
 
         # Check for stop command
         if self.is_stop_command(content):
