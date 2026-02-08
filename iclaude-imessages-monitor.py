@@ -248,26 +248,34 @@ class iMessageMonitorUnified:
 
     def extract_image_paths_from_response(self, response):
         """Extract file paths to images from Claude's response and return (paths, cleaned_response)"""
-        # Match absolute paths (starting with / or ~) followed by image extension
-        # Using a more permissive pattern that captures the full path
-        pattern = r'([/~](?:[^\s<>"|*?])+\.(?:png|jpg|jpeg|gif|heic|PNG|JPG|JPEG|GIF|HEIC))'
+        # Match image paths in different formats:
+        # 1. Quoted paths (can contain spaces): "/path/to/file.jpg" or '/path/to/file.jpg'
+        # 2. Backtick paths (can contain spaces): `/path/to/file.jpg`
+        # 3. Unquoted paths (no spaces): /path/to/file.jpg
+        patterns = [
+            r'["\']([/~][^"\']+\.(?:png|jpg|jpeg|gif|heic|PNG|JPG|JPEG|GIF|HEIC))["\']',  # Quoted paths
+            r'`([/~][^`]+\.(?:png|jpg|jpeg|gif|heic|PNG|JPG|JPEG|GIF|HEIC))`',  # Backtick paths
+            r'([/~](?:[^\s<>"|*?])+\.(?:png|jpg|jpeg|gif|heic|PNG|JPG|JPEG|GIF|HEIC))',  # Unquoted paths
+        ]
 
         image_paths = []
         path_spans = []  # Track (start, end, path) tuples
 
-        for match in re.finditer(pattern, response):
-            path = match.group(1)
+        for pattern in patterns:
+            for match in re.finditer(pattern, response):
+                path = match.group(1)
 
-            # Expand ~ to home directory
-            if path.startswith('~'):
-                expanded_path = str(Path(path).expanduser())
-            else:
-                expanded_path = path
+                # Expand ~ to home directory
+                if path.startswith('~'):
+                    expanded_path = str(Path(path).expanduser())
+                else:
+                    expanded_path = path
 
-            # Only include if file exists
-            if Path(expanded_path).exists():
-                image_paths.append(expanded_path)
-                path_spans.append((match.start(), match.end(), expanded_path))
+                # Only include if file exists
+                if Path(expanded_path).exists():
+                    # Use the full match span (including quotes) for removal
+                    image_paths.append(expanded_path)
+                    path_spans.append((match.start(), match.end(), expanded_path))
 
         # Remove duplicates while preserving order
         seen = set()
@@ -285,15 +293,9 @@ class iMessageMonitorUnified:
             # Sort spans in reverse order to remove from end to start
             unique_spans.sort(reverse=True)
             for start, end in unique_spans:
-                # Remove the path and clean up surrounding context
+                # Remove the path (quotes already included in span for quoted paths)
                 before = cleaned_response[:start]
                 after = cleaned_response[end:]
-
-                # Remove surrounding quotes/backticks if path was quoted
-                if before.endswith(('`', '"', "'")):
-                    before = before[:-1]
-                    if after.startswith(('`', '"', "'")):
-                        after = after[1:]
 
                 # Clean up common lead-in phrases that precede paths
                 before = re.sub(r'(?:saved|created|generated|wrote|found|located)\s+(?:to|at|in)\s*$', '', before, flags=re.IGNORECASE)
