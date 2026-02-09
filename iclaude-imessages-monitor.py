@@ -104,10 +104,20 @@ class iMessageMonitorUnified:
             ORDER BY m.date ASC
         """
 
-        with sqlite3.connect(str(self.db_path)) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute(query, (last_id,))
-            return [dict(row) for row in cursor.fetchall()]
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                with sqlite3.connect(str(self.db_path), timeout=10.0) as conn:
+                    conn.row_factory = sqlite3.Row
+                    cursor = conn.execute(query, (last_id,))
+                    return [dict(row) for row in cursor.fetchall()]
+            except sqlite3.OperationalError as e:
+                if attempt < max_retries - 1:
+                    time.sleep(0.5)
+                    continue
+                else:
+                    print(f"⚠️  Database access error after {max_retries} attempts: {e}")
+                    return []
 
     def get_message_attachments(self, message_id):
         """Get image attachments for a message"""
@@ -121,10 +131,14 @@ class iMessageMonitorUnified:
             WHERE maj.message_id = ?
         """
 
-        with sqlite3.connect(str(self.db_path)) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute(query, (message_id,))
-            attachments = [dict(row) for row in cursor.fetchall()]
+        try:
+            with sqlite3.connect(str(self.db_path), timeout=10.0) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(query, (message_id,))
+                attachments = [dict(row) for row in cursor.fetchall()]
+        except sqlite3.OperationalError as e:
+            print(f"⚠️  Database error getting attachments: {e}")
+            return []
 
         # Filter for images and resolve paths
         image_attachments = []
@@ -277,13 +291,15 @@ class iMessageMonitorUnified:
             exts.append(ext_clean.capitalize())
         ext_pattern = '|'.join(set(exts))  # Remove duplicates
 
-        # Match file paths starting with /, ~, or /Users/me
+        # Match file paths starting with /, ~, or relative paths
         # Supports quoted, backtick-wrapped, bold-wrapped (**), and unquoted paths
         patterns = [
             rf'["\']([/~][^"\']+\.(?:{ext_pattern}))["\']',  # Quoted: "/path" or '/path'
             rf'`([/~][^`]+\.(?:{ext_pattern}))`',  # Backtick: `/path`
             rf'\*\*([/~][^\*]+\.(?:{ext_pattern}))\*\*',  # Bold: **/path**
-            rf'(?:^|(?<=\s))((?:/Users/me|~|/[a-zA-Z])[^\s<>"|*?`\']*\.(?:{ext_pattern}))(?=\s|$)',  # Unquoted paths
+            rf'(?:^|(?<=\s))([/~][^\s<>"|*?`\']*\.(?:{ext_pattern}))(?=\s|$|[.,;!?])',  # Unquoted absolute/home paths
+            rf'(?:^|(?<=\s))([A-Za-z]:[\\/][^\s<>"|*?`\']*\.(?:{ext_pattern}))(?=\s|$|[.,;!?])',  # Windows paths
+            rf'(?:^|(?<=\s))([A-Za-z0-9_\-./]+\.(?:{ext_pattern}))(?=\s|$|[.,;!?])',  # Relative paths and simple filenames
         ]
 
         file_paths = []
@@ -294,16 +310,23 @@ class iMessageMonitorUnified:
                 # Get the path from group 1
                 path = match.group(1)
 
-                # Expand ~ to home directory
+                # Expand and resolve path
                 if path.startswith('~'):
                     expanded_path = str(Path(path).expanduser())
-                else:
+                elif path.startswith('/'):
                     expanded_path = path
+                else:
+                    # Relative path - resolve against home directory as fallback
+                    expanded_path = str(Path(path).expanduser())
+                    if not Path(expanded_path).exists():
+                        # Try resolving as absolute path
+                        expanded_path = str(Path(path).resolve())
 
-                # Only include if file exists
-                if Path(expanded_path).exists():
+                # Only include if file exists and is a file (not directory)
+                path_obj = Path(expanded_path)
+                if path_obj.exists() and path_obj.is_file():
                     # For quoted/backtick/bold paths, use full match span
-                    # For unquoted paths (idx=3), use group 1 span to avoid removing surrounding whitespace
+                    # For unquoted paths (idx>=3), use group 1 span to avoid removing surrounding whitespace
                     if idx < 3:
                         span_start, span_end = match.start(), match.end()
                     else:
