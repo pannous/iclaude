@@ -80,8 +80,12 @@ export default function App() {
     }
 
     function handleKeyDown(e: KeyboardEvent) {
-      // Alt+X to archive current session
-      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.key === 'x') {
+      // Alt+X or Ctrl+Delete to archive current session
+      const isArchiveShortcut =
+        (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.key === 'x') ||
+        ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key === 'Delete');
+
+      if (isArchiveShortcut) {
         e.preventDefault();
 
         const store = useStore.getState();
