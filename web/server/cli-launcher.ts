@@ -33,6 +33,8 @@ export interface LaunchOptions {
   claudeBinary?: string;
   allowedTools?: string[];
   env?: Record<string, string>;
+  /** CLI session ID to resume (from ~/.claude/projects/) */
+  resumeSessionId?: string;
   /** Pre-resolved worktree info from the session creation flow */
   worktreeInfo?: {
     isWorktree: boolean;
@@ -121,6 +123,11 @@ export class CliLauncher {
       cwd,
       createdAt: Date.now(),
     };
+
+    // Pre-set cliSessionId so subsequent relaunches use --resume
+    if (options.resumeSessionId) {
+      info.cliSessionId = options.resumeSessionId;
+    }
 
     // Store worktree metadata if provided
     if (options.worktreeInfo) {

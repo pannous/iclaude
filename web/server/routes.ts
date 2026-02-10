@@ -1,5 +1,7 @@
 import { Hono } from "hono";
-import { readdir, stat, realpath } from "node:fs/promises";
+import { readdir, stat, realpath, readFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { createInterface } from "node:readline";
 import { resolve, join, sep } from "node:path";
 import { homedir } from "node:os";
 import type { CliLauncher } from "./cli-launcher.js";
@@ -113,6 +115,7 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
         allowedTools: body.allowedTools,
         env: envVars,
         worktreeInfo,
+        resumeSessionId: body.resumeSessionId,
       });
 
       // Track the worktree mapping
@@ -136,6 +139,49 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
 
   api.get("/sessions", (c) => {
     return c.json(launcher.listSessions());
+  });
+
+  api.get("/sessions/resumable", async (c) => {
+    try {
+      const projectsDir = join(homedir(), ".claude", "projects");
+      const projEntries = await readdir(projectsDir, { withFileTypes: true }).catch(() => []);
+
+      const candidates: { sessionId: string; project: string; mtime: number; filePath: string }[] = [];
+
+      for (const entry of projEntries) {
+        if (!entry.isDirectory()) continue;
+        const projPath = join(projectsDir, entry.name);
+        const project = "/" + entry.name.replace(/^-/, "").replace(/-/g, "/");
+        const files = await readdir(projPath).catch(() => []);
+        for (const file of files) {
+          if (!file.endsWith(".jsonl")) continue;
+          const sessionId = file.replace(".jsonl", "");
+          const filePath = join(projPath, file);
+          try {
+            const s = await stat(filePath);
+            candidates.push({ sessionId, project, mtime: s.mtime.getTime(), filePath });
+          } catch { /* skip */ }
+        }
+      }
+
+      candidates.sort((a, b) => b.mtime - a.mtime);
+      const top = candidates.slice(0, 20);
+
+      const results = await Promise.all(top.map(async (item) => {
+        const title = await extractSessionTitle(item.filePath);
+        return {
+          sessionId: item.sessionId,
+          project: item.project,
+          lastModified: item.mtime,
+          title,
+        };
+      }));
+
+      return c.json(results);
+    } catch (e: unknown) {
+      console.error("[routes] Failed to list resumable sessions:", e);
+      return c.json([], 500);
+    }
   });
 
   api.get("/sessions/:id", (c) => {
@@ -403,4 +449,44 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
   }
 
   return api;
+}
+
+/** Read first user message from a session JSONL as a title. */
+async function extractSessionTitle(filePath: string): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: createReadStream(filePath), crlfDelay: Infinity });
+    let found = false;
+    rl.on("line", (line) => {
+      if (found) return;
+      try {
+        const data = JSON.parse(line);
+        if (data.type === "summary") {
+          found = true;
+          rl.close();
+          resolve(data.summary?.slice(0, 120) || "");
+          return;
+        }
+        if (data.type !== "user") return;
+        const msg = data.message;
+        if (!msg) return;
+        const content = msg.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block?.type === "text" && block.text) {
+              found = true;
+              rl.close();
+              resolve(block.text.slice(0, 120));
+              return;
+            }
+          }
+        } else if (typeof content === "string") {
+          found = true;
+          rl.close();
+          resolve(content.slice(0, 120));
+        }
+      } catch { /* skip malformed lines */ }
+    });
+    rl.on("close", () => { if (!found) resolve(""); });
+    rl.on("error", () => resolve(""));
+  });
 }

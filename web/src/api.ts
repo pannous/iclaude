@@ -56,6 +56,14 @@ export interface CreateSessionOpts {
   envSlug?: string;
   branch?: string;
   createBranch?: boolean;
+  resumeSessionId?: string;
+}
+
+export interface ResumableSession {
+  sessionId: string;
+  project: string;
+  lastModified: number;
+  title: string;
 }
 
 export interface GitRepoInfo {
@@ -133,6 +141,9 @@ export const api = {
 
   setSessionTitle: (sessionId: string, title: string) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/title`, { title }),
+
+  listResumableSessions: () =>
+    get<ResumableSession[]>("/sessions/resumable"),
 
   listDirs: (path?: string) =>
     get<DirListResult>(`/fs/list${path ? `?path=${encodeURIComponent(path)}` : ""}`),
