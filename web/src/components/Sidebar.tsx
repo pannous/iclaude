@@ -151,6 +151,7 @@ export function Sidebar() {
       sdkState: sdkInfo?.state ?? null,
       createdAt: sdkInfo?.createdAt ?? 0,
       archived: sdkInfo?.archived ?? false,
+      title: sdkInfo?.title,
     };
   }).sort((a, b) => b.createdAt - a.createdAt);
 
@@ -161,7 +162,7 @@ export function Sidebar() {
     const isActive = currentSessionId === s.id;
     const name = sessionNames.get(s.id);
     const shortId = s.id.slice(0, 8);
-    const label = name || s.model || shortId;
+    const label = s.title || name || s.model || shortId;
     const dirName = s.cwd ? s.cwd.split("/").pop() : "";
     const isRunning = s.status === "running";
     const isCompacting = s.status === "compacting";

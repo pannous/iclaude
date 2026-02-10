@@ -91,6 +91,16 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
     return c.json({ ok: true });
   });
 
+  api.post("/sessions/:id/title", async (c) => {
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.title || typeof body.title !== "string") {
+      return c.json({ error: "Missing or invalid title" }, 400);
+    }
+    launcher.setTitle(id, body.title);
+    return c.json({ ok: true });
+  });
+
   // ─── Filesystem browsing ─────────────────────────────────────
 
   api.get("/fs/list", async (c) => {
