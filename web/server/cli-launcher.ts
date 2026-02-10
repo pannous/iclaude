@@ -15,6 +15,7 @@ export interface SdkSessionInfo {
   /** The CLI's internal session ID (from system.init), used for --resume */
   cliSessionId?: string;
   archived?: boolean;
+  title?: string;
 }
 
 export interface LaunchOptions {
@@ -320,6 +321,17 @@ export class CliLauncher {
     const info = this.sessions.get(sessionId);
     if (info) {
       info.archived = archived;
+      this.persistState();
+    }
+  }
+
+  /**
+   * Set the title for a session.
+   */
+  setTitle(sessionId: string, title: string): void {
+    const info = this.sessions.get(sessionId);
+    if (info) {
+      info.title = title;
       this.persistState();
     }
   }

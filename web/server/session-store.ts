@@ -12,6 +12,7 @@ export interface PersistedSession {
   pendingMessages: string[];
   pendingPermissions: [string, PermissionRequest][];
   archived?: boolean;
+  title?: string;
 }
 
 // ─── Store ──────────────────────────────────────────────────────────────────

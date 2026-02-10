@@ -41,4 +41,5 @@ export interface SdkSessionInfo {
   cwd: string;
   createdAt: number;
   archived?: boolean;
+  title?: string;
 }

@@ -17,6 +17,7 @@ import type {
   PermissionRequest,
 } from "./session-types.js";
 import type { SessionStore } from "./session-store.js";
+import { generateTitle } from "./title-generator.js";
 
 // ─── WebSocket data tags ──────────────────────────────────────────────────────
 
@@ -74,10 +75,16 @@ export class WsBridge {
   private store: SessionStore | null = null;
   private onCLISessionId: ((sessionId: string, cliSessionId: string) => void) | null = null;
   private onCLIRelaunchNeeded: ((sessionId: string) => void) | null = null;
+  private onTitleGenerated: ((sessionId: string, title: string) => void) | null = null;
 
   /** Register a callback for when we learn the CLI's internal session ID. */
   onCLISessionIdReceived(cb: (sessionId: string, cliSessionId: string) => void): void {
     this.onCLISessionId = cb;
+  }
+
+  /** Register a callback for when a title is auto-generated from the first user message. */
+  onTitleGeneratedCallback(cb: (sessionId: string, title: string) => void): void {
+    this.onTitleGenerated = cb;
   }
 
   /** Register a callback for when a browser connects but CLI is dead. */
@@ -557,12 +564,22 @@ export class WsBridge {
     session: Session,
     msg: { type: "user_message"; content: string; session_id?: string; images?: { media_type: string; data: string }[] }
   ) {
+    // Count user messages in history to detect first message
+    const userMessageCount = session.messageHistory.filter(m => m.type === "user_message").length;
+    const isFirstMessage = userMessageCount === 0;
+
     // Store user message in history for replay (text-only for replay)
     session.messageHistory.push({
       type: "user_message",
       content: msg.content,
       timestamp: Date.now(),
     });
+
+    // Auto-generate title from first user message
+    if (isFirstMessage && this.onTitleGenerated && msg.content.trim()) {
+      const title = generateTitle(msg.content);
+      this.onTitleGenerated(session.id, title);
+    }
 
     // Build content: if images are present, use content block array; otherwise plain string
     let content: string | unknown[];

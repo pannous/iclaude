@@ -31,6 +31,11 @@ wsBridge.onCLISessionIdReceived((sessionId, cliSessionId) => {
   launcher.setCLISessionId(sessionId, cliSessionId);
 });
 
+// When a title is auto-generated from the first user message, update the session
+wsBridge.onTitleGeneratedCallback((sessionId, title) => {
+  launcher.setTitle(sessionId, title);
+});
+
 // Auto-relaunch CLI when a browser connects to a session with no CLI
 const relaunchingSet = new Set<string>();
 wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
