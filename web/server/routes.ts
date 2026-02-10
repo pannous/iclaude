@@ -6,7 +6,7 @@ import { createInterface } from "node:readline";
 import { resolve, join, sep } from "node:path";
 import { homedir } from "node:os";
 import type { CliLauncher } from "./cli-launcher.js";
-import type { WsBridge } from "./ws-bridge.js";
+import { WsBridge } from "./ws-bridge.js";
 import type { SessionStore } from "./session-store.js";
 import type { WorktreeTracker } from "./worktree-tracker.js";
 import * as envManager from "./env-manager.js";
@@ -256,6 +256,7 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
       return c.json({ error: "Missing or invalid title" }, 400);
     }
     launcher.setTitle(id, body.title);
+    wsBridge.setTitle(id, body.title);
     return c.json({ ok: true });
   });
 

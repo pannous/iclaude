@@ -183,6 +183,7 @@ export type BrowserIncomingMessage =
   | { type: "error"; message: string }
   | { type: "cli_disconnected" }
   | { type: "cli_connected" }
+  | { type: "title_updated"; title: string }
   | { type: "user_message"; content: string; timestamp: number }
   | { type: "message_history"; messages: BrowserIncomingMessage[] };
 

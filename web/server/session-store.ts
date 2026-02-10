@@ -14,6 +14,7 @@ export interface PersistedSession {
   archived?: boolean;
   title?: string;
   cliSessionId?: string;
+  createdAt?: number;
 }
 
 // ─── Store ──────────────────────────────────────────────────────────────────

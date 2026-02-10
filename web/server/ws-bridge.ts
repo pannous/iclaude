@@ -49,6 +49,10 @@ interface Session {
   pendingMessages: string[];
   /** CLI's internal session ID (for resuming) */
   cliSessionId?: string;
+  /** Auto-generated or user-set title */
+  title?: string;
+  /** Timestamp when session was created */
+  createdAt?: number;
 }
 
 function makeDefaultState(sessionId: string): SessionState {
@@ -122,6 +126,8 @@ export class WsBridge {
         messageHistory: p.messageHistory || [],
         pendingMessages: p.pendingMessages || [],
         cliSessionId: p.cliSessionId,
+        title: p.title,
+        createdAt: p.createdAt,
       };
       this.sessions.set(p.id, session);
       count++;
@@ -142,6 +148,8 @@ export class WsBridge {
       pendingMessages: session.pendingMessages,
       pendingPermissions: Array.from(session.pendingPermissions.entries()),
       cliSessionId: session.cliSessionId,
+      title: session.title,
+      createdAt: session.createdAt,
     });
   }
 
@@ -232,6 +240,7 @@ export class WsBridge {
         pendingPermissions: new Map(),
         messageHistory: [],
         pendingMessages: [],
+        createdAt: Date.now(),
       };
 
       // If resuming, try to load message history from the CLI's session file
@@ -258,6 +267,16 @@ export class WsBridge {
 
   isCliConnected(sessionId: string): boolean {
     return !!this.sessions.get(sessionId)?.cliSocket;
+  }
+
+  /** Set the title for a session, persist it, and notify browsers. */
+  setTitle(sessionId: string, title: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.title = title;
+      this.persistSession(session);
+      this.broadcastToBrowsers(session, { type: "title_updated", title });
+    }
   }
 
   removeSession(sessionId: string) {
