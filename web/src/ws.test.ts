@@ -2,11 +2,6 @@
 
 import type { SessionState, PermissionRequest, ContentBlock } from "./types.js";
 
-// Mock the names utility before any imports
-vi.mock("./utils/names.js", () => ({
-  generateUniqueSessionName: vi.fn(() => "Test Session"),
-}));
-
 let wsModule: typeof import("./ws.js");
 let useStore: typeof import("./store.js").useStore;
 
@@ -156,7 +151,7 @@ describe("disconnectSession", () => {
 // handleMessage: session_init
 // ===========================================================================
 describe("handleMessage: session_init", () => {
-  it("adds session to store, sets CLI connected, generates name", () => {
+  it("adds session to store, sets CLI connected and idle status", () => {
     wsModule.connectSession("s1");
     const session = makeSession("s1");
 
@@ -167,16 +162,6 @@ describe("handleMessage: session_init", () => {
     expect(state.sessions.get("s1")!.model).toBe("claude-opus-4-20250514");
     expect(state.cliConnected.get("s1")).toBe(true);
     expect(state.sessionStatus.get("s1")).toBe("idle");
-    expect(state.sessionNames.get("s1")).toBe("Test Session");
-  });
-
-  it("does not overwrite an existing session name", () => {
-    useStore.getState().setSessionName("s1", "Custom Name");
-
-    wsModule.connectSession("s1");
-    fireMessage({ type: "session_init", session: makeSession("s1") });
-
-    expect(useStore.getState().sessionNames.get("s1")).toBe("Custom Name");
   });
 });
 

@@ -3,7 +3,6 @@ import { useStore } from "../store.js";
 import { api, type CompanionEnv, type GitRepoInfo, type GitBranchInfo } from "../api.js";
 import { connectSession, waitForConnection, sendToSession } from "../ws.js";
 import { disconnectSession } from "../ws.js";
-import { generateUniqueSessionName } from "../utils/names.js";
 import { getRecentDirs, addRecentDir } from "../utils/recent-dirs.js";
 import { safeStorage } from "../utils/safe-storage.js";
 import { EnvManager } from "./EnvManager.js";
@@ -226,11 +225,6 @@ export function HomePage() {
         createBranch: branchName && isNewBranch ? true : undefined,
       });
       const sessionId = result.sessionId;
-
-      // Assign a random session name
-      const existingNames = new Set(useStore.getState().sessionNames.values());
-      const sessionName = generateUniqueSessionName(existingNames);
-      useStore.getState().setSessionName(sessionId, sessionName);
 
       // Save cwd to recent dirs
       if (cwd) addRecentDir(cwd);

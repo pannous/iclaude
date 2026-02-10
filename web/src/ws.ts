@@ -1,6 +1,5 @@
 import { useStore } from "./store.js";
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem } from "./types.js";
-import { generateUniqueSessionName } from "./utils/names.js";
 
 const sockets = new Map<string, WebSocket>();
 const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -144,11 +143,6 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       store.addSession(data.session);
       store.setCliConnected(sessionId, true);
       store.setSessionStatus(sessionId, "idle");
-      if (!store.sessionNames.has(sessionId)) {
-        const existingNames = new Set(store.sessionNames.values());
-        const name = generateUniqueSessionName(existingNames);
-        store.setSessionName(sessionId, name);
-      }
       break;
     }
 

@@ -20,7 +20,19 @@ import type {
   PermissionRequest,
 } from "./session-types.js";
 import type { SessionStore } from "./session-store.js";
-import { generateTitle } from "./title-generator.js";
+
+/** Truncate a message to use as a session title (max ~50 chars at word boundary). */
+function truncateTitle(message: string): string {
+  const cleaned = message.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= 50) return cleaned;
+  const words = cleaned.split(" ");
+  let title = "";
+  for (const word of words) {
+    if ((title + " " + word).length > 47) break;
+    title += (title ? " " : "") + word;
+  }
+  return title + "...";
+}
 
 // ─── WebSocket data tags ──────────────────────────────────────────────────────
 
@@ -583,6 +595,12 @@ export class WsBridge {
   }
 
   private handleResultMessage(session: Session, msg: CLIResultMessage) {
+    // Update title from CLI result summary (overrides user-input title with better context)
+    if (msg.result && this.onTitleGenerated) {
+      const title = truncateTitle(msg.result);
+      this.onTitleGenerated(session.id, title);
+    }
+
     // Update session cost/turns
     session.state.total_cost_usd = msg.total_cost_usd;
     session.state.num_turns = msg.num_turns;
@@ -729,15 +747,10 @@ export class WsBridge {
       timestamp: Date.now(),
     });
 
-    // Auto-generate title from first user message (async, don't block sending message)
+    // Use the user's first message directly as the initial title
     if (isFirstMessage && this.onTitleGenerated && msg.content.trim()) {
-      generateTitle(msg.content).then(title => {
-        if (this.onTitleGenerated) {
-          this.onTitleGenerated(session.id, title);
-        }
-      }).catch(err => {
-        console.error("[ws-bridge] Failed to generate title:", err);
-      });
+      const title = truncateTitle(msg.content);
+      this.onTitleGenerated(session.id, title);
     }
 
     // Build content: if images are present, use content block array; otherwise plain string
