@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { useStore } from "./store.js";
 import { connectSession } from "./ws.js";
+import { disconnectSession } from "./ws.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
@@ -33,6 +34,35 @@ export default function App() {
     if (restoredId) {
       connectSession(restoredId);
     }
+  }, []);
+
+  // Global keyboard shortcuts for starting a new session
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Ctrl+S or Ctrl+T to start a new session
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 't')) {
+        e.preventDefault();
+
+        const store = useStore.getState();
+        const currentId = store.currentSessionId;
+
+        // Disconnect current session if any
+        if (currentId) {
+          disconnectSession(currentId);
+        }
+
+        // Clear current session and reset home page
+        store.newSession();
+
+        // Navigate to home if on playground
+        if (window.location.hash === "#/playground") {
+          window.location.hash = "";
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   if (hash === "#/playground") {
