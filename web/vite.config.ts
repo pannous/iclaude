@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 2345,
+    allowedHosts: ["all","mac.fritz.box"],
     proxy: {
       "/api": "http://localhost:3456",
       "/ws": {

@@ -82,7 +82,7 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
         cwd = resolvedCwd;
       }
 
-      let worktreeInfo: { isWorktree: boolean; repoRoot: string; branch: string; worktreePath: string } | undefined;
+      let worktreeInfo: { isWorktree: boolean; repoRoot: string; branch: string; actualBranch: string; worktreePath: string } | undefined;
 
       // If worktree is requested, set up a worktree for the selected branch
       if (body.useWorktree && body.branch && cwd) {
@@ -94,14 +94,22 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
           const result = gitUtils.ensureWorktree(repoInfo.repoRoot, body.branch, {
             baseBranch: repoInfo.defaultBranch,
             createBranch: body.createBranch,
+            forceNew: true,
           });
           cwd = result.worktreePath;
           worktreeInfo = {
             isWorktree: true,
             repoRoot: repoInfo.repoRoot,
             branch: body.branch,
+            actualBranch: result.actualBranch,
             worktreePath: result.worktreePath,
           };
+        }
+      } else if (body.branch && cwd) {
+        // Non-worktree: checkout the selected branch in-place
+        const repoInfo = gitUtils.getRepoInfo(cwd);
+        if (repoInfo && repoInfo.currentBranch !== body.branch) {
+          gitUtils.checkoutBranch(repoInfo.repoRoot, body.branch);
         }
       }
 
@@ -127,6 +135,7 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
           sessionId: session.sessionId,
           repoRoot: worktreeInfo.repoRoot,
           branch: worktreeInfo.branch,
+          actualBranch: worktreeInfo.actualBranch,
           worktreePath: worktreeInfo.worktreePath,
           createdAt: Date.now(),
         });
@@ -422,6 +431,13 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
     return c.json(result);
   });
 
+  api.post("/git/fetch", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const { repoRoot } = body;
+    if (!repoRoot) return c.json({ error: "repoRoot required" }, 400);
+    return c.json(gitUtils.gitFetch(repoRoot));
+  });
+
   api.post("/git/pull", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const { cwd } = body;
@@ -461,7 +477,11 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
       return { cleaned: false, dirty: true, path: mapping.worktreePath };
     }
 
-    const result = gitUtils.removeWorktree(mapping.repoRoot, mapping.worktreePath, { force: dirty });
+    // Delete the companion-managed branch if it differs from the conceptual branch
+    const branchToDelete = mapping.actualBranch && mapping.actualBranch !== mapping.branch
+      ? mapping.actualBranch
+      : undefined;
+    const result = gitUtils.removeWorktree(mapping.repoRoot, mapping.worktreePath, { force: dirty, branchToDelete });
     if (result.removed) {
       // Only remove the mapping after successful cleanup
       worktreeTracker.removeBySession(sessionId);
