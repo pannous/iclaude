@@ -28,29 +28,39 @@ launcher.setStore(sessionStore);
 launcher.restoreFromDisk();
 wsBridge.restoreFromDisk();
 
+// Auto-relaunch CLI when a browser connects to a session with no CLI.
+// Uses exponential backoff to prevent rapid relaunch loops when a CLI keeps crashing.
+const relaunchCooldowns = new Map<string, { until: number; attempts: number }>();
+const MAX_RELAUNCH_COOLDOWN = 60_000;
+
 // When the CLI reports its internal session_id, store it for --resume on relaunch
+// and reset any relaunch backoff since the CLI is now healthy
 wsBridge.onCLISessionIdReceived((sessionId, cliSessionId) => {
   launcher.setCLISessionId(sessionId, cliSessionId);
+  relaunchCooldowns.delete(sessionId);
 });
 
 // When a title is auto-generated from the first user message, update the session
 wsBridge.onTitleGeneratedCallback((sessionId, title) => {
   launcher.setTitle(sessionId, title);
+  wsBridge.setTitle(sessionId, title);
 });
 
-// Auto-relaunch CLI when a browser connects to a session with no CLI
-const relaunchingSet = new Set<string>();
 wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
-  if (relaunchingSet.has(sessionId)) return;
+  const now = Date.now();
+  const cooldown = relaunchCooldowns.get(sessionId);
+  if (cooldown && now < cooldown.until) return;
   const info = launcher.getSession(sessionId);
   if (info?.archived) return;
   if (info && info.state !== "starting") {
-    relaunchingSet.add(sessionId);
-    console.log(`[server] Auto-relaunching CLI for session ${sessionId}`);
+    const attempts = (cooldown?.attempts ?? 0) + 1;
+    const backoff = Math.min(5_000 * 2 ** (attempts - 1), MAX_RELAUNCH_COOLDOWN);
+    relaunchCooldowns.set(sessionId, { until: now + backoff, attempts });
+    console.log(`[server] Auto-relaunching CLI for session ${sessionId} (attempt ${attempts}, cooldown ${backoff}ms)`);
     try {
       await launcher.relaunch(sessionId);
-    } finally {
-      setTimeout(() => relaunchingSet.delete(sessionId), 5000);
+    } catch (err) {
+      console.error(`[server] Relaunch failed for session ${sessionId}:`, err);
     }
   }
 });
