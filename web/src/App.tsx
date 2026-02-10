@@ -115,6 +115,18 @@ export default function App() {
         return;
       }
 
+      // Alt+Ctrl+PageUp/PageDown for session navigation
+      if (e.altKey && e.ctrlKey && e.key === 'PageUp') {
+        e.preventDefault();
+        navigateSession('prev');
+        return;
+      }
+      if (e.altKey && e.ctrlKey && e.key === 'PageDown') {
+        e.preventDefault();
+        navigateSession('next');
+        return;
+      }
+
       // Navigate between sessions with various modifier combinations + arrow keys
       // Supported: Ctrl+Alt+Arrow, Ctrl+Super+Arrow, Alt+Super+Arrow, Ctrl+Alt+Super+Arrow
       const isNavigationCombo = (
