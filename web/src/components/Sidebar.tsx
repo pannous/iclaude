@@ -326,6 +326,12 @@ export function Sidebar() {
                 </>
               )}
             </span>
+            {/* Status label */}
+            {!archived && !isEditing && (isRunning || isCompacting) && (
+              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-cc-success/15 text-cc-success uppercase tracking-wide shrink-0">
+                {isRunning ? "Working" : "Compacting"}
+              </span>
+            )}
             {isEditing ? (
               <input
                 ref={editInputRef}
@@ -394,10 +400,18 @@ export function Sidebar() {
             {permCount}
           </span>
         )}
-        {!archived && permCount === 0 && isSessionDone && allTasksDone && (
-          <span className="absolute right-2 top-1/2 -translate-y-1/2 h-[18px] flex items-center justify-center rounded-full bg-cc-success/15 text-cc-success text-[10px] font-semibold leading-none px-1.5 group-hover:opacity-0 transition-opacity pointer-events-none">
-            Done
-          </span>
+        {!archived && permCount === 0 && (
+          <>
+            {isSessionDone && allTasksDone ? (
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 h-[18px] flex items-center justify-center rounded-full bg-cc-success/15 text-cc-success text-[10px] font-semibold leading-none px-1.5 group-hover:opacity-0 transition-opacity pointer-events-none">
+                Done
+              </span>
+            ) : !isRunning && !isCompacting && s.isConnected && s.sdkState !== "exited" ? (
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 h-[18px] flex items-center justify-center rounded-full bg-cc-muted/10 text-cc-muted text-[10px] font-semibold leading-none px-1.5 group-hover:opacity-0 transition-opacity pointer-events-none">
+                Idle
+              </span>
+            ) : null}
+          </>
         )}
         {archived ? (
           <>
