@@ -116,9 +116,9 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
         resumeSessionId: body.resumeSessionId,
       });
 
-      // If resuming, initialize the WsBridge session with message history from the old session
+      // If resuming, initialize the WsBridge session with message history from the CLI's session file
       if (body.resumeSessionId) {
-        wsBridge.initializeResumedSession(session.sessionId, body.resumeSessionId);
+        wsBridge.initializeResumedSession(session.sessionId, body.resumeSessionId, cwd);
       }
 
       // Track the worktree mapping

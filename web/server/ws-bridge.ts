@@ -1,6 +1,9 @@
 import type { ServerWebSocket } from "bun";
 import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import type {
   CLIMessage,
   CLISystemInitMessage,
@@ -144,7 +147,66 @@ export class WsBridge {
 
   // ── Session management ──────────────────────────────────────────────────
 
-  getOrCreateSession(sessionId: string, opts?: { resumeCliSessionId?: string }): Session {
+  /**
+   * Load message history from the CLI's session file.
+   * The CLI stores conversation history in ~/.claude/projects/<cwd-hash>/<session-id>.jsonl
+   */
+  private loadCLIHistory(cliSessionId: string, cwd?: string): BrowserIncomingMessage[] {
+    try {
+      // Compute the project directory name (same logic as CLI)
+      const projectDir = cwd ? cwd.replace(/\//g, "-") : "";
+      const projectPath = join(homedir(), ".claude", "projects", projectDir);
+      const sessionFile = join(projectPath, `${cliSessionId}.jsonl`);
+
+      if (!existsSync(sessionFile)) {
+        console.log(`[ws-bridge] CLI session file not found: ${sessionFile}`);
+        return [];
+      }
+
+      const content = readFileSync(sessionFile, "utf-8");
+      const lines = content.split("\n").filter(l => l.trim());
+      const messages: BrowserIncomingMessage[] = [];
+
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line);
+
+          if (entry.type === "user") {
+            messages.push({
+              type: "user_message",
+              content: typeof entry.message.content === "string" ? entry.message.content : "",
+              timestamp: new Date(entry.timestamp).getTime(),
+            });
+          } else if (entry.type === "assistant" && entry.message) {
+            const msg = entry.message;
+            messages.push({
+              type: "assistant",
+              message: {
+                id: msg.id || `cli-${entry.uuid}`,
+                type: "message",
+                role: "assistant",
+                content: msg.content || [],
+                model: msg.model,
+                stop_reason: msg.stop_reason,
+                usage: msg.usage,
+              },
+              parent_tool_use_id: null,
+            });
+          }
+        } catch (e) {
+          // Skip invalid lines
+          console.warn(`[ws-bridge] Failed to parse CLI history line:`, e);
+        }
+      }
+
+      return messages;
+    } catch (error) {
+      console.error(`[ws-bridge] Failed to load CLI history for session ${cliSessionId}:`, error);
+      return [];
+    }
+  }
+
+  getOrCreateSession(sessionId: string, opts?: { resumeCliSessionId?: string; cwd?: string }): Session {
     let session = this.sessions.get(sessionId);
     if (!session) {
       session = {
@@ -157,12 +219,12 @@ export class WsBridge {
         pendingMessages: [],
       };
 
-      // If resuming, try to load message history from the old session
-      if (opts?.resumeCliSessionId && this.store) {
-        const oldSession = this.store.findByCliSessionId(opts.resumeCliSessionId);
-        if (oldSession && oldSession.messageHistory.length > 0) {
-          console.log(`[ws-bridge] Resuming session ${sessionId} from CLI session ${opts.resumeCliSessionId}, loading ${oldSession.messageHistory.length} message(s)`);
-          session.messageHistory = oldSession.messageHistory;
+      // If resuming, try to load message history from the CLI's session file
+      if (opts?.resumeCliSessionId) {
+        const cliHistory = this.loadCLIHistory(opts.resumeCliSessionId, opts.cwd);
+        if (cliHistory.length > 0) {
+          console.log(`[ws-bridge] Resuming session ${sessionId} from CLI session ${opts.resumeCliSessionId}, loading ${cliHistory.length} message(s) from CLI history`);
+          session.messageHistory = cliHistory;
         }
       }
 
@@ -190,10 +252,10 @@ export class WsBridge {
 
   /**
    * Initialize a session that will resume from a CLI session.
-   * Loads message history from the old session if available.
+   * Loads message history from the CLI's session file.
    */
-  initializeResumedSession(sessionId: string, resumeCliSessionId: string): void {
-    this.getOrCreateSession(sessionId, { resumeCliSessionId });
+  initializeResumedSession(sessionId: string, resumeCliSessionId: string, cwd?: string): void {
+    this.getOrCreateSession(sessionId, { resumeCliSessionId, cwd });
   }
 
   /**
