@@ -572,7 +572,7 @@ export class WsBridge {
   private routeBrowserMessage(session: Session, msg: BrowserOutgoingMessage) {
     switch (msg.type) {
       case "user_message":
-        this.handleUserMessage(session, msg);
+        void this.handleUserMessage(session, msg);
         break;
 
       case "permission_response":
@@ -593,7 +593,7 @@ export class WsBridge {
     }
   }
 
-  private handleUserMessage(
+  private async handleUserMessage(
     session: Session,
     msg: { type: "user_message"; content: string; session_id?: string; images?: { media_type: string; data: string }[] }
   ) {
@@ -608,10 +608,15 @@ export class WsBridge {
       timestamp: Date.now(),
     });
 
-    // Auto-generate title from first user message
+    // Auto-generate title from first user message (async, don't block sending message)
     if (isFirstMessage && this.onTitleGenerated && msg.content.trim()) {
-      const title = generateTitle(msg.content);
-      this.onTitleGenerated(session.id, title);
+      generateTitle(msg.content).then(title => {
+        if (this.onTitleGenerated) {
+          this.onTitleGenerated(session.id, title);
+        }
+      }).catch(err => {
+        console.error("[ws-bridge] Failed to generate title:", err);
+      });
     }
 
     // Build content: if images are present, use content block array; otherwise plain string

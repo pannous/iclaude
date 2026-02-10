@@ -1,71 +1,65 @@
+import Anthropic from "@anthropic-ai/sdk";
+
 /**
- * Generate a concise, descriptive title from a user message.
- * Creates a summary rather than just truncating.
+ * Generate a concise, descriptive title from a user message using Claude.
  */
-export function generateTitle(message: string): string {
-  // Clean up the message
-  const cleaned = message
-    .replace(/\s+/g, " ")
-    .trim();
+export async function generateTitle(message: string): Promise<string> {
+  const cleaned = message.replace(/\s+/g, " ").trim();
 
-  // Remove common question starters to get to the core request
-  let summarized = cleaned
-    .replace(/^(can you|could you|please|would you|will you|hey|hi|hello)\s+/i, "")
-    .replace(/^(help me|i need|i want|i would like)\s+(to\s+)?/i, "")
-    .trim();
-
-  // Capitalize first letter
-  summarized = summarized.charAt(0).toUpperCase() + summarized.slice(1);
-
-  // If it's short enough now, use it
-  if (summarized.length <= 50) {
-    return summarized;
+  // If message is very short, just use it as-is
+  if (cleaned.length <= 40) {
+    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   }
 
-  // Extract main action and object from common patterns
-  const patterns = [
-    // "create a X" -> "Create X"
-    { regex: /^(create|make|build|write|add|implement|fix|debug|update|modify|change|delete|remove)\s+(?:a|an|the|some)?\s*(.+)/i, format: (_: string, action: string, object: string) => `${capitalize(action)} ${object}` },
-    // "how to X" -> "How to X"
-    { regex: /^how (?:do i|can i|to)\s+(.+)/i, format: (_: string, rest: string) => `How to ${rest}` },
-    // "what is X" -> "What is X"
-    { regex: /^what (?:is|are)\s+(.+)/i, format: (_: string, rest: string) => `What is ${rest}` },
-    // "why does X" -> "Why X"
-    { regex: /^why (?:does|do|is|are)\s+(.+)/i, format: (_: string, rest: string) => `Why ${rest}` },
-  ];
+  // Use Claude to generate a smart title
+  try {
+    const anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    });
 
-  for (const { regex, format } of patterns) {
-    const match = summarized.match(regex);
-    if (match) {
-      summarized = format(...match as [string, ...string[]]);
-      break;
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 50,
+      messages: [{
+        role: "user",
+        content: `Generate a concise 3-7 word title for this request. Just return the title, nothing else:\n\n"${cleaned}"`
+      }]
+    });
+
+    const title = response.content[0].type === "text"
+      ? response.content[0].text.trim().replace(/^["']|["']$/g, "")
+      : "";
+
+    // Fallback to truncation if Claude's response is empty or too long
+    if (!title || title.length > 60) {
+      return fallbackTitle(cleaned);
     }
+
+    return title;
+  } catch (error) {
+    console.error("[title-generator] Failed to generate title with Claude:", error);
+    return fallbackTitle(cleaned);
   }
-
-  // If still too long, intelligently truncate
-  if (summarized.length > 50) {
-    // Get first sentence or clause
-    const firstPart = summarized.split(/[.!?,;]/)[0].trim();
-
-    if (firstPart.length <= 50) {
-      return firstPart;
-    }
-
-    // Truncate at word boundary
-    const words = firstPart.split(" ");
-    let title = "";
-    for (const word of words) {
-      if ((title + " " + word).length > 47) {
-        break;
-      }
-      title += (title ? " " : "") + word;
-    }
-    return title + "...";
-  }
-
-  return summarized;
 }
 
-function capitalize(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+/**
+ * Fallback title generation if Claude API fails
+ */
+function fallbackTitle(message: string): string {
+  // Simple truncation at word boundary
+  const firstSentence = message.split(/[.!?]/)[0].trim();
+
+  if (firstSentence.length <= 50) {
+    return firstSentence;
+  }
+
+  const words = firstSentence.split(" ");
+  let title = "";
+  for (const word of words) {
+    if ((title + " " + word).length > 47) {
+      break;
+    }
+    title += (title ? " " : "") + word;
+  }
+  return title + "...";
 }
