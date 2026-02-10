@@ -172,9 +172,24 @@ export class WsBridge {
           const entry = JSON.parse(line);
 
           if (entry.type === "user") {
+            // Extract text content from user message
+            let textContent = "";
+            if (typeof entry.message.content === "string") {
+              textContent = entry.message.content;
+            } else if (Array.isArray(entry.message.content)) {
+              // Extract text from text blocks in the content array
+              const textBlocks = entry.message.content.filter((block: any) => block?.type === "text");
+              textContent = textBlocks.map((block: any) => block.text || "").join("\n").trim();
+            }
+
+            // Skip empty user messages (e.g., messages with only tool_result blocks)
+            if (!textContent) {
+              continue;
+            }
+
             messages.push({
               type: "user_message",
-              content: typeof entry.message.content === "string" ? entry.message.content : "",
+              content: textContent,
               timestamp: new Date(entry.timestamp).getTime(),
             });
           } else if (entry.type === "assistant" && entry.message) {
