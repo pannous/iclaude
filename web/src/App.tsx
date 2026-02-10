@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { useStore } from "./store.js";
 import { connectSession } from "./ws.js";
 import { disconnectSession } from "./ws.js";
+import { api } from "./api.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
@@ -81,6 +82,33 @@ export default function App() {
     }
 
     function handleKeyDown(e: KeyboardEvent) {
+      // Alt+X to archive current session
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.key === 'x') {
+        e.preventDefault();
+
+        const store = useStore.getState();
+        const currentId = store.currentSessionId;
+
+        if (currentId) {
+          // Archive the current session
+          disconnectSession(currentId);
+          api.archiveSession(currentId).catch(() => {
+            // best-effort
+          });
+
+          // Go back to home page
+          store.newSession();
+
+          // Refresh session list
+          api.listSessions().then((list) => {
+            store.setSdkSessions(list);
+          }).catch(() => {
+            // best-effort
+          });
+        }
+        return;
+      }
+
       // Ctrl+S or Ctrl+T to start a new session
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 't')) {
         e.preventDefault();
