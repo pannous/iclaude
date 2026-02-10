@@ -38,6 +38,46 @@ export default function App() {
 
   // Global keyboard shortcuts for starting a new session and navigating between sessions
   useEffect(() => {
+    function navigateSession(direction: 'prev' | 'next') {
+      const store = useStore.getState();
+      const sdkSessions = store.sdkSessions;
+      const currentId = store.currentSessionId;
+
+      // Get active (non-archived) sessions sorted by creation time (newest first)
+      const activeSessions = sdkSessions
+        .filter(s => !s.archived)
+        .sort((a, b) => b.createdAt - a.createdAt);
+
+      if (activeSessions.length === 0) return;
+
+      // Find current session index
+      const currentIndex = activeSessions.findIndex(s => s.sessionId === currentId);
+
+      let targetIndex: number;
+      if (currentIndex === -1) {
+        // No current session or session not found - go to first
+        targetIndex = 0;
+      } else if (direction === 'prev') {
+        // Previous session (wrap around)
+        targetIndex = (currentIndex - 1 + activeSessions.length) % activeSessions.length;
+      } else {
+        // Next session (wrap around)
+        targetIndex = (currentIndex + 1) % activeSessions.length;
+      }
+
+      const targetSession = activeSessions[targetIndex];
+      if (targetSession && targetSession.sessionId !== currentId) {
+        // Disconnect current session
+        if (currentId) {
+          disconnectSession(currentId);
+        }
+
+        // Connect to new session
+        store.setCurrentSession(targetSession.sessionId);
+        connectSession(targetSession.sessionId);
+      }
+    }
+
     function handleKeyDown(e: KeyboardEvent) {
       // Ctrl+S or Ctrl+T to start a new session
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 't')) {
@@ -61,6 +101,18 @@ export default function App() {
         return;
       }
 
+      // Browser Back/Forward keys (keyboard keys like on some keyboards/laptops)
+      if (e.key === 'BrowserBack' || e.key === 'Back') {
+        e.preventDefault();
+        navigateSession('prev');
+        return;
+      }
+      if (e.key === 'BrowserForward' || e.key === 'Forward') {
+        e.preventDefault();
+        navigateSession('next');
+        return;
+      }
+
       // Navigate between sessions with various modifier combinations + arrow keys
       // Supported: Ctrl+Alt+Arrow, Ctrl+Super+Arrow, Alt+Super+Arrow, Ctrl+Alt+Super+Arrow
       const isNavigationCombo = (
@@ -75,49 +127,27 @@ export default function App() {
 
       if (isNavigationCombo && (isPrevKey || isNextKey)) {
         e.preventDefault();
+        navigateSession(isPrevKey ? 'prev' : 'next');
+      }
+    }
 
-        const store = useStore.getState();
-        const sdkSessions = store.sdkSessions;
-        const currentId = store.currentSessionId;
-
-        // Get active (non-archived) sessions sorted by creation time (newest first)
-        const activeSessions = sdkSessions
-          .filter(s => !s.archived)
-          .sort((a, b) => b.createdAt - a.createdAt);
-
-        if (activeSessions.length === 0) return;
-
-        // Find current session index
-        const currentIndex = activeSessions.findIndex(s => s.sessionId === currentId);
-
-        let targetIndex: number;
-        if (currentIndex === -1) {
-          // No current session or session not found - go to first
-          targetIndex = 0;
-        } else if (isPrevKey) {
-          // Previous session (wrap around)
-          targetIndex = (currentIndex - 1 + activeSessions.length) % activeSessions.length;
-        } else {
-          // Next session (wrap around)
-          targetIndex = (currentIndex + 1) % activeSessions.length;
-        }
-
-        const targetSession = activeSessions[targetIndex];
-        if (targetSession && targetSession.sessionId !== currentId) {
-          // Disconnect current session
-          if (currentId) {
-            disconnectSession(currentId);
-          }
-
-          // Connect to new session
-          store.setCurrentSession(targetSession.sessionId);
-          connectSession(targetSession.sessionId);
-        }
+    function handleMouseButton(e: MouseEvent) {
+      // Mouse button 3 = Back, button 4 = Forward
+      if (e.button === 3) {
+        e.preventDefault();
+        navigateSession('prev');
+      } else if (e.button === 4) {
+        e.preventDefault();
+        navigateSession('next');
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("mouseup", handleMouseButton);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("mouseup", handleMouseButton);
+    };
   }, []);
 
   if (hash === "#/playground") {
