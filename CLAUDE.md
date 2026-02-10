@@ -9,7 +9,7 @@ The Vibe Companion — a web UI for Claude Code. It reverse-engineers the undocu
 ## Development Commands
 
 ```bash
-# Dev server (Hono backend on :3456 + Vite HMR on :5174)
+# Dev server (Hono backend on :3456 + Vite HMR on :2345)
 cd web && bun install && bun run dev
 
 # Or from repo root
@@ -48,7 +48,7 @@ cd web && bun run test:watch
 
 ```
 Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket (NDJSON) ←→ Claude Code CLI
-     :5174              /ws/browser/:id        :3456        /ws/cli/:id         (--sdk-url)
+     :2345              /ws/browser/:id        :3456        /ws/cli/:id         (--sdk-url)
 ```
 
 1. Browser sends a "create session" REST call to the server
