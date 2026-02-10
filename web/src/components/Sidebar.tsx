@@ -74,9 +74,20 @@ export function Sidebar() {
     }
   }, [editingSessionId]);
 
-  function confirmRename() {
+  async function confirmRename() {
     if (editingSessionId && editingName.trim()) {
-      useStore.getState().setSessionName(editingSessionId, editingName.trim());
+      const title = editingName.trim();
+      // Update local store immediately for instant feedback
+      useStore.getState().setSessionName(editingSessionId, title);
+      // Update server-side title
+      try {
+        await api.setSessionTitle(editingSessionId, title);
+        // Refresh SDK sessions to get the updated title
+        const list = await api.listSessions();
+        useStore.getState().setSdkSessions(list);
+      } catch (err) {
+        console.error("Failed to update session title:", err);
+      }
     }
     setEditingSessionId(null);
     setEditingName("");

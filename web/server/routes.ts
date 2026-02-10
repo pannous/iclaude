@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { readdir, stat } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { readdir, stat, realpath } from "node:fs/promises";
+import { resolve, join, sep } from "node:path";
 import { homedir } from "node:os";
 import type { CliLauncher } from "./cli-launcher.js";
 import type { WsBridge } from "./ws-bridge.js";
@@ -17,9 +17,44 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
   api.post("/sessions/create", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     try {
+      // Validate model (if provided)
+      if (body.model !== undefined) {
+        if (typeof body.model !== "string" || body.model.length === 0 || body.model.length > 100) {
+          return c.json({ error: "Invalid model parameter" }, 400);
+        }
+      }
+
+      // Validate permissionMode (if provided)
+      if (body.permissionMode !== undefined) {
+        const validModes = ["bypass", "bypassPermissions", "acceptEdits", "delegate", "dontAsk", "default", "plan"];
+        if (typeof body.permissionMode !== "string" || !validModes.includes(body.permissionMode)) {
+          return c.json({ error: "Invalid permissionMode parameter" }, 400);
+        }
+      }
+
+      // Validate claudeBinary (if provided)
+      if (body.claudeBinary !== undefined) {
+        if (typeof body.claudeBinary !== "string" || !/^[a-zA-Z0-9_\-\/\.]+$/.test(body.claudeBinary)) {
+          return c.json({ error: "Invalid claudeBinary parameter" }, 400);
+        }
+      }
+
+      // Validate allowedTools (if provided)
+      if (body.allowedTools !== undefined) {
+        if (!Array.isArray(body.allowedTools)) {
+          return c.json({ error: "allowedTools must be an array" }, 400);
+        }
+        if (!body.allowedTools.every((t: unknown) => typeof t === "string" && t.length > 0 && t.length < 100)) {
+          return c.json({ error: "Invalid allowedTools array" }, 400);
+        }
+      }
+
       // Resolve environment variables from envSlug
       let envVars: Record<string, string> | undefined = body.env;
       if (body.envSlug) {
+        if (typeof body.envSlug !== "string" || body.envSlug.length === 0) {
+          return c.json({ error: "Invalid envSlug parameter" }, 400);
+        }
         const companionEnv = envManager.getEnv(body.envSlug);
         if (companionEnv) {
           console.log(`[routes] Injecting env "${companionEnv.name}" (${Object.keys(companionEnv.variables).length} vars):`, Object.keys(companionEnv.variables).join(", "));
@@ -29,11 +64,28 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
         }
       }
 
+      // Validate cwd and apply path traversal protection
       let cwd = body.cwd;
+      if (cwd !== undefined) {
+        if (typeof cwd !== "string" || cwd.length === 0) {
+          return c.json({ error: "Invalid cwd parameter" }, 400);
+        }
+        // Security: Ensure cwd is within home directory
+        const resolvedCwd = resolve(cwd);
+        const allowedBase = homedir();
+        if (!resolvedCwd.startsWith(allowedBase + sep) && resolvedCwd !== allowedBase) {
+          return c.json({ error: "cwd must be within home directory" }, 403);
+        }
+        cwd = resolvedCwd;
+      }
+
       let worktreeInfo: { isWorktree: boolean; repoRoot: string; branch: string; worktreePath: string } | undefined;
 
       // If a branch is specified, set up a worktree
       if (body.branch && cwd) {
+        if (typeof body.branch !== "string" || body.branch.length === 0 || body.branch.length > 200) {
+          return c.json({ error: "Invalid branch parameter" }, 400);
+        }
         const repoInfo = gitUtils.getRepoInfo(cwd);
         if (repoInfo) {
           // If the requested branch is the default branch, use the original repo dir
@@ -154,17 +206,34 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
   api.get("/fs/list", async (c) => {
     const rawPath = c.req.query("path") || homedir();
     const basePath = resolve(rawPath);
+
     try {
-      const entries = await readdir(basePath, { withFileTypes: true });
+      // Security: Validate the path is within safe boundaries
+      // Resolve to real path to prevent symlink attacks
+      const realPath = await realpath(basePath).catch(() => basePath);
+
+      // Only allow access to user's home directory and subdirectories
+      const allowedBase = homedir();
+      if (!realPath.startsWith(allowedBase + sep) && realPath !== allowedBase) {
+        return c.json({
+          error: "Access denied: Path must be within home directory",
+          path: basePath,
+          dirs: [],
+          home: homedir()
+        }, 403);
+      }
+
+      const entries = await readdir(realPath, { withFileTypes: true });
       const dirs: { name: string; path: string }[] = [];
       for (const entry of entries) {
         if (entry.isDirectory() && !entry.name.startsWith(".")) {
-          dirs.push({ name: entry.name, path: join(basePath, entry.name) });
+          dirs.push({ name: entry.name, path: join(realPath, entry.name) });
         }
       }
       dirs.sort((a, b) => a.name.localeCompare(b.name));
-      return c.json({ path: basePath, dirs, home: homedir() });
-    } catch {
+      return c.json({ path: realPath, dirs, home: homedir() });
+    } catch (err) {
+      console.error("[routes] fs/list error:", err);
       return c.json({ error: "Cannot read directory", path: basePath, dirs: [], home: homedir() }, 400);
     }
   });

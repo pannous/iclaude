@@ -131,6 +131,9 @@ export const api = {
   unarchiveSession: (sessionId: string) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/unarchive`),
 
+  setSessionTitle: (sessionId: string, title: string) =>
+    post(`/sessions/${encodeURIComponent(sessionId)}/title`, { title }),
+
   listDirs: (path?: string) =>
     get<DirListResult>(`/fs/list${path ? `?path=${encodeURIComponent(path)}` : ""}`),
 
