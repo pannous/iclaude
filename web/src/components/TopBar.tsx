@@ -12,7 +12,11 @@ export function TopBar() {
   const activeTab = useStore((s) => s.activeTab);
   const setActiveTab = useStore((s) => s.setActiveTab);
 
-  const sessionName = useStore((s) => currentSessionId ? s.sessionNames.get(currentSessionId) : undefined);
+  const sessionTitle = useStore((s) => {
+    if (!currentSessionId) return undefined;
+    const sdkTitle = s.sdkSessions.find((ss) => ss.sessionId === currentSessionId)?.title;
+    return sdkTitle || s.sessionNames.get(currentSessionId);
+  });
   const isConnected = currentSessionId ? (cliConnected.get(currentSessionId) ?? false) : false;
   const status = currentSessionId ? (sessionStatus.get(currentSessionId) ?? null) : null;
 
@@ -32,8 +36,8 @@ export function TopBar() {
         {/* Session name + connection status */}
         {currentSessionId && (
           <div className="flex items-center gap-2">
-            {sessionName && (
-              <span className="text-[13px] font-medium text-cc-fg truncate max-w-[200px] sm:max-w-[300px]">{sessionName}</span>
+            {sessionTitle && (
+              <span className="text-[13px] font-medium text-cc-fg truncate max-w-[200px] sm:max-w-[300px]">{sessionTitle}</span>
             )}
             <div className="flex items-center gap-1.5">
               <span
