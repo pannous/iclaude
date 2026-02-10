@@ -176,6 +176,33 @@ export default function App() {
     }
 
     function handleMouseButton(e: MouseEvent) {
+      // Mouse button 1 = Middle (archive session)
+      if (e.button === 1) {
+        e.preventDefault();
+
+        const store = useStore.getState();
+        const currentId = store.currentSessionId;
+
+        if (currentId) {
+          // Archive the current session
+          disconnectSession(currentId);
+          api.archiveSession(currentId).catch(() => {
+            // best-effort
+          });
+
+          // Go back to home page
+          store.newSession();
+
+          // Refresh session list
+          api.listSessions().then((list) => {
+            store.setSdkSessions(list);
+          }).catch(() => {
+            // best-effort
+          });
+        }
+        return;
+      }
+
       // Mouse button 3 = Back, button 4 = Forward
       if (e.button === 3) {
         e.preventDefault();
