@@ -11,11 +11,16 @@ export async function generateTitle(message: string): Promise<string> {
     return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   }
 
+  // Check if API key is configured before attempting to use Claude
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    // No API key configured - silently fall back to simple title generation
+    return fallbackTitle(cleaned);
+  }
+
   // Use Claude to generate a smart title
   try {
-    const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
+    const anthropic = new Anthropic({ apiKey });
 
     const response = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
@@ -37,7 +42,7 @@ export async function generateTitle(message: string): Promise<string> {
 
     return title;
   } catch (error) {
-    console.error("[title-generator] Failed to generate title with Claude:", error);
+    console.warn("[title-generator] Failed to generate title with Claude, using fallback");
     return fallbackTitle(cleaned);
   }
 }
