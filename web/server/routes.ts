@@ -84,27 +84,24 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
 
       let worktreeInfo: { isWorktree: boolean; repoRoot: string; branch: string; worktreePath: string } | undefined;
 
-      // If a branch is specified, set up a worktree
-      if (body.branch && cwd) {
+      // If worktree is requested, set up a worktree for the selected branch
+      if (body.useWorktree && body.branch && cwd) {
         if (typeof body.branch !== "string" || body.branch.length === 0 || body.branch.length > 200) {
           return c.json({ error: "Invalid branch parameter" }, 400);
         }
         const repoInfo = gitUtils.getRepoInfo(cwd);
         if (repoInfo) {
-          // If the requested branch is the default branch, use the original repo dir
-          if (body.branch !== repoInfo.defaultBranch) {
-            const result = gitUtils.ensureWorktree(repoInfo.repoRoot, body.branch, {
-              baseBranch: repoInfo.defaultBranch,
-              createBranch: body.createBranch,
-            });
-            cwd = result.worktreePath;
-            worktreeInfo = {
-              isWorktree: true,
-              repoRoot: repoInfo.repoRoot,
-              branch: body.branch,
-              worktreePath: result.worktreePath,
-            };
-          }
+          const result = gitUtils.ensureWorktree(repoInfo.repoRoot, body.branch, {
+            baseBranch: repoInfo.defaultBranch,
+            createBranch: body.createBranch,
+          });
+          cwd = result.worktreePath;
+          worktreeInfo = {
+            isWorktree: true,
+            repoRoot: repoInfo.repoRoot,
+            branch: body.branch,
+            worktreePath: result.worktreePath,
+          };
         }
       }
 
