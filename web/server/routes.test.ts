@@ -19,9 +19,12 @@ vi.mock("./git-utils.js", () => ({
 }));
 
 import { Hono } from "hono";
+import { homedir } from "node:os";
 import { createRoutes } from "./routes.js";
 import * as envManager from "./env-manager.js";
 import * as gitUtils from "./git-utils.js";
+
+const TEST_CWD = `${homedir()}/test`;
 
 // ─── Mock factories ──────────────────────────────────────────────────────────
 
@@ -30,7 +33,7 @@ function createMockLauncher() {
     launch: vi.fn(() => ({
       sessionId: "session-1",
       state: "starting",
-      cwd: "/test",
+      cwd: TEST_CWD,
       createdAt: Date.now(),
     })),
     kill: vi.fn(async () => true),
@@ -88,14 +91,14 @@ describe("POST /api/sessions/create", () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "claude-sonnet-4-5-20250929", cwd: "/test" }),
+      body: JSON.stringify({ model: "claude-sonnet-4-5-20250929", cwd: TEST_CWD }),
     });
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json).toMatchObject({ sessionId: "session-1", state: "starting", cwd: "/test" });
+    expect(json).toMatchObject({ sessionId: "session-1", state: "starting", cwd: TEST_CWD });
     expect(launcher.launch).toHaveBeenCalledWith(
-      expect.objectContaining({ model: "claude-sonnet-4-5-20250929", cwd: "/test" }),
+      expect.objectContaining({ model: "claude-sonnet-4-5-20250929", cwd: TEST_CWD }),
     );
   });
 
@@ -111,7 +114,7 @@ describe("POST /api/sessions/create", () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test", envSlug: "production" }),
+      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "production" }),
     });
 
     expect(res.status).toBe(200);
@@ -124,15 +127,16 @@ describe("POST /api/sessions/create", () => {
   });
 
   it("sets up a worktree when branch is specified", async () => {
+    const REPO = `${homedir()}/repo`;
     vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
-      repoRoot: "/repo",
+      repoRoot: REPO,
       repoName: "my-repo",
       currentBranch: "main",
       defaultBranch: "main",
       isWorktree: false,
     });
     vi.mocked(gitUtils.ensureWorktree).mockReturnValue({
-      worktreePath: "/home/.companion/worktrees/my-repo/feat-branch",
+      worktreePath: `${homedir()}/.companion/worktrees/my-repo/feat-branch`,
       branch: "feat-branch",
       actualBranch: "feat-branch",
       isNew: true,
@@ -141,32 +145,32 @@ describe("POST /api/sessions/create", () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/repo", branch: "feat-branch", useWorktree: true }),
+      body: JSON.stringify({ cwd: REPO, branch: "feat-branch", useWorktree: true }),
     });
 
     expect(res.status).toBe(200);
-    expect(gitUtils.getRepoInfo).toHaveBeenCalledWith("/repo");
-    expect(gitUtils.ensureWorktree).toHaveBeenCalledWith("/repo", "feat-branch", {
+    expect(gitUtils.getRepoInfo).toHaveBeenCalledWith(REPO);
+    expect(gitUtils.ensureWorktree).toHaveBeenCalledWith(REPO, "feat-branch", {
       baseBranch: "main",
       createBranch: undefined,
       forceNew: true,
     });
     expect(launcher.launch).toHaveBeenCalledWith(
       expect.objectContaining({
-        cwd: "/home/.companion/worktrees/my-repo/feat-branch",
+        cwd: `${homedir()}/.companion/worktrees/my-repo/feat-branch`,
         worktreeInfo: expect.objectContaining({
           isWorktree: true,
-          repoRoot: "/repo",
+          repoRoot: REPO,
           branch: "feat-branch",
           actualBranch: "feat-branch",
-          worktreePath: "/home/.companion/worktrees/my-repo/feat-branch",
+          worktreePath: `${homedir()}/.companion/worktrees/my-repo/feat-branch`,
         }),
       }),
     );
     expect(tracker.addMapping).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: "session-1",
-        repoRoot: "/repo",
+        repoRoot: REPO,
         branch: "feat-branch",
         actualBranch: "feat-branch",
       }),
@@ -181,7 +185,7 @@ describe("POST /api/sessions/create", () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test" }),
+      body: JSON.stringify({ cwd: TEST_CWD }),
     });
 
     expect(res.status).toBe(500);

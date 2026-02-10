@@ -48,6 +48,7 @@ interface MockStoreState {
   sessionStatus: Map<string, "idle" | "running" | "compacting" | null>;
   sessionNames: Map<string, string>;
   pendingPermissions: Map<string, Map<string, unknown>>;
+  sessionTasks: Map<string, unknown[]>;
   setCurrentSession: ReturnType<typeof vi.fn>;
   toggleDarkMode: ReturnType<typeof vi.fn>;
   removeSession: ReturnType<typeof vi.fn>;
@@ -107,6 +108,7 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     sessionStatus: new Map(),
     sessionNames: new Map(),
     pendingPermissions: new Map(),
+    sessionTasks: new Map(),
     setCurrentSession: vi.fn(),
     toggleDarkMode: vi.fn(),
     removeSession: vi.fn(),
@@ -142,9 +144,9 @@ beforeEach(() => {
 });
 
 describe("Sidebar", () => {
-  it("renders 'New Session' button", () => {
+  it("renders 'New' button", () => {
     render(<Sidebar />);
-    expect(screen.getByText("New Session")).toBeInTheDocument();
+    expect(screen.getByText("New")).toBeInTheDocument();
   });
 
   it("renders 'No sessions yet.' when no sessions exist", () => {
@@ -292,9 +294,9 @@ describe("Sidebar", () => {
     expect(mockConnectSession).toHaveBeenCalledWith("s1");
   });
 
-  it("New Session button calls newSession", () => {
+  it("New button calls newSession", () => {
     render(<Sidebar />);
-    fireEvent.click(screen.getByText("New Session"));
+    fireEvent.click(screen.getByText("New"));
 
     expect(mockState.newSession).toHaveBeenCalled();
   });
