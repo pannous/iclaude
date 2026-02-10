@@ -326,11 +326,16 @@ export function Sidebar() {
                 </>
               )}
             </span>
-            {/* Status label */}
-            {!archived && !isEditing && (isRunning || isCompacting) && (
-              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-cc-success/15 text-cc-success uppercase tracking-wide shrink-0">
-                {isRunning ? "Working" : "Compacting"}
-              </span>
+            {/* Animated working indicator */}
+            {!archived && !isEditing && isRunning && (
+              <svg viewBox="0 0 16 16" fill="none" className="w-3 h-3 shrink-0 text-cc-success animate-spin">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="28 10" opacity="0.8" />
+              </svg>
+            )}
+            {!archived && !isEditing && isCompacting && (
+              <svg viewBox="0 0 16 16" fill="none" className="w-3 h-3 shrink-0 text-cc-warning animate-spin">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="28 10" opacity="0.8" />
+              </svg>
             )}
             {isEditing ? (
               <input
