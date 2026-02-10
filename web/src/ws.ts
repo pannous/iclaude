@@ -131,6 +131,14 @@ function handleMessage(sessionId: string, event: MessageEvent) {
 
     case "assistant": {
       const msg = data.message;
+
+      // Deduplicate: check if message with same ID already exists
+      const existingMessages = store.messages.get(sessionId) || [];
+      if (existingMessages.some((m) => m.id === msg.id)) {
+        console.warn(`[ws] Duplicate assistant message detected (id: ${msg.id}), skipping`);
+        break;
+      }
+
       const textContent = extractTextFromBlocks(msg.content);
       const chatMsg: ChatMessage = {
         id: msg.id,
@@ -302,6 +310,8 @@ function handleMessage(sessionId: string, event: MessageEvent) {
 
     case "message_history": {
       const chatMessages: ChatMessage[] = [];
+      const seenIds = new Set<string>();
+
       for (const histMsg of data.messages) {
         if (histMsg.type === "user_message") {
           chatMessages.push({
@@ -312,6 +322,14 @@ function handleMessage(sessionId: string, event: MessageEvent) {
           });
         } else if (histMsg.type === "assistant") {
           const msg = histMsg.message;
+
+          // Deduplicate by message ID
+          if (seenIds.has(msg.id)) {
+            console.warn(`[ws] Duplicate message in history (id: ${msg.id}), skipping`);
+            continue;
+          }
+          seenIds.add(msg.id);
+
           const textContent = extractTextFromBlocks(msg.content);
           chatMessages.push({
             id: msg.id,
