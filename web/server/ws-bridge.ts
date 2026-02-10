@@ -44,6 +44,8 @@ interface Session {
   messageHistory: BrowserIncomingMessage[];
   /** Messages queued while waiting for CLI to connect */
   pendingMessages: string[];
+  /** CLI's internal session ID (for resuming) */
+  cliSessionId?: string;
 }
 
 function makeDefaultState(sessionId: string): SessionState {
@@ -116,6 +118,7 @@ export class WsBridge {
         pendingPermissions: new Map(p.pendingPermissions || []),
         messageHistory: p.messageHistory || [],
         pendingMessages: p.pendingMessages || [],
+        cliSessionId: p.cliSessionId,
       };
       this.sessions.set(p.id, session);
       count++;
@@ -135,12 +138,13 @@ export class WsBridge {
       messageHistory: session.messageHistory,
       pendingMessages: session.pendingMessages,
       pendingPermissions: Array.from(session.pendingPermissions.entries()),
+      cliSessionId: session.cliSessionId,
     });
   }
 
   // ── Session management ──────────────────────────────────────────────────
 
-  getOrCreateSession(sessionId: string): Session {
+  getOrCreateSession(sessionId: string, opts?: { resumeCliSessionId?: string }): Session {
     let session = this.sessions.get(sessionId);
     if (!session) {
       session = {
@@ -152,6 +156,16 @@ export class WsBridge {
         messageHistory: [],
         pendingMessages: [],
       };
+
+      // If resuming, try to load message history from the old session
+      if (opts?.resumeCliSessionId && this.store) {
+        const oldSession = this.store.findByCliSessionId(opts.resumeCliSessionId);
+        if (oldSession && oldSession.messageHistory.length > 0) {
+          console.log(`[ws-bridge] Resuming session ${sessionId} from CLI session ${opts.resumeCliSessionId}, loading ${oldSession.messageHistory.length} message(s)`);
+          session.messageHistory = oldSession.messageHistory;
+        }
+      }
+
       this.sessions.set(sessionId, session);
     }
     return session;
@@ -172,6 +186,14 @@ export class WsBridge {
   removeSession(sessionId: string) {
     this.sessions.delete(sessionId);
     this.store?.remove(sessionId);
+  }
+
+  /**
+   * Initialize a session that will resume from a CLI session.
+   * Loads message history from the old session if available.
+   */
+  initializeResumedSession(sessionId: string, resumeCliSessionId: string): void {
+    this.getOrCreateSession(sessionId, { resumeCliSessionId });
   }
 
   /**
@@ -372,8 +394,11 @@ export class WsBridge {
       // from the launcher UUID, causing duplicate entries in the sidebar.
 
       // Store the CLI's internal session_id so we can --resume on relaunch
-      if (init.session_id && this.onCLISessionId) {
-        this.onCLISessionId(session.id, init.session_id);
+      if (init.session_id) {
+        session.cliSessionId = init.session_id;
+        if (this.onCLISessionId) {
+          this.onCLISessionId(session.id, init.session_id);
+        }
       }
 
       session.state.model = init.model;

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { execSync } from "node:child_process";
 import { readdir, stat, realpath, readFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
@@ -117,6 +118,11 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
         worktreeInfo,
         resumeSessionId: body.resumeSessionId,
       });
+
+      // If resuming, initialize the WsBridge session with message history from the old session
+      if (body.resumeSessionId) {
+        wsBridge.initializeResumedSession(session.sessionId, body.resumeSessionId);
+      }
 
       // Track the worktree mapping
       if (worktreeInfo) {
@@ -418,6 +424,25 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
     const result = gitUtils.removeWorktree(repoRoot, worktreePath, { force });
     return c.json(result);
   });
+
+  api.post("/git/pull", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const { cwd } = body;
+    if (!cwd) return c.json({ error: "cwd required" }, 400);
+    const result = gitUtils.gitPull(cwd);
+    // Return refreshed ahead/behind counts
+    let git_ahead = 0, git_behind = 0;
+    try {
+      const counts = execSync("git rev-list --left-right --count @{upstream}...HEAD", {
+        cwd, encoding: "utf-8", timeout: 3000,
+      }).trim();
+      const [behind, ahead] = counts.split(/\s+/).map(Number);
+      git_ahead = ahead || 0;
+      git_behind = behind || 0;
+    } catch { /* no upstream */ }
+    return c.json({ ...result, git_ahead, git_behind });
+  });
+
 
   // ─── Helper ─────────────────────────────────────────────────────────
 

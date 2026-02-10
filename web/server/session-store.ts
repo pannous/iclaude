@@ -13,6 +13,7 @@ export interface PersistedSession {
   pendingPermissions: [string, PermissionRequest][];
   archived?: boolean;
   title?: string;
+  cliSessionId?: string;
 }
 
 // ─── Store ──────────────────────────────────────────────────────────────────
@@ -122,6 +123,27 @@ export class SessionStore {
     } catch {
       return null;
     }
+  }
+
+  /** Find a session by CLI session ID. */
+  findByCliSessionId(cliSessionId: string): PersistedSession | null {
+    try {
+      const files = readdirSync(this.dir).filter((f) => f.endsWith(".json") && f !== "launcher.json");
+      for (const file of files) {
+        try {
+          const raw = readFileSync(join(this.dir, file), "utf-8");
+          const session = JSON.parse(raw) as PersistedSession;
+          if (session.cliSessionId === cliSessionId) {
+            return session;
+          }
+        } catch {
+          // Skip corrupt files
+        }
+      }
+    } catch {
+      // Dir doesn't exist yet
+    }
+    return null;
   }
 
   get directory(): string {

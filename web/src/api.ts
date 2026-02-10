@@ -56,6 +56,7 @@ export interface CreateSessionOpts {
   envSlug?: string;
   branch?: string;
   createBranch?: boolean;
+  useWorktree?: boolean;
   resumeSessionId?: string;
 }
 
@@ -174,4 +175,6 @@ export const api = {
     post<WorktreeCreateResult>("/git/worktree", { repoRoot, branch, ...opts }),
   removeWorktree: (repoRoot: string, worktreePath: string, force?: boolean) =>
     del<{ removed: boolean; reason?: string }>("/git/worktree", { repoRoot, worktreePath, force }),
+  gitPull: (cwd: string) =>
+    post<{ success: boolean; output: string; git_ahead: number; git_behind: number }>("/git/pull", { cwd }),
 };

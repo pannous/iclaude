@@ -1,6 +1,6 @@
 {
   "name": "the-vibe-companion",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "type": "module",
   "description": "Web UI for launching and interacting with Claude Code agents",
   "license": "MIT",
@@ -31,7 +31,8 @@
     "build": "vite build",
     "start": "NODE_ENV=production bun server/index.ts",
     "prepublishOnly": "bun run build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",

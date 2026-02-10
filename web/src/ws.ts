@@ -86,6 +86,31 @@ function nextId(): string {
   return `msg-${Date.now()}-${++idCounter}`;
 }
 
+function notifySessionDone(sessionId: string, isError: boolean) {
+  const store = useStore.getState();
+  // Only notify for background sessions (not the one the user is looking at)
+  if (store.currentSessionId === sessionId) return;
+  if (!("Notification" in window)) return;
+
+  const name = store.sessionNames.get(sessionId) || sessionId.slice(0, 8);
+  const title = isError ? `Session failed: ${name}` : `Session done: ${name}`;
+  const tasks = store.sessionTasks.get(sessionId) || [];
+  const completedCount = tasks.filter((t) => t.status === "completed").length;
+  const body = tasks.length > 0
+    ? `${completedCount}/${tasks.length} tasks completed`
+    : isError ? "Session ended with an error" : "Session finished successfully";
+
+  if (Notification.permission === "granted") {
+    new Notification(title, { body, tag: `session-done-${sessionId}` });
+  } else if (Notification.permission !== "denied") {
+    Notification.requestPermission().then((perm) => {
+      if (perm === "granted") {
+        new Notification(title, { body, tag: `session-done-${sessionId}` });
+      }
+    });
+  }
+}
+
 function getWsUrl(sessionId: string): string {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${location.host}/ws/browser/${sessionId}`;
@@ -204,7 +229,7 @@ function handleMessage(sessionId: string, event: MessageEvent) {
         num_turns: r.num_turns,
       };
       // Forward lines changed if present
-      const raw = r as Record<string, unknown>;
+      const raw = r as any;
       if (typeof raw.total_lines_added === "number") {
         sessionUpdates.total_lines_added = raw.total_lines_added;
       }
@@ -233,6 +258,8 @@ function handleMessage(sessionId: string, event: MessageEvent) {
           timestamp: Date.now(),
         });
       }
+      // Notify when a background session finishes
+      notifySessionDone(sessionId, r.is_error);
       break;
     }
 

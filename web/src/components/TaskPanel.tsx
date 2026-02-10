@@ -12,6 +12,7 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
   if (!taskPanelOpen) return null;
 
   const completedCount = tasks.filter((t) => t.status === "completed").length;
+  const allTasksDone = tasks.length > 0 && completedCount === tasks.length;
   const contextPct = session?.context_used_percent ?? 0;
 
   return (
@@ -74,9 +75,16 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
 
       {/* Task section header */}
       <div className="shrink-0 px-4 py-2.5 border-b border-cc-border flex items-center justify-between">
-        <span className="text-[12px] font-semibold text-cc-fg">Tasks</span>
+        <span className="text-[12px] font-semibold text-cc-fg flex items-center gap-1.5">
+          Tasks
+          {allTasksDone && (
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-cc-success">
+              <path fillRule="evenodd" d="M8 15A7 7 0 108 1a7 7 0 000 14zm3.354-9.354a.5.5 0 00-.708-.708L7 8.586 5.354 6.94a.5.5 0 10-.708.708l2 2a.5.5 0 00.708 0l4-4z" clipRule="evenodd" />
+            </svg>
+          )}
+        </span>
         {tasks.length > 0 && (
-          <span className="text-[11px] text-cc-muted tabular-nums">
+          <span className={`text-[11px] tabular-nums ${allTasksDone ? "text-cc-success font-medium" : "text-cc-muted"}`}>
             {completedCount}/{tasks.length}
           </span>
         )}
@@ -91,6 +99,11 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
             {tasks.map((task) => (
               <TaskRow key={task.id} task={task} />
             ))}
+            {allTasksDone && (
+              <div className="mt-3 mx-1 px-3 py-2 rounded-lg bg-cc-success/10 text-cc-success text-[12px] font-medium text-center">
+                All tasks completed
+              </div>
+            )}
           </div>
         )}
       </div>
