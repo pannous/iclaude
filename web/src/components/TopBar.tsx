@@ -12,6 +12,7 @@ export function TopBar() {
   const activeTab = useStore((s) => s.activeTab);
   const setActiveTab = useStore((s) => s.setActiveTab);
 
+  const sessionName = useStore((s) => currentSessionId ? s.sessionNames.get(currentSessionId) : undefined);
   const isConnected = currentSessionId ? (cliConnected.get(currentSessionId) ?? false) : false;
   const status = currentSessionId ? (sessionStatus.get(currentSessionId) ?? null) : null;
 
@@ -28,24 +29,27 @@ export function TopBar() {
           </svg>
         </button>
 
-        {/* Connection status */}
+        {/* Session name + connection status */}
         {currentSessionId && (
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isConnected ? "bg-cc-success" : "bg-cc-muted opacity-40"
-              }`}
-            />
-            {isConnected ? (
-              <span className="text-[11px] text-cc-muted hidden sm:inline">Connected</span>
-            ) : (
-              <button
-                onClick={() => currentSessionId && api.relaunchSession(currentSessionId).catch(console.error)}
-                className="text-[11px] text-cc-warning hover:text-cc-warning/80 font-medium cursor-pointer hidden sm:inline"
-              >
-                Reconnect
-              </button>
+          <div className="flex items-center gap-2">
+            {sessionName && (
+              <span className="text-[13px] font-medium text-cc-fg truncate max-w-[200px] sm:max-w-[300px]">{sessionName}</span>
             )}
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isConnected ? "bg-cc-success" : "bg-cc-muted opacity-40"
+                }`}
+              />
+              {!isConnected && (
+                <button
+                  onClick={() => currentSessionId && api.relaunchSession(currentSessionId).catch(console.error)}
+                  className="text-[11px] text-cc-warning hover:text-cc-warning/80 font-medium cursor-pointer hidden sm:inline"
+                >
+                  Reconnect
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
