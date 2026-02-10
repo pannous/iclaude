@@ -340,6 +340,11 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       break;
     }
 
+    case "subtitle_updated": {
+      store.setSessionSubtitle(sessionId, data.subtitle);
+      break;
+    }
+
     case "message_history": {
       const chatMessages: ChatMessage[] = [];
       const seenIds = new Set<string>();

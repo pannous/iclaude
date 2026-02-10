@@ -36,6 +36,7 @@ interface AppState {
 
   // Session display names
   sessionNames: Map<string, string>;
+  sessionSubtitles: Map<string, string>;
 
   // UI
   darkMode: boolean;
@@ -75,6 +76,7 @@ interface AppState {
 
   // Session name actions
   setSessionName: (sessionId: string, name: string) => void;
+  setSessionSubtitle: (sessionId: string, subtitle: string) => void;
 
   // Plan mode actions
   setPreviousPermissionMode: (sessionId: string, mode: string) => void;
@@ -123,6 +125,7 @@ export const useStore = create<AppState>((set) => ({
   previousPermissionMode: new Map(),
   sessionTasks: new Map(),
   sessionNames: getInitialSessionNames(),
+  sessionSubtitles: new Map(),
   darkMode: getInitialDarkMode(),
   sidebarOpen: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
   taskPanelOpen: typeof window !== "undefined" ? window.innerWidth >= 1024 : false,
@@ -332,6 +335,13 @@ export const useStore = create<AppState>((set) => ({
       return { sessionNames };
     }),
 
+  setSessionSubtitle: (sessionId, subtitle) =>
+    set((s) => {
+      const sessionSubtitles = new Map(s.sessionSubtitles);
+      sessionSubtitles.set(sessionId, subtitle);
+      return { sessionSubtitles };
+    }),
+
   setPreviousPermissionMode: (sessionId, mode) =>
     set((s) => {
       const previousPermissionMode = new Map(s.previousPermissionMode);
@@ -376,5 +386,6 @@ export const useStore = create<AppState>((set) => ({
       previousPermissionMode: new Map(),
       sessionTasks: new Map(),
       sessionNames: new Map(),
+      sessionSubtitles: new Map(),
     }),
 }));

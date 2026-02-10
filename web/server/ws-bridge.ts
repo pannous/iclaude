@@ -595,10 +595,10 @@ export class WsBridge {
   }
 
   private handleResultMessage(session: Session, msg: CLIResultMessage) {
-    // Update title from CLI result summary (overrides user-input title with better context)
-    if (msg.result && this.onTitleGenerated) {
-      const title = truncateTitle(msg.result);
-      this.onTitleGenerated(session.id, title);
+    // Broadcast CLI result summary as subtitle (shown below the title in TopBar)
+    if (msg.result) {
+      const subtitle = truncateTitle(msg.result);
+      this.broadcastToBrowsers(session, { type: "subtitle_updated", subtitle });
     }
 
     // Update session cost/turns

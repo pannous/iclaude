@@ -184,6 +184,7 @@ export type BrowserIncomingMessage =
   | { type: "cli_disconnected" }
   | { type: "cli_connected" }
   | { type: "title_updated"; title: string }
+  | { type: "subtitle_updated"; subtitle: string }
   | { type: "user_message"; content: string; timestamp: number }
   | { type: "message_history"; messages: BrowserIncomingMessage[] };
 
