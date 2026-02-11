@@ -14,6 +14,7 @@ export interface ChatMessage {
   content: string;
   contentBlocks?: ContentBlock[];
   images?: { media_type: string; data: string }[];
+  scannedImages?: { src: string; original: string }[];
   timestamp: number;
   parentToolUseId?: string | null;
   isStreaming?: boolean;

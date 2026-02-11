@@ -1,5 +1,6 @@
 import { useStore } from "./store.js";
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem } from "./types.js";
+import { resultScanner } from "./utils/result-scanner.js";
 
 const sockets = new Map<string, WebSocket>();
 const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -129,6 +130,15 @@ function extractTextFromBlocks(blocks: ContentBlock[]): string {
     .join("\n");
 }
 
+function scanForImages(text: string): { src: string; original: string }[] | undefined {
+  const scanned = resultScanner.scan(text);
+  if (scanned.length === 0) return undefined;
+  return scanned.map((img) => ({
+    src: resultScanner.toDisplaySrc(img),
+    original: img.original,
+  }));
+}
+
 function handleMessage(sessionId: string, event: MessageEvent) {
   const store = useStore.getState();
   let data: BrowserIncomingMessage;
@@ -167,6 +177,7 @@ function handleMessage(sessionId: string, event: MessageEvent) {
         role: "assistant",
         content: textContent,
         contentBlocks: msg.content,
+        scannedImages: scanForImages(textContent),
         timestamp: Date.now(),
         parentToolUseId: data.parent_tool_use_id,
         model: msg.model,
@@ -373,6 +384,7 @@ function handleMessage(sessionId: string, event: MessageEvent) {
             role: "assistant",
             content: textContent,
             contentBlocks: msg.content,
+            scannedImages: scanForImages(textContent),
             timestamp: Date.now(),
             parentToolUseId: histMsg.parent_tool_use_id,
             model: msg.model,

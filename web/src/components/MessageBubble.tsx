@@ -100,6 +100,19 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
         <AssistantAvatar />
         <div className="flex-1 min-w-0">
           <MarkdownContent text={message.content} />
+          {message.scannedImages && message.scannedImages.length > 0 && (
+            <div className="flex gap-2 flex-wrap mt-3">
+              {message.scannedImages.map((img, i) => (
+                <img
+                  key={i}
+                  src={img.src}
+                  alt="detected image"
+                  className="max-w-[400px] max-h-[300px] rounded-lg border border-cc-border object-contain"
+                  loading="lazy"
+                />
+              ))}
+            </div>
+          )}
         </div>
         <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity mt-0.5">
           <CopyButton getText={getText} title="Copy response" />
@@ -122,6 +135,19 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
           }
           return <ToolGroupBlock key={i} name={group.name} items={group.items} />;
         })}
+        {message.scannedImages && message.scannedImages.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {message.scannedImages.map((img, i) => (
+              <img
+                key={i}
+                src={img.src}
+                alt="detected image"
+                className="max-w-[400px] max-h-[300px] rounded-lg border border-cc-border object-contain"
+                loading="lazy"
+              />
+            ))}
+          </div>
+        )}
       </div>
       {hasText && (
         <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity mt-0.5">

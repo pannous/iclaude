@@ -260,6 +260,47 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
     return c.json({ ok: true });
   });
 
+  // ─── Serve local images for ResultScanner ─────────────────────
+
+  const IMAGE_EXTENSIONS = new Set([
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico",
+    ".heic", ".avif", ".tif", ".tiff",
+  ]);
+  const MIME_MAP: Record<string, string> = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+    ".bmp": "image/bmp", ".ico": "image/x-icon", ".heic": "image/heic",
+    ".avif": "image/avif", ".tif": "image/tiff", ".tiff": "image/tiff",
+  };
+
+  api.get("/fs/image", async (c) => {
+    const rawPath = c.req.query("path");
+    if (!rawPath) return c.json({ error: "path required" }, 400);
+
+    const resolved = resolve(rawPath.replace(/^~\//, homedir() + "/"));
+    const allowedBase = homedir();
+    if (!resolved.startsWith(allowedBase + sep) && resolved !== allowedBase) {
+      return c.json({ error: "Access denied" }, 403);
+    }
+
+    const ext = "." + resolved.split(".").pop()!.toLowerCase();
+    if (!IMAGE_EXTENSIONS.has(ext)) {
+      return c.json({ error: "Not an image file" }, 400);
+    }
+
+    try {
+      const data = await readFile(resolved);
+      return new Response(data, {
+        headers: {
+          "Content-Type": MIME_MAP[ext] || "application/octet-stream",
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
+    } catch {
+      return c.json({ error: "File not found" }, 404);
+    }
+  });
+
   // ─── Filesystem browsing ─────────────────────────────────────
 
   api.get("/fs/list", async (c) => {

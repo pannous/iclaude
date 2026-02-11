@@ -199,7 +199,7 @@ export class WsBridge {
       const toRemove = remaining - MAX_TOTAL_SESSIONS;
       for (let i = 0; i < Math.min(toRemove, sortedDisconnected.length); i++) {
         this.sessions.delete(sortedDisconnected[i].id);
-        if (this.store) this.store.delete(sortedDisconnected[i].id);
+        if (this.store) this.store.remove(sortedDisconnected[i].id);
         removed++;
       }
     }
