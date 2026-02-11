@@ -511,10 +511,10 @@ export function Sidebar() {
     <aside className="w-[260px] h-full flex flex-col bg-cc-sidebar border-r border-cc-border">
       {/* Header */}
       <div className="p-4 pb-3">
-        <div className="flex items-center gap-2 mb-4">
+        <a href="https://github.com/pannous/companion" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity">
           <img src={logoSrc} alt="" className="w-7 h-7" />
-          <span className="text-sm font-semibold text-cc-fg tracking-tight">The Vibe Companion</span>
-        </div>
+          <span className="text-sm font-semibold text-cc-fg tracking-tight">Vibe Companion</span>
+        </a>
 
         <div className="flex gap-1.5">
           <button
