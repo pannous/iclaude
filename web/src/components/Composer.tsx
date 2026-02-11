@@ -388,7 +388,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   : isPlan
                   ? "text-cc-primary hover:bg-cc-primary/10"
                   : currentMode === "dontAsk"
-                  ? "text-cc-error hover:bg-cc-error/10"
+                  ? "text-cc-warning hover:bg-cc-warning/10"
                   : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
               }`}
               title="Toggle mode (Shift+Tab)"
@@ -399,9 +399,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   <rect x="9.5" y="3" width="3.5" height="10" rx="0.75" />
                 </svg>
               ) : currentMode === "dontAsk" ? (
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-cc-error">
-                  <path d="M8 1l1.5 4.5h4.5l-3.5 2.5 1.5 4.5L8 10l-3.5 2.5 1.5-4.5-3.5-2.5h4.5L8 1z" />
-                  <path d="M7.5 5.5h1v3h-1zM8 11a.5.5 0 100-1 .5.5 0 000 1z" fill="currentColor" />
+                <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5">
+                  <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M6.5 6.5a1.5 1.5 0 012.83.7c0 1-1.33 1.3-1.33 1.3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                  <circle cx="8" cy="11.5" r="0.6" fill="currentColor" />
                 </svg>
               ) : (
                 <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
@@ -410,7 +411,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 </svg>
               )}
               <span>
-                {isPlan ? "plan" : currentMode === "dontAsk" ? "dangerous ⚠️" : "agent"}
+                {isPlan ? "plan" : currentMode === "dontAsk" ? "ask" : "agent"}
               </span>
             </button>
 
