@@ -111,52 +111,19 @@ export class CliLauncher {
   }
 
   /**
-   * Remove old exited sessions to prevent unbounded growth.
-   * Keeps: all active sessions + recent exited sessions (48h) + max 100 total
+   * Remove all exited sessions. Manually triggered, so cleans everything.
    */
   cleanupOldSessions(): void {
-    const MAX_TOTAL_SESSIONS = 100;
-    const MAX_EXITED_AGE_MS = 48 * 60 * 60 * 1000; // 48 hours
-    const now = Date.now();
-
-    // Separate active and exited sessions
-    const active: SdkSessionInfo[] = [];
-    const exited: SdkSessionInfo[] = [];
-
+    let removed = 0;
     for (const session of this.sessions.values()) {
       if (session.state === "exited") {
-        exited.push(session);
-      } else {
-        active.push(session);
-      }
-    }
-
-    // Remove old exited sessions
-    let removed = 0;
-    for (const session of exited) {
-      const age = now - session.createdAt;
-      if (age > MAX_EXITED_AGE_MS) {
         this.sessions.delete(session.sessionId);
         removed++;
       }
     }
 
-    // If still over limit, remove oldest exited sessions
-    const remaining = this.sessions.size;
-    if (remaining > MAX_TOTAL_SESSIONS) {
-      const sortedExited = Array.from(this.sessions.values())
-        .filter(s => s.state === "exited")
-        .sort((a, b) => a.createdAt - b.createdAt);
-
-      const toRemove = remaining - MAX_TOTAL_SESSIONS;
-      for (let i = 0; i < Math.min(toRemove, sortedExited.length); i++) {
-        this.sessions.delete(sortedExited[i].sessionId);
-        removed++;
-      }
-    }
-
     if (removed > 0) {
-      console.log(`[cli-launcher] Cleaned up ${removed} old session(s) (${this.sessions.size} remaining)`);
+      console.log(`[cli-launcher] Cleaned up ${removed} exited session(s) (${this.sessions.size} remaining)`);
       this.persistState();
     }
   }
