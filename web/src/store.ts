@@ -46,6 +46,7 @@ interface AppState {
   // UI
   darkMode: boolean;
   notificationSound: boolean;
+  yoloMode: boolean;
   sidebarOpen: boolean;
   taskPanelOpen: boolean;
   homeResetKey: number;
@@ -59,6 +60,8 @@ interface AppState {
   toggleDarkMode: () => void;
   setNotificationSound: (v: boolean) => void;
   toggleNotificationSound: () => void;
+  setYoloMode: (v: boolean) => void;
+  toggleYoloMode: () => void;
   setSidebarOpen: (v: boolean) => void;
   setTaskPanelOpen: (open: boolean) => void;
   newSession: () => void;
@@ -141,6 +144,12 @@ function getInitialNotificationSound(): boolean {
   return true;
 }
 
+function getInitialYoloMode(): boolean {
+  if (typeof window === "undefined") return false;
+  const stored = safeStorage.getItem("cc-yolo-mode");
+  return stored === "true";
+}
+
 export const useStore = create<AppState>((set) => ({
   sessions: new Map(),
   sdkSessions: [],
@@ -161,6 +170,7 @@ export const useStore = create<AppState>((set) => ({
   recentlyRenamed: new Set(),
   darkMode: getInitialDarkMode(),
   notificationSound: getInitialNotificationSound(),
+  yoloMode: getInitialYoloMode(),
   sidebarOpen: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
   taskPanelOpen: typeof window !== "undefined" ? window.innerWidth >= 1024 : false,
   homeResetKey: 0,
@@ -188,6 +198,16 @@ export const useStore = create<AppState>((set) => ({
       const next = !s.notificationSound;
       localStorage.setItem("cc-notification-sound", String(next));
       return { notificationSound: next };
+    }),
+  setYoloMode: (v) => {
+    safeStorage.setItem("cc-yolo-mode", String(v));
+    set({ yoloMode: v });
+  },
+  toggleYoloMode: () =>
+    set((s) => {
+      const next = !s.yoloMode;
+      safeStorage.setItem("cc-yolo-mode", String(next));
+      return { yoloMode: next };
     }),
   setSidebarOpen: (v) => set({ sidebarOpen: v }),
   setTaskPanelOpen: (open) => set({ taskPanelOpen: open }),

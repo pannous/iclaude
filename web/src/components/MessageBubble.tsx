@@ -5,6 +5,7 @@ import type { ChatMessage, ContentBlock } from "../types.js";
 import { ToolBlock, getToolIcon, getToolLabel, getPreview, ToolIcon } from "./ToolBlock.js";
 import { CopyButton } from "./CopyButton.js";
 import { messageToText } from "../utils/message-text.js";
+import { useStore } from "../store.js";
 
 export function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.role === "system") {
@@ -388,7 +389,7 @@ function ThinkingBlock({ text }: { text: string }) {
 
 function HtmlPreview({ html, preview }: { html: string; preview: string }) {
   const [open, setOpen] = useState(true);
-  const [unsafeMode, setUnsafeMode] = useState(false);
+  const yoloMode = useStore((s) => s.yoloMode);
 
   return (
     <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
@@ -412,38 +413,18 @@ function HtmlPreview({ html, preview }: { html: string; preview: string }) {
         </svg>
         <span className="font-medium text-cc-fg">HTML Fragment</span>
         <span className="text-cc-muted/70 truncate flex-1 text-left">{preview}</span>
-        {unsafeMode && (
+        {yoloMode && (
           <span className="text-[10px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded font-mono">
-            YOLO MODE
+            YOLO
           </span>
         )}
       </button>
       {open && (
         <div className="border-t border-cc-border">
-          <div className="px-3 py-2 bg-cc-hover/50 border-b border-cc-border flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={unsafeMode}
-                  onChange={(e) => setUnsafeMode(e.target.checked)}
-                  className="w-3 h-3"
-                />
-                <span className="text-[11px] text-cc-muted">
-                  YOLO Mode (remove all restrictions)
-                </span>
-              </label>
-            </div>
-            {unsafeMode && (
-              <span className="text-[10px] text-red-500">
-                ⚠️ Full access enabled
-              </span>
-            )}
-          </div>
           <iframe
             srcDoc={html}
             className="w-full h-[400px] bg-white"
-            sandbox={unsafeMode ? undefined : "allow-scripts"}
+            sandbox={yoloMode ? undefined : "allow-scripts"}
             title="HTML preview"
           />
         </div>
