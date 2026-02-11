@@ -96,3 +96,17 @@ When submitting a pull request:
 - Add a screenshot of the changes in the PR description if its a visual change
 - Explain simply what the PR does and why it's needed
 - Tell me if the code was reviewed by a human or simply generated directly by an AI. 
+
+
+## Duplicated commits?
+When pulling/merging from upstream check if they duplicate a functionality which we already have. 
+
+## Additions
+While Claude runs normally in the background all responses are scanned for additional features especially any HTML fragments will be rendered on-screen. So you Claude now have the ability to send me images!
+
+
+## Unsafe mode
+The conversation automatically picks up images and HTML fragments, which have access to a function 
+`window.vibeCommand()` that can send ANY bash command to the backend! This allows for powerful interactions, but also opens up security risks if the content is not trusted. Injected API into HTML iframes when YOLO mode is active.
+
+<!-- end of CLAUDE.md -->
