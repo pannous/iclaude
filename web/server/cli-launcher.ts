@@ -32,6 +32,16 @@ export interface SdkSessionInfo {
   name?: string;
   /** Which backend this session uses */
   backendType?: BackendType;
+  /** Git branch from bridge state (enriched by REST API) */
+  gitBranch?: string;
+  /** Git ahead count (enriched by REST API) */
+  gitAhead?: number;
+  /** Git behind count (enriched by REST API) */
+  gitBehind?: number;
+  /** Total lines added (enriched by REST API) */
+  totalLinesAdded?: number;
+  /** Total lines removed (enriched by REST API) */
+  totalLinesRemoved?: number;
 }
 
 export interface LaunchOptions {
@@ -45,6 +55,8 @@ export interface LaunchOptions {
   /** CLI session ID to resume (from ~/.claude/projects/) */
   resumeSessionId?: string;
   backendType?: BackendType;
+  /** Codex sandbox mode. */
+  codexSandbox?: "workspace-write" | "danger-full-access";
   /** Pre-resolved worktree info from the session creation flow */
   worktreeInfo?: {
     isWorktree: boolean;
@@ -378,6 +390,7 @@ export class CliLauncher {
       cwd: info.cwd,
       approvalMode: options.permissionMode,
       threadId: info.cliSessionId,
+      sandbox: options.codexSandbox,
     });
 
     // Handle init errors — mark session as exited so UI shows failure

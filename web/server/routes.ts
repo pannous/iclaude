@@ -149,6 +149,9 @@ export function createRoutes(
         cwd,
         claudeBinary: body.claudeBinary,
         codexBinary: body.codexBinary,
+        codexSandbox: backend === "codex" && body.codexInternetAccess === true
+          ? "danger-full-access"
+          : "workspace-write",
         allowedTools: body.allowedTools,
         env: envVars,
         backendType: backend,
@@ -184,10 +187,20 @@ export function createRoutes(
   api.get("/sessions", (c) => {
     const sessions = launcher.listSessions();
     const names = sessionNames.getAllNames();
-    const enriched = sessions.map((s) => ({
-      ...s,
-      name: names[s.sessionId] ?? s.name,
-    }));
+    const bridgeStates = wsBridge.getAllSessions();
+    const bridgeMap = new Map(bridgeStates.map((s) => [s.session_id, s]));
+    const enriched = sessions.map((s) => {
+      const bridge = bridgeMap.get(s.sessionId);
+      return {
+        ...s,
+        name: names[s.sessionId] ?? s.name,
+        gitBranch: bridge?.git_branch || "",
+        gitAhead: bridge?.git_ahead || 0,
+        gitBehind: bridge?.git_behind || 0,
+        totalLinesAdded: bridge?.total_lines_added || 0,
+        totalLinesRemoved: bridge?.total_lines_removed || 0,
+      };
+    });
     return c.json(enriched);
   });
 
@@ -744,6 +757,33 @@ export function createRoutes(
   // ─── Usage Limits ─────────────────────────────────────────────────────
 
   api.get("/usage-limits", async (c) => {
+    const limits = await getUsageLimits();
+    return c.json(limits);
+  });
+
+  api.get("/sessions/:id/usage-limits", async (c) => {
+    const sessionId = c.req.param("id");
+    const session = wsBridge.getSession(sessionId);
+    const empty = { five_hour: null, seven_day: null, extra_usage: null };
+
+    if (session?.backendType === "codex") {
+      const rl = wsBridge.getCodexRateLimits(sessionId);
+      if (!rl) return c.json(empty);
+      const mapLimit = (l: { usedPercent: number; windowDurationMins: number; resetsAt: number } | null) => {
+        if (!l) return null;
+        return {
+          utilization: l.usedPercent,
+          resets_at: l.resetsAt ? new Date(l.resetsAt * 1000).toISOString() : null,
+        };
+      };
+      return c.json({
+        five_hour: mapLimit(rl.primary),
+        seven_day: mapLimit(rl.secondary),
+        extra_usage: null,
+      });
+    }
+
+    // Claude sessions: use existing logic
     const limits = await getUsageLimits();
     return c.json(limits);
   });

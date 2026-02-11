@@ -38,6 +38,11 @@ vi.mock("./session-names.js", () => ({
   _resetForTest: vi.fn(),
 }));
 
+const mockGetUsageLimits = vi.hoisted(() => vi.fn());
+vi.mock("./usage-limits.js", () => ({
+  getUsageLimits: mockGetUsageLimits,
+}));
+
 import { Hono } from "hono";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
@@ -71,6 +76,9 @@ function createMockLauncher() {
 function createMockBridge() {
   return {
     closeSession: vi.fn(),
+    getSession: vi.fn(() => null),
+    getAllSessions: vi.fn(() => []),
+    getCodexRateLimits: vi.fn(() => null),
   } as any;
 }
 
@@ -244,9 +252,57 @@ describe("GET /api/sessions", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual([
-      { sessionId: "s1", state: "running", cwd: "/a", name: "Fix auth bug" },
-      { sessionId: "s2", state: "stopped", cwd: "/b" },
+      {
+        sessionId: "s1", state: "running", cwd: "/a", name: "Fix auth bug",
+        gitBranch: "", gitAhead: 0, gitBehind: 0, totalLinesAdded: 0, totalLinesRemoved: 0,
+      },
+      {
+        sessionId: "s2", state: "stopped", cwd: "/b",
+        gitBranch: "", gitAhead: 0, gitBehind: 0, totalLinesAdded: 0, totalLinesRemoved: 0,
+      },
     ]);
+  });
+
+  it("enriches sessions with git data from bridge state", async () => {
+    const sessions = [
+      { sessionId: "s1", state: "running", cwd: "/a" },
+      { sessionId: "s2", state: "running", cwd: "/b" },
+    ];
+    launcher.listSessions.mockReturnValue(sessions);
+    vi.mocked(sessionNames.getAllNames).mockReturnValue({});
+    bridge.getAllSessions.mockReturnValue([
+      {
+        session_id: "s1",
+        git_branch: "feature/auth",
+        git_ahead: 3,
+        git_behind: 1,
+        total_lines_added: 42,
+        total_lines_removed: 7,
+      },
+    ]);
+
+    const res = await app.request("/api/sessions", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    // s1 should have bridge git data
+    expect(json[0]).toMatchObject({
+      sessionId: "s1",
+      gitBranch: "feature/auth",
+      gitAhead: 3,
+      gitBehind: 1,
+      totalLinesAdded: 42,
+      totalLinesRemoved: 7,
+    });
+    // s2 has no bridge data — defaults to empty/zero
+    expect(json[1]).toMatchObject({
+      sessionId: "s2",
+      gitBranch: "",
+      gitAhead: 0,
+      gitBehind: 0,
+      totalLinesAdded: 0,
+      totalLinesRemoved: 0,
+    });
   });
 });
 
@@ -846,5 +902,94 @@ describe("POST /api/sessions/create with backend", () => {
     expect(launcher.launch).toHaveBeenCalledWith(
       expect.objectContaining({ backendType: "claude" }),
     );
+  });
+});
+
+// ─── Per-session usage limits ─────────────────────────────────────────────────
+
+describe("GET /api/sessions/:id/usage-limits", () => {
+  it("returns Claude usage limits for a claude session", async () => {
+    bridge.getSession.mockReturnValue({ backendType: "claude" });
+    mockGetUsageLimits.mockResolvedValue({
+      five_hour: { utilization: 42, resets_at: "2025-01-01T12:00:00Z" },
+      seven_day: { utilization: 15, resets_at: null },
+      extra_usage: null,
+    });
+
+    const res = await app.request("/api/sessions/s1/usage-limits", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({
+      five_hour: { utilization: 42, resets_at: "2025-01-01T12:00:00Z" },
+      seven_day: { utilization: 15, resets_at: null },
+      extra_usage: null,
+    });
+    expect(mockGetUsageLimits).toHaveBeenCalled();
+  });
+
+  it("returns mapped Codex rate limits for a codex session", async () => {
+    bridge.getSession.mockReturnValue({ backendType: "codex" });
+    bridge.getCodexRateLimits.mockReturnValue({
+      primary: { usedPercent: 25, windowDurationMins: 300, resetsAt: 1730947200 },
+      secondary: { usedPercent: 10, windowDurationMins: 10080, resetsAt: 1731552000 },
+    });
+
+    const res = await app.request("/api/sessions/s1/usage-limits", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.five_hour).toEqual({
+      utilization: 25,
+      resets_at: new Date(1730947200 * 1000).toISOString(),
+    });
+    expect(json.seven_day).toEqual({
+      utilization: 10,
+      resets_at: new Date(1731552000 * 1000).toISOString(),
+    });
+    expect(json.extra_usage).toBeNull();
+    expect(mockGetUsageLimits).not.toHaveBeenCalled();
+  });
+
+  it("returns empty limits when codex session has no rate limits yet", async () => {
+    bridge.getSession.mockReturnValue({ backendType: "codex" });
+    bridge.getCodexRateLimits.mockReturnValue(null);
+
+    const res = await app.request("/api/sessions/s1/usage-limits", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({ five_hour: null, seven_day: null, extra_usage: null });
+  });
+
+  it("handles codex rate limits with null secondary", async () => {
+    bridge.getSession.mockReturnValue({ backendType: "codex" });
+    bridge.getCodexRateLimits.mockReturnValue({
+      primary: { usedPercent: 50, windowDurationMins: 300, resetsAt: 0 },
+      secondary: null,
+    });
+
+    const res = await app.request("/api/sessions/s1/usage-limits", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.five_hour).toEqual({ utilization: 50, resets_at: null });
+    expect(json.seven_day).toBeNull();
+  });
+
+  it("falls back to Claude limits when session is not found", async () => {
+    bridge.getSession.mockReturnValue(null);
+    mockGetUsageLimits.mockResolvedValue({
+      five_hour: null,
+      seven_day: null,
+      extra_usage: null,
+    });
+
+    const res = await app.request("/api/sessions/unknown/usage-limits", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({ five_hour: null, seven_day: null, extra_usage: null });
+    expect(mockGetUsageLimits).toHaveBeenCalled();
   });
 });

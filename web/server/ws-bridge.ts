@@ -99,6 +99,45 @@ function makeDefaultState(sessionId: string, backendType: BackendType = "claude"
   };
 }
 
+// ─── Git info helper ─────────────────────────────────────────────────────────
+
+function resolveGitInfo(state: SessionState): void {
+  if (!state.cwd) return;
+  try {
+    state.git_branch = execSync("git rev-parse --abbrev-ref HEAD", {
+      cwd: state.cwd, encoding: "utf-8", timeout: 3000,
+    }).trim();
+
+    try {
+      const gitDir = execSync("git rev-parse --git-dir", {
+        cwd: state.cwd, encoding: "utf-8", timeout: 3000,
+      }).trim();
+      state.is_worktree = gitDir.includes("/worktrees/");
+    } catch { /* ignore */ }
+
+    try {
+      state.repo_root = execSync("git rev-parse --show-toplevel", {
+        cwd: state.cwd, encoding: "utf-8", timeout: 3000,
+      }).trim();
+    } catch { /* ignore */ }
+
+    try {
+      const counts = execSync(
+        "git rev-list --left-right --count @{upstream}...HEAD",
+        { cwd: state.cwd, encoding: "utf-8", timeout: 3000 },
+      ).trim();
+      const [behind, ahead] = counts.split(/\s+/).map(Number);
+      state.git_ahead = ahead || 0;
+      state.git_behind = behind || 0;
+    } catch {
+      state.git_ahead = 0;
+      state.git_behind = 0;
+    }
+  } catch {
+    // Not a git repo or git not available
+  }
+}
+
 // ─── Bridge ───────────────────────────────────────────────────────────────────
 
 export class WsBridge {
@@ -157,6 +196,8 @@ export class WsBridge {
         createdAt: p.createdAt,
       };
       session.state.backend_type = session.backendType;
+      // Resolve git info for restored sessions (may have been persisted without it)
+      resolveGitInfo(session.state);
       this.sessions.set(p.id, session);
       // Restored sessions with completed turns don't need auto-naming re-triggered
       if (session.state.num_turns > 0) {
@@ -285,16 +326,17 @@ export class WsBridge {
     }
   }
 
-  getOrCreateSession(sessionId: string, backendType: BackendType = "claude", opts?: { resumeCliSessionId?: string; cwd?: string }): Session {
+  getOrCreateSession(sessionId: string, backendType?: BackendType, opts?: { resumeCliSessionId?: string; cwd?: string }): Session {
     let session = this.sessions.get(sessionId);
     if (!session) {
+      const type = backendType || "claude";
       session = {
         id: sessionId,
-        backendType,
+        backendType: type,
         cliSocket: null,
         codexAdapter: null,
         browserSockets: new Set(),
-        state: makeDefaultState(sessionId, backendType),
+        state: makeDefaultState(sessionId, type),
         pendingPermissions: new Map(),
         messageHistory: [],
         pendingMessages: [],
@@ -311,9 +353,12 @@ export class WsBridge {
       }
 
       this.sessions.set(sessionId, session);
+    } else if (backendType) {
+      // Only overwrite backendType when explicitly provided (e.g. attachCodexAdapter)
+      // Prevents handleBrowserOpen from resetting codex→claude
+      session.backendType = backendType;
+      session.state.backend_type = backendType;
     }
-    session.backendType = backendType;
-    session.state.backend_type = backendType;
     return session;
   }
 
@@ -323,6 +368,11 @@ export class WsBridge {
 
   getAllSessions(): SessionState[] {
     return Array.from(this.sessions.values()).map((s) => s.state);
+  }
+
+  getCodexRateLimits(sessionId: string) {
+    const session = this.sessions.get(sessionId);
+    return session?.codexAdapter?.getRateLimits() ?? null;
   }
 
   isCliConnected(sessionId: string): boolean {
@@ -405,6 +455,7 @@ export class WsBridge {
     adapter.onBrowserMessage((msg) => {
       if (msg.type === "session_init") {
         session.state = { ...session.state, ...msg.session, backend_type: "codex" };
+        resolveGitInfo(session.state);
         this.persistSession(session);
       } else if (msg.type === "session_update") {
         session.state = { ...session.state, ...msg.session, backend_type: "codex" };
@@ -686,46 +737,7 @@ export class WsBridge {
       session.state.skills = msg.skills ?? [];
 
       // Resolve git info from session cwd
-      if (session.state.cwd) {
-        try {
-          session.state.git_branch = execSync("git rev-parse --abbrev-ref HEAD", {
-            cwd: session.state.cwd,
-            encoding: "utf-8",
-            timeout: 3000,
-          }).trim();
-
-          // Detect if in a worktree
-          try {
-            const gitDir = execSync("git rev-parse --git-dir", {
-              cwd: session.state.cwd, encoding: "utf-8", timeout: 3000,
-            }).trim();
-            session.state.is_worktree = gitDir.includes("/worktrees/");
-          } catch { /* ignore */ }
-
-          // Get repo root
-          try {
-            session.state.repo_root = execSync("git rev-parse --show-toplevel", {
-              cwd: session.state.cwd, encoding: "utf-8", timeout: 3000,
-            }).trim();
-          } catch { /* ignore */ }
-
-          // Ahead/behind remote
-          try {
-            const counts = execSync(
-              "git rev-list --left-right --count @{upstream}...HEAD",
-              { cwd: session.state.cwd, encoding: "utf-8", timeout: 3000 },
-            ).trim();
-            const [behind, ahead] = counts.split(/\s+/).map(Number);
-            session.state.git_ahead = ahead || 0;
-            session.state.git_behind = behind || 0;
-          } catch {
-            session.state.git_ahead = 0;
-            session.state.git_behind = 0;
-          }
-        } catch {
-          // Not a git repo or git not available
-        }
-      }
+      resolveGitInfo(session.state);
 
       this.broadcastToBrowsers(session, {
         type: "session_init",

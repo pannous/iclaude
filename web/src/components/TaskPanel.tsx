@@ -6,6 +6,9 @@ import type { TaskItem } from "../types.js";
 const EMPTY_TASKS: TaskItem[] = [];
 const POLL_INTERVAL = 60_000;
 
+// Module-level cache — survives session switches so limits don't flash empty
+const limitsCache = new Map<string, UsageLimits>();
+
 function formatResetTime(resetsAt: string): string {
   try {
     const diffMs = new Date(resetsAt).getTime() - Date.now();
@@ -27,17 +30,25 @@ function barColor(pct: number): string {
   return "bg-cc-primary";
 }
 
-function UsageLimitsSection() {
-  const [limits, setLimits] = useState<UsageLimits | null>(null);
+function UsageLimitsSection({ sessionId }: { sessionId: string }) {
+  const [limits, setLimits] = useState<UsageLimits | null>(
+    limitsCache.get(sessionId) ?? null,
+  );
 
   const fetchLimits = useCallback(async () => {
     try {
-      const data = await api.getUsageLimits();
+      const data = await api.getSessionUsageLimits(sessionId);
+      limitsCache.set(sessionId, data);
       setLimits(data);
     } catch {
       // silent
     }
-  }, []);
+  }, [sessionId]);
+
+  // When sessionId changes, show cached value immediately
+  useEffect(() => {
+    setLimits(limitsCache.get(sessionId) ?? null);
+  }, [sessionId]);
 
   useEffect(() => {
     fetchLimits();
@@ -157,10 +168,6 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
   const allTasksDone = tasks.length > 0 && completedCount === tasks.length;
   const isCodex = (session?.backend_type || sdkBackendType) === "codex";
   const showTasks = !!session && !isCodex;
-  const rawContextPct = session?.context_used_percent ?? 0;
-  const contextPct = Number.isFinite(rawContextPct)
-    ? Math.max(0, Math.min(Math.round(rawContextPct), 100))
-    : 0;
 
   return (
     <aside className="w-[280px] h-full flex flex-col bg-cc-card border-l border-cc-border">
@@ -235,7 +242,7 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
       )}
 
       {/* Usage limits */}
-      <UsageLimitsSection />
+      <UsageLimitsSection sessionId={sessionId} />
 
       {showTasks && (
         <>

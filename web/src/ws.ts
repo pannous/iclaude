@@ -1,5 +1,5 @@
 import { useStore } from "./store.js";
-import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem } from "./types.js";
+import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, SdkSessionInfo } from "./types.js";
 import { resultScanner, scanContent } from "./utils/result-scanner.js";
 import { generateUniqueSessionName } from "./utils/names.js";
 import { playNotificationSound } from "./utils/notification-sound.js";
@@ -494,15 +494,15 @@ export function connectSession(sessionId: string) {
 
 function scheduleReconnect(sessionId: string) {
   if (reconnectTimers.has(sessionId)) return;
-  const store = useStore.getState();
-  // Only auto-reconnect the session the user is actively viewing
-  if (store.currentSessionId !== sessionId) return;
   const attempts = reconnectAttempts.get(sessionId) || 0;
   const delay = Math.min(BASE_RECONNECT_DELAY * 2 ** attempts, MAX_RECONNECT_DELAY);
   reconnectAttempts.set(sessionId, attempts + 1);
   const timer = setTimeout(() => {
     reconnectTimers.delete(sessionId);
-    if (useStore.getState().currentSessionId === sessionId) {
+    const store = useStore.getState();
+    // Reconnect any active (non-archived) session
+    const sdkSession = store.sdkSessions.find((s) => s.sessionId === sessionId);
+    if (sdkSession && !sdkSession.archived) {
       connectSession(sessionId);
     }
   }, delay);
@@ -528,6 +528,14 @@ export function disconnectSession(sessionId: string) {
 export function disconnectAll() {
   for (const [id] of sockets) {
     disconnectSession(id);
+  }
+}
+
+export function connectAllSessions(sessions: SdkSessionInfo[]) {
+  for (const s of sessions) {
+    if (!s.archived) {
+      connectSession(s.sessionId);
+    }
   }
 }
 

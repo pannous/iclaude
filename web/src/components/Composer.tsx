@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useStore } from "../store.js";
 import { sendToSession } from "../ws.js";
 import { api } from "../api.js";
+import { CLAUDE_MODES, CODEX_MODES } from "../utils/backends.js";
+import type { ModeOption } from "../utils/backends.js";
 
 let idCounter = 0;
 
@@ -44,6 +46,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const isConnected = cliConnected.get(sessionId) ?? false;
   const currentMode = sessionData?.permissionMode || "acceptEdits";
   const isPlan = currentMode === "plan";
+  const isCodex = sessionData?.backend_type === "codex";
+  const modes: ModeOption[] = isCodex ? CODEX_MODES : CLAUDE_MODES;
+  const modeLabel = modes.find((m) => m.value === currentMode)?.label?.toLowerCase() || currentMode;
 
   // Build command list from session data
   const allCommands = useMemo<CommandItem[]>(() => {
@@ -222,7 +227,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   }
 
   function toggleMode() {
-    if (!isConnected) return;
+    if (!isConnected || isCodex) return;
     const store = useStore.getState();
 
     // Cycle through: bypassPermissions -> plan -> default -> bypassPermissions
@@ -327,7 +332,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
             placeholder={isConnected ? "Type a message... (/ for commands)" : "Waiting for CLI connection..."}
             disabled={!isConnected}
             rows={1}
-            className="w-full px-4 pt-3 pb-1 text-sm bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted disabled:opacity-50"
+            className="w-full px-4 pt-3 pb-1 text-base sm:text-sm bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted disabled:opacity-50"
             style={{ minHeight: "36px", maxHeight: "200px" }}
           />
 
@@ -382,28 +387,20 @@ export function Composer({ sessionId }: { sessionId: string }) {
             <div className="flex items-center gap-2">
               <button
                 onClick={toggleMode}
-                disabled={!isConnected}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[12px] font-medium transition-all cursor-pointer select-none ${
-                  !isConnected
+                disabled={!isConnected || isCodex}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[12px] font-medium transition-all select-none ${
+                  !isConnected || isCodex
                     ? "opacity-30 cursor-not-allowed text-cc-muted"
                     : isPlan
-                    ? "text-cc-primary hover:bg-cc-primary/10"
-                    : currentMode === "default"
-                    ? "text-cc-warning hover:bg-cc-warning/10"
-                    : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                    ? "text-cc-primary hover:bg-cc-primary/10 cursor-pointer"
+                    : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
                 }`}
-                title="Toggle mode (Shift+Tab)"
+                title={isCodex ? "Mode is fixed for Codex sessions" : "Toggle mode (Shift+Tab)"}
               >
                 {isPlan ? (
                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
                     <rect x="3" y="3" width="3.5" height="10" rx="0.75" />
                     <rect x="9.5" y="3" width="3.5" height="10" rx="0.75" />
-                  </svg>
-                ) : currentMode === "default" ? (
-                  <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5">
-                    <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
-                    <path d="M6.5 6.5a1.5 1.5 0 012.83.7c0 1-1.33 1.3-1.33 1.3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                    <circle cx="8" cy="11.5" r="0.6" fill="currentColor" />
                   </svg>
                 ) : (
                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
@@ -411,9 +408,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                     <path d="M8.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
                   </svg>
                 )}
-                <span>
-                  {isPlan ? "plan" : currentMode === "default" ? "ask" : "agent"}
-                </span>
+                <span>{modeLabel}</span>
               </button>
 
               {/* YOLO mode toggle */}

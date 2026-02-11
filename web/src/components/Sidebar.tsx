@@ -1,31 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useStore } from "../store.js";
-import { api, type ResumableSession } from "../api.js";
-import { connectSession, disconnectSession, waitForConnection } from "../ws.js";
+import { api } from "../api.js";
+import { connectSession, connectAllSessions, disconnectSession } from "../ws.js";
 import { EnvManager } from "./EnvManager.js";
-
-function formatTimeAgo(timestamp: number): string {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
 export function Sidebar() {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [showEnvManager, setShowEnvManager] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
-  const [showResumePicker, setShowResumePicker] = useState(false);
-  const [resumableSessions, setResumableSessions] = useState<ResumableSession[]>([]);
-  const [resumeLoading, setResumeLoading] = useState(false);
-  const [resumingId, setResumingId] = useState<string | null>(null);
   const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
-  const [cleaningUp, setCleaningUp] = useState(false);
   const editInputRef = useRef<HTMLInputElement>(null);
   const sessions = useStore((s) => s.sessions);
   const sdkSessions = useStore((s) => s.sdkSessions);
@@ -41,7 +25,6 @@ export function Sidebar() {
   const sessionNames = useStore((s) => s.sessionNames);
   const recentlyRenamed = useStore((s) => s.recentlyRenamed);
   const pendingPermissions = useStore((s) => s.pendingPermissions);
-  const sessionTasks = useStore((s) => s.sessionTasks);
 
   // Poll for SDK sessions on mount
   useEffect(() => {
@@ -51,6 +34,8 @@ export function Sidebar() {
         const list = await api.listSessions();
         if (active) {
           useStore.getState().setSdkSessions(list);
+          // Connect all active sessions so we receive notifications for all of them
+          connectAllSessions(list);
           // Hydrate session names from server (server is source of truth for auto-generated names)
           const store = useStore.getState();
           for (const s of list) {
@@ -78,18 +63,11 @@ export function Sidebar() {
     };
   }, []);
 
-  function handleSelectSession(sessionId: string, options?: { isArchived?: boolean }) {
+  function handleSelectSession(sessionId: string) {
     if (currentSessionId === sessionId) return;
-    // Disconnect from old session, connect to new
-    if (currentSessionId) {
-      disconnectSession(currentSessionId);
-    }
     setCurrentSession(sessionId);
+    // Ensure connected (idempotent — no-op if already connected)
     connectSession(sessionId);
-    // Auto-collapse archived section when clicking an archived session
-    if (options?.isArchived) {
-      setShowArchived(false);
-    }
     // Close sidebar on mobile
     if (window.innerWidth < 768) {
       useStore.getState().setSidebarOpen(false);
@@ -97,59 +75,10 @@ export function Sidebar() {
   }
 
   function handleNewSession() {
-    if (currentSessionId) {
-      disconnectSession(currentSessionId);
-    }
     useStore.getState().newSession();
     if (window.innerWidth < 768) {
       useStore.getState().setSidebarOpen(false);
     }
-  }
-
-  async function handleShowResumePicker() {
-    if (showResumePicker) {
-      setShowResumePicker(false);
-      return;
-    }
-    setResumeLoading(true);
-    setShowResumePicker(true);
-    try {
-      const sessions = await api.listResumableSessions();
-      setResumableSessions(sessions);
-    } catch {
-      setResumableSessions([]);
-    }
-    setResumeLoading(false);
-  }
-
-  async function handleResumeSession(rs: ResumableSession) {
-    setResumingId(rs.sessionId);
-    try {
-      if (currentSessionId) disconnectSession(currentSessionId);
-
-      // Derive cwd from project path
-      const result = await api.createSession({
-        cwd: rs.project,
-        resumeSessionId: rs.sessionId,
-      });
-      const sessionId = result.sessionId;
-
-      // Use the session title or first message as the display name
-      const name = rs.title.slice(0, 40) || rs.sessionId.slice(0, 8);
-      useStore.getState().setSessionName(sessionId, name);
-
-      setCurrentSession(sessionId);
-      connectSession(sessionId);
-      await waitForConnection(sessionId);
-
-      setShowResumePicker(false);
-      if (window.innerWidth < 768) {
-        useStore.getState().setSidebarOpen(false);
-      }
-    } catch (err) {
-      console.error("Failed to resume session:", err);
-    }
-    setResumingId(null);
   }
 
   // Focus edit input when entering edit mode
@@ -160,20 +89,10 @@ export function Sidebar() {
     }
   }, [editingSessionId]);
 
-  async function confirmRename() {
+  function confirmRename() {
     if (editingSessionId && editingName.trim()) {
-      const title = editingName.trim();
-      // Update local store immediately for instant feedback
-      useStore.getState().setSessionName(editingSessionId, title);
-      // Update server-side title + rename
-      try {
-        await api.setSessionTitle(editingSessionId, title);
-        api.renameSession(editingSessionId, title).catch(() => {});
-        const list = await api.listSessions();
-        useStore.getState().setSdkSessions(list);
-      } catch (err) {
-        console.error("Failed to update session title:", err);
-      }
+      useStore.getState().setSessionName(editingSessionId, editingName.trim());
+      api.renameSession(editingSessionId, editingName.trim()).catch(() => {});
     }
     setEditingSessionId(null);
     setEditingName("");
@@ -252,18 +171,6 @@ export function Sidebar() {
     }
   }, []);
 
-  const handleCleanupSessions = useCallback(async () => {
-    setCleaningUp(true);
-    try {
-      await api.cleanupSessions();
-      const list = await api.listSessions();
-      useStore.getState().setSdkSessions(list);
-    } catch (err) {
-      console.error("Failed to cleanup sessions:", err);
-    }
-    setCleaningUp(false);
-  }, []);
-
   // Combine sessions from WsBridge state + SDK sessions list
   const allSessionIds = new Set<string>();
   for (const id of sessions.keys()) allSessionIds.add(id);
@@ -276,200 +183,194 @@ export function Sidebar() {
       id,
       model: bridgeState?.model || sdkInfo?.model || "",
       cwd: bridgeState?.cwd || sdkInfo?.cwd || "",
-      gitBranch: bridgeState?.git_branch || "",
+      gitBranch: bridgeState?.git_branch || sdkInfo?.gitBranch || "",
       isWorktree: bridgeState?.is_worktree || sdkInfo?.isWorktree || false,
-      gitAhead: bridgeState?.git_ahead || 0,
-      gitBehind: bridgeState?.git_behind || 0,
-      linesAdded: bridgeState?.total_lines_added || 0,
-      linesRemoved: bridgeState?.total_lines_removed || 0,
+      gitAhead: bridgeState?.git_ahead || sdkInfo?.gitAhead || 0,
+      gitBehind: bridgeState?.git_behind || sdkInfo?.gitBehind || 0,
+      linesAdded: bridgeState?.total_lines_added || sdkInfo?.totalLinesAdded || 0,
+      linesRemoved: bridgeState?.total_lines_removed || sdkInfo?.totalLinesRemoved || 0,
       isConnected: cliConnected.get(id) ?? false,
       status: sessionStatus.get(id) ?? null,
       sdkState: sdkInfo?.state ?? null,
       createdAt: sdkInfo?.createdAt ?? 0,
       archived: sdkInfo?.archived ?? false,
-      title: sdkInfo?.title,
       backendType: bridgeState?.backend_type || sdkInfo?.backendType || "claude",
     };
   }).sort((a, b) => b.createdAt - a.createdAt);
 
-  // Filter out ghost sessions: entries in launcher.json that have no title, no model,
-  // and no working directory — these are stale entries with no meaningful content
-  const validSessions = allSessionList.filter((s) =>
-    s.title || s.model || s.cwd || sessions.has(s.id)
-  );
-  const activeSessions = validSessions.filter((s) => !s.archived);
-  const archivedSessions = validSessions.filter((s) => s.archived);
-  const currentSession = currentSessionId ? validSessions.find((s) => s.id === currentSessionId) : null;
+  const activeSessions = allSessionList.filter((s) => !s.archived);
+  const archivedSessions = allSessionList.filter((s) => s.archived);
+  const currentSession = currentSessionId ? allSessionList.find((s) => s.id === currentSessionId) : null;
   const logoSrc = currentSession?.backendType === "codex" ? "/logo-codex.svg" : "/logo.svg";
 
   function renderSessionItem(s: typeof allSessionList[number], options?: { isArchived?: boolean }) {
     const isActive = currentSessionId === s.id;
     const name = sessionNames.get(s.id);
     const shortId = s.id.slice(0, 8);
-    const label = s.title || name || s.model || shortId;
+    const label = name || s.model || shortId;
     const dirName = s.cwd ? s.cwd.split("/").pop() : "";
     const isRunning = s.status === "running";
     const isCompacting = s.status === "compacting";
     const isEditing = editingSessionId === s.id;
     const permCount = pendingPermissions.get(s.id)?.size ?? 0;
     const archived = options?.isArchived;
-    const tasks = sessionTasks.get(s.id) || [];
-    const allTasksDone = tasks.length > 0 && tasks.every((t) => t.status === "completed");
-    const isSessionDone = s.sdkState === "exited" || (!isRunning && !isCompacting && s.isConnected && allTasksDone);
+    const avatarSrc = s.backendType === "codex" ? "/logo-codex.svg" : "/logo.svg";
+
+    // Status dot class
+    const statusDotClass = archived
+      ? "bg-cc-muted/40"
+      : permCount > 0
+      ? "bg-cc-warning"
+      : s.sdkState === "exited"
+      ? "bg-cc-muted/40"
+      : isRunning
+      ? "bg-cc-success"
+      : isCompacting
+      ? "bg-cc-warning"
+      : "bg-cc-success/60";
+
+    // Pulse animation for running or permissions
+    const showPulse = !archived && (
+      permCount > 0 || (isRunning && s.isConnected)
+    );
+    const pulseClass = permCount > 0
+      ? "bg-cc-warning/40"
+      : "bg-cc-success/40";
 
     return (
-      <div key={s.id} className={`relative group ${archived ? "opacity-60" : ""}`}>
+      <div key={s.id} className={`relative group ${archived ? "opacity-50" : ""}`}>
         <button
-          onClick={() => handleSelectSession(s.id, { isArchived: archived })}
+          onClick={() => handleSelectSession(s.id)}
           onDoubleClick={(e) => {
             e.preventDefault();
             setEditingSessionId(s.id);
             setEditingName(label);
           }}
-          className={`w-full px-3 py-2.5 ${archived ? "pr-14" : "pr-8"} text-left rounded-[10px] transition-all duration-100 cursor-pointer ${
+          className={`w-full pl-3.5 pr-8 py-2 ${archived ? "pr-14" : ""} text-left rounded-lg transition-all duration-100 cursor-pointer ${
             isActive
               ? "bg-cc-active"
               : "hover:bg-cc-hover"
           }`}
         >
-          <div className="flex items-center gap-2">
-            <span className="relative flex shrink-0 items-center justify-center w-3.5 h-3.5">
-              {!archived && isSessionDone && allTasksDone ? (
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-cc-success">
-                  <path fillRule="evenodd" d="M8 15A7 7 0 108 1a7 7 0 000 14zm3.354-9.354a.5.5 0 00-.708-.708L7 8.586 5.354 6.94a.5.5 0 10-.708.708l2 2a.5.5 0 00.708 0l4-4z" clipRule="evenodd" />
-                </svg>
-              ) : (
-                <>
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      archived
-                        ? "bg-cc-muted opacity-40"
-                        : permCount > 0
-                        ? "bg-cc-warning"
-                        : s.sdkState === "exited"
-                        ? "bg-cc-muted opacity-40"
-                        : s.isConnected
-                        ? isRunning
-                          ? "bg-cc-success"
-                          : isCompacting
-                          ? "bg-cc-warning"
-                          : "bg-cc-success opacity-60"
-                        : "bg-cc-muted opacity-40"
-                    }`}
-                  />
-                  {!archived && permCount > 0 && (
-                    <span className="absolute inset-0 flex items-center justify-center">
-                      <span className="w-2 h-2 rounded-full bg-cc-warning/40 animate-[pulse-dot_1.5s_ease-in-out_infinite]" />
-                    </span>
-                  )}
-                  {!archived && permCount === 0 && isRunning && s.isConnected && (
-                    <span className="absolute inset-0 flex items-center justify-center">
-                      <span className="w-2 h-2 rounded-full bg-cc-success/40 animate-[pulse-dot_1.5s_ease-in-out_infinite]" />
-                    </span>
-                  )}
-                </>
-              )}
-            </span>
-            {/* Animated working indicator */}
-            {!archived && !isEditing && isRunning && (
-              <svg viewBox="0 0 16 16" fill="none" className="w-3 h-3 shrink-0 text-cc-success animate-spin">
-                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="28 10" opacity="0.8" />
-              </svg>
-            )}
-            {!archived && !isEditing && isCompacting && (
-              <svg viewBox="0 0 16 16" fill="none" className="w-3 h-3 shrink-0 text-cc-warning animate-spin">
-                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="28 10" opacity="0.8" />
-              </svg>
-            )}
-            {isEditing ? (
-              <input
-                ref={editInputRef}
-                value={editingName}
-                onChange={(e) => setEditingName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    confirmRename();
-                  } else if (e.key === "Escape") {
-                    e.preventDefault();
-                    cancelRename();
-                  }
-                  e.stopPropagation();
-                }}
-                onBlur={confirmRename}
-                onClick={(e) => e.stopPropagation()}
-                onDoubleClick={(e) => e.stopPropagation()}
-                className="text-[13px] font-medium flex-1 text-cc-fg bg-transparent border border-cc-border rounded-md px-1 py-0 outline-none focus:border-cc-primary/50 min-w-0"
+          {/* Left accent border */}
+          <span
+            className={`absolute left-0 top-2 bottom-2 w-[2px] rounded-full ${
+              s.backendType === "codex"
+                ? "bg-blue-500"
+                : "bg-[#5BA8A0]"
+            } ${isActive ? "opacity-100" : "opacity-40 group-hover:opacity-70"} transition-opacity`}
+          />
+
+          <div className="flex items-start gap-2.5">
+            {/* Avatar with status dot overlay */}
+            <div className="relative shrink-0 w-6 h-6 mt-0.5">
+              <img
+                src={avatarSrc}
+                alt=""
+                className="w-6 h-6 rounded-[5px]"
               />
-            ) : (
               <span
-                className={`text-[13px] font-medium truncate flex-1 text-cc-fg ${recentlyRenamed.has(s.id) ? "animate-name-appear" : ""} flex items-center gap-1.5`}
-                onAnimationEnd={() => useStore.getState().clearRecentlyRenamed(s.id)}
-              >
-                <span className="truncate">{label}</span>
-                {s.backendType === "codex" && (
-                  <span className="text-[9px] px-1 py-0.5 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 shrink-0">codex</span>
-                )}
-              </span>
-            )}
-          </div>
-          {(dirName || s.gitBranch) && (
-            <div className="flex items-center gap-1.5 mt-0.5 ml-4 text-[11px] text-cc-muted truncate">
-              {dirName && <span className="truncate shrink-0">{dirName}</span>}
-              {dirName && s.gitBranch && <span className="opacity-40">/</span>}
-              {s.gitBranch && (
-                <span className="flex items-center gap-1 truncate min-w-0">
-                  {s.isWorktree ? (
-                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 shrink-0 opacity-60">
-                      <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v5.256a2.25 2.25 0 101.5 0V5.372zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zm7.5-9.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V7A2.5 2.5 0 0110 9.5H6a1 1 0 000 2h4a2.5 2.5 0 012.5 2.5v.628a2.25 2.25 0 11-1.5 0V14a1 1 0 00-1-1H6a2.5 2.5 0 01-2.5-2.5V10a2.5 2.5 0 012.5-2.5h4a1 1 0 001-1V5.372a2.25 2.25 0 01-1.5-2.122z" />
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 shrink-0 opacity-60">
-                      <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.116.862a2.25 2.25 0 10-.862.862A4.48 4.48 0 007.25 7.5h-1.5A2.25 2.25 0 003.5 9.75v.318a2.25 2.25 0 101.5 0V9.75a.75.75 0 01.75-.75h1.5a5.98 5.98 0 003.884-1.435A2.25 2.25 0 109.634 3.362zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5z" />
-                    </svg>
-                  )}
-                  <span className="truncate">{s.gitBranch}</span>
-                  {s.isWorktree && (
-                    <span className="text-[9px] bg-cc-primary/10 text-cc-primary px-0.5 rounded">wt</span>
-                  )}
-                </span>
-              )}
-              {(s.gitAhead > 0 || s.gitBehind > 0) && (
-                <span className="flex items-center gap-0.5 text-[10px] shrink-0">
-                  {s.gitAhead > 0 && <span className="text-green-500">{s.gitAhead}&#8593;</span>}
-                  {s.gitBehind > 0 && <span className="text-cc-warning">{s.gitBehind}&#8595;</span>}
-                </span>
-              )}
-              {(s.linesAdded > 0 || s.linesRemoved > 0) && (
-                <span className="flex items-center gap-1 shrink-0">
-                  <span className="text-green-500">+{s.linesAdded}</span>
-                  <span className="text-red-400">-{s.linesRemoved}</span>
-                </span>
+                className={`absolute -bottom-0.5 -right-0.5 w-[7px] h-[7px] rounded-full ring-[1.5px] ring-cc-sidebar ${statusDotClass}`}
+              />
+              {showPulse && (
+                <span className={`absolute -bottom-0.5 -right-0.5 w-[7px] h-[7px] rounded-full ${pulseClass} animate-[pulse-dot_1.5s_ease-in-out_infinite]`} />
               )}
             </div>
-          )}
+
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              {/* Row 1: Name */}
+              {isEditing ? (
+                <input
+                  ref={editInputRef}
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      confirmRename();
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      cancelRename();
+                    }
+                    e.stopPropagation();
+                  }}
+                  onBlur={confirmRename}
+                  onClick={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => e.stopPropagation()}
+                  className="text-[13px] font-medium w-full text-cc-fg bg-transparent border border-cc-border rounded px-1 py-0 outline-none focus:border-cc-primary/50 min-w-0"
+                />
+              ) : (
+                <span
+                  className={`text-[13px] font-medium truncate block text-cc-fg leading-snug ${
+                    recentlyRenamed.has(s.id) ? "animate-name-appear" : ""
+                  }`}
+                  onAnimationEnd={() => useStore.getState().clearRecentlyRenamed(s.id)}
+                >
+                  {label}
+                </span>
+              )}
+
+              {/* Row 2: Directory + Branch inline */}
+              {(dirName || s.gitBranch) && (
+                <div className="flex items-center gap-1 mt-0.5 text-[10.5px] text-cc-muted leading-tight truncate">
+                  {dirName && (
+                    <span className="truncate shrink-0 max-w-[80px]">{dirName}</span>
+                  )}
+                  {dirName && s.gitBranch && (
+                    <span className="text-cc-muted/40 shrink-0">/</span>
+                  )}
+                  {s.gitBranch && (
+                    <>
+                      {s.isWorktree ? (
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 shrink-0 opacity-50">
+                          <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v5.256a2.25 2.25 0 101.5 0V5.372zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zm7.5-9.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V7A2.5 2.5 0 0110 9.5H6a1 1 0 000 2h4a2.5 2.5 0 012.5 2.5v.628a2.25 2.25 0 11-1.5 0V14a1 1 0 00-1-1H6a2.5 2.5 0 01-2.5-2.5V10a2.5 2.5 0 012.5-2.5h4a1 1 0 001-1V5.372a2.25 2.25 0 01-1.5-2.122z" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 shrink-0 opacity-50">
+                          <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.116.862a2.25 2.25 0 10-.862.862A4.48 4.48 0 007.25 7.5h-1.5A2.25 2.25 0 003.5 9.75v.318a2.25 2.25 0 101.5 0V9.75a.75.75 0 01.75-.75h1.5a5.98 5.98 0 003.884-1.435A2.25 2.25 0 109.634 3.362zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5z" />
+                        </svg>
+                      )}
+                      <span className="truncate">{s.gitBranch}</span>
+                      {s.isWorktree && (
+                        <span className="text-[8px] bg-cc-primary/10 text-cc-primary px-0.5 rounded shrink-0">wt</span>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Row 3: Git stats (conditional) */}
+              {(s.gitAhead > 0 || s.gitBehind > 0 || s.linesAdded > 0 || s.linesRemoved > 0) && (
+                <div className="flex items-center gap-1.5 mt-px text-[10px] text-cc-muted">
+                  {(s.gitAhead > 0 || s.gitBehind > 0) && (
+                    <span className="flex items-center gap-0.5">
+                      {s.gitAhead > 0 && <span className="text-green-500">{s.gitAhead}&#8593;</span>}
+                      {s.gitBehind > 0 && <span className="text-cc-warning">{s.gitBehind}&#8595;</span>}
+                    </span>
+                  )}
+                  {(s.linesAdded > 0 || s.linesRemoved > 0) && (
+                    <span className="flex items-center gap-1 shrink-0">
+                      <span className="text-green-500">+{s.linesAdded}</span>
+                      <span className="text-red-400">-{s.linesRemoved}</span>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </button>
+
+        {/* Permission badge */}
         {!archived && permCount > 0 && (
           <span className="absolute right-2 top-1/2 -translate-y-1/2 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-cc-warning text-white text-[10px] font-bold leading-none px-1 group-hover:opacity-0 transition-opacity pointer-events-none">
             {permCount}
           </span>
         )}
-        {!archived && permCount === 0 && (
-          <>
-            {isSessionDone && allTasksDone ? (
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 h-[18px] flex items-center justify-center rounded-full bg-cc-success/15 text-cc-success text-[10px] font-semibold leading-none px-1.5 group-hover:opacity-0 transition-opacity pointer-events-none">
-                Done
-              </span>
-            ) : !isRunning && !isCompacting && s.isConnected && s.sdkState !== "exited" ? (
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 h-[18px] flex items-center justify-center rounded-full bg-cc-muted/10 text-cc-muted text-[10px] font-semibold leading-none px-1.5 group-hover:opacity-0 transition-opacity pointer-events-none">
-                Idle
-              </span>
-            ) : null}
-          </>
-        )}
+
+        {/* Action buttons */}
         {archived ? (
           <>
-            {/* Unarchive button */}
             <button
               onClick={(e) => handleUnarchiveSession(e, s.id)}
               className="absolute right-8 top-1/2 -translate-y-1/2 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
@@ -480,7 +381,6 @@ export function Sidebar() {
                 <path d="M3 13h10" strokeLinecap="round" />
               </svg>
             </button>
-            {/* Delete button */}
             <button
               onClick={(e) => handleDeleteSession(e, s.id)}
               className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-red-400 transition-all cursor-pointer"
@@ -511,76 +411,20 @@ export function Sidebar() {
     <aside className="w-[260px] h-full flex flex-col bg-cc-sidebar border-r border-cc-border">
       {/* Header */}
       <div className="p-4 pb-3">
-        <a href="https://github.com/pannous/companion" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity">
+        <div className="flex items-center gap-2 mb-4">
           <img src={logoSrc} alt="" className="w-7 h-7" />
-          <span className="text-sm font-semibold text-cc-fg tracking-tight">Vibe Companion</span>
-        </a>
-
-        <div className="flex gap-1.5">
-          <button
-            onClick={handleNewSession}
-            className="flex-1 py-2 px-3 text-sm font-medium rounded-[10px] bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors duration-150 flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-              <path d="M8 3v10M3 8h10" />
-            </svg>
-            New
-          </button>
-          <button
-            onClick={handleShowResumePicker}
-            className={`flex-1 py-2 px-3 text-sm font-medium rounded-[10px] transition-colors duration-150 flex items-center justify-center gap-1.5 cursor-pointer ${
-              showResumePicker
-                ? "bg-cc-active text-cc-fg"
-                : "bg-cc-hover text-cc-muted hover:text-cc-fg"
-            }`}
-          >
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
-              <path d="M3 8a5 5 0 119.546 2.046" strokeLinecap="round" />
-              <path d="M14 8A6 6 0 102 8a6 6 0 0012 0z" strokeOpacity="0.3" />
-              <path d="M10 12l2.5-2-2.5-2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Resume
-          </button>
+          <span className="text-sm font-semibold text-cc-fg tracking-tight">The Vibe Companion</span>
         </div>
 
-        {showResumePicker && (
-          <div className="mt-1.5 rounded-[10px] border border-cc-border bg-cc-sidebar overflow-hidden">
-            {resumeLoading ? (
-              <div className="px-3 py-4 text-xs text-cc-muted text-center">Loading sessions...</div>
-            ) : resumableSessions.length === 0 ? (
-              <div className="px-3 py-4 text-xs text-cc-muted text-center">No resumable sessions found</div>
-            ) : (
-              <div className="max-h-[280px] overflow-y-auto">
-                {resumableSessions.map((rs) => {
-                  const projectName = rs.project.split("/").pop() || rs.project;
-                  const ago = formatTimeAgo(rs.lastModified);
-                  const isResuming = resumingId === rs.sessionId;
-                  return (
-                    <button
-                      key={rs.sessionId}
-                      onClick={() => handleResumeSession(rs)}
-                      disabled={!!resumingId}
-                      className="w-full px-3 py-2 text-left hover:bg-cc-hover transition-colors border-b border-cc-border last:border-b-0 cursor-pointer disabled:opacity-50"
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="shrink-0 mt-1 w-1.5 h-1.5 rounded-full bg-cc-muted opacity-40" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[12px] text-cc-fg truncate leading-snug">
-                            {isResuming ? "Resuming..." : (rs.title || rs.sessionId.slice(0, 12))}
-                          </p>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[10px] text-cc-muted truncate">{projectName}</span>
-                            <span className="text-[10px] text-cc-muted opacity-50">{ago}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
+        <button
+          onClick={handleNewSession}
+          className="w-full py-2 px-3 text-sm font-medium rounded-[10px] bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors duration-150 flex items-center justify-center gap-1.5 cursor-pointer"
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+            <path d="M8 3v10M3 8h10" />
+          </svg>
+          New Session
+        </button>
       </div>
 
       {/* Worktree archive confirmation */}
@@ -657,18 +501,6 @@ export function Sidebar() {
             <path d="M8 1a2 2 0 012 2v1h2a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h2V3a2 2 0 012-2zm0 1.5a.5.5 0 00-.5.5v1h1V3a.5.5 0 00-.5-.5zM4 5.5a.5.5 0 00-.5.5v6a.5.5 0 00.5.5h8a.5.5 0 00.5-.5V6a.5.5 0 00-.5-.5H4z" />
           </svg>
           <span>Environments</span>
-        </button>
-        <button
-          onClick={handleCleanupSessions}
-          disabled={cleaningUp}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Remove old disconnected sessions (48h+)"
-        >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
-            <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
-            <circle cx="8" cy="8" r="7" strokeOpacity="0.3" />
-          </svg>
-          <span>{cleaningUp ? "Cleaning..." : "Cleanup Sessions"}</span>
         </button>
         <button
           onClick={toggleNotificationSound}
