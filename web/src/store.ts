@@ -34,19 +34,31 @@ interface AppState {
   // Tasks per session
   sessionTasks: Map<string, TaskItem[]>;
 
+  // Files changed by the agent per session (Edit/Write tool calls)
+  changedFiles: Map<string, Set<string>>;
+
   // Session display names
   sessionNames: Map<string, string>;
   sessionSubtitles: Map<string, string>;
+  // Track sessions that were just renamed (for animation)
+  recentlyRenamed: Set<string>;
 
   // UI
   darkMode: boolean;
+  notificationSound: boolean;
   sidebarOpen: boolean;
   taskPanelOpen: boolean;
   homeResetKey: number;
+  activeTab: "chat" | "editor";
+  editorOpenFile: Map<string, string>;
+  editorUrl: Map<string, string>;
+  editorLoading: Map<string, boolean>;
 
   // Actions
   setDarkMode: (v: boolean) => void;
   toggleDarkMode: () => void;
+  setNotificationSound: (v: boolean) => void;
+  toggleNotificationSound: () => void;
   setSidebarOpen: (v: boolean) => void;
   setTaskPanelOpen: (open: boolean) => void;
   newSession: () => void;
@@ -74,9 +86,15 @@ interface AppState {
   setTasks: (sessionId: string, tasks: TaskItem[]) => void;
   updateTask: (sessionId: string, taskId: string, updates: Partial<TaskItem>) => void;
 
+  // Changed files actions
+  addChangedFile: (sessionId: string, filePath: string) => void;
+  clearChangedFiles: (sessionId: string) => void;
+
   // Session name actions
   setSessionName: (sessionId: string, name: string) => void;
   setSessionSubtitle: (sessionId: string, subtitle: string) => void;
+  markRecentlyRenamed: (sessionId: string) => void;
+  clearRecentlyRenamed: (sessionId: string) => void;
 
   // Plan mode actions
   setPreviousPermissionMode: (sessionId: string, mode: string) => void;
@@ -85,6 +103,12 @@ interface AppState {
   setConnectionStatus: (sessionId: string, status: "connecting" | "connected" | "disconnected") => void;
   setCliConnected: (sessionId: string, connected: boolean) => void;
   setSessionStatus: (sessionId: string, status: "idle" | "running" | "compacting" | null) => void;
+
+  // Editor actions
+  setActiveTab: (tab: "chat" | "editor") => void;
+  setEditorOpenFile: (sessionId: string, filePath: string | null) => void;
+  setEditorUrl: (sessionId: string, url: string) => void;
+  setEditorLoading: (sessionId: string, loading: boolean) => void;
 
   reset: () => void;
 }
@@ -114,6 +138,13 @@ function getInitialDarkMode(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
+function getInitialNotificationSound(): boolean {
+  if (typeof window === "undefined") return true;
+  const stored = localStorage.getItem("cc-notification-sound");
+  if (stored !== null) return stored === "true";
+  return true;
+}
+
 export const useStore = create<AppState>((set) => ({
   sessions: new Map(),
   sdkSessions: [],
@@ -128,12 +159,19 @@ export const useStore = create<AppState>((set) => ({
   sessionStatus: new Map(),
   previousPermissionMode: new Map(),
   sessionTasks: new Map(),
+  changedFiles: new Map(),
   sessionNames: getInitialSessionNames(),
   sessionSubtitles: new Map(),
+  recentlyRenamed: new Set(),
   darkMode: getInitialDarkMode(),
+  notificationSound: getInitialNotificationSound(),
   sidebarOpen: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
   taskPanelOpen: typeof window !== "undefined" ? window.innerWidth >= 1024 : false,
   homeResetKey: 0,
+  activeTab: "chat",
+  editorOpenFile: new Map(),
+  editorUrl: new Map(),
+  editorLoading: new Map(),
 
   setDarkMode: (v) => {
     safeStorage.setItem("cc-dark-mode", String(v));
@@ -144,6 +182,16 @@ export const useStore = create<AppState>((set) => ({
       const next = !s.darkMode;
       safeStorage.setItem("cc-dark-mode", String(next));
       return { darkMode: next };
+    }),
+  setNotificationSound: (v) => {
+    localStorage.setItem("cc-notification-sound", String(v));
+    set({ notificationSound: v });
+  },
+  toggleNotificationSound: () =>
+    set((s) => {
+      const next = !s.notificationSound;
+      localStorage.setItem("cc-notification-sound", String(next));
+      return { notificationSound: next };
     }),
   setSidebarOpen: (v) => set({ sidebarOpen: v }),
   setTaskPanelOpen: (open) => set({ taskPanelOpen: open }),
@@ -214,8 +262,18 @@ export const useStore = create<AppState>((set) => ({
       pendingPermissions.delete(sessionId);
       const sessionTasks = new Map(s.sessionTasks);
       sessionTasks.delete(sessionId);
+      const changedFiles = new Map(s.changedFiles);
+      changedFiles.delete(sessionId);
       const sessionNames = new Map(s.sessionNames);
       sessionNames.delete(sessionId);
+      const recentlyRenamed = new Set(s.recentlyRenamed);
+      recentlyRenamed.delete(sessionId);
+      const editorOpenFile = new Map(s.editorOpenFile);
+      editorOpenFile.delete(sessionId);
+      const editorUrl = new Map(s.editorUrl);
+      editorUrl.delete(sessionId);
+      const editorLoading = new Map(s.editorLoading);
+      editorLoading.delete(sessionId);
       safeStorage.setItem("cc-session-names", JSON.stringify(Array.from(sessionNames.entries())));
       if (s.currentSessionId === sessionId) {
         safeStorage.removeItem("cc-current-session");
@@ -232,7 +290,12 @@ export const useStore = create<AppState>((set) => ({
         previousPermissionMode,
         pendingPermissions,
         sessionTasks,
+        changedFiles,
         sessionNames,
+        recentlyRenamed,
+        editorOpenFile,
+        editorUrl,
+        editorLoading,
         sdkSessions: s.sdkSessions.filter((sdk) => sdk.sessionId !== sessionId),
         currentSessionId: s.currentSessionId === sessionId ? null : s.currentSessionId,
       };
@@ -343,6 +406,22 @@ export const useStore = create<AppState>((set) => ({
       return { sessionTasks };
     }),
 
+  addChangedFile: (sessionId, filePath) =>
+    set((s) => {
+      const changedFiles = new Map(s.changedFiles);
+      const files = new Set(changedFiles.get(sessionId) || []);
+      files.add(filePath);
+      changedFiles.set(sessionId, files);
+      return { changedFiles };
+    }),
+
+  clearChangedFiles: (sessionId) =>
+    set((s) => {
+      const changedFiles = new Map(s.changedFiles);
+      changedFiles.delete(sessionId);
+      return { changedFiles };
+    }),
+
   setSessionName: (sessionId, name) =>
     set((s) => {
       const sessionNames = new Map(s.sessionNames);
@@ -356,6 +435,20 @@ export const useStore = create<AppState>((set) => ({
       const sessionSubtitles = new Map(s.sessionSubtitles);
       sessionSubtitles.set(sessionId, subtitle);
       return { sessionSubtitles };
+    }),
+
+  markRecentlyRenamed: (sessionId) =>
+    set((s) => {
+      const recentlyRenamed = new Set(s.recentlyRenamed);
+      recentlyRenamed.add(sessionId);
+      return { recentlyRenamed };
+    }),
+
+  clearRecentlyRenamed: (sessionId) =>
+    set((s) => {
+      const recentlyRenamed = new Set(s.recentlyRenamed);
+      recentlyRenamed.delete(sessionId);
+      return { recentlyRenamed };
     }),
 
   setPreviousPermissionMode: (sessionId, mode) =>
@@ -386,6 +479,33 @@ export const useStore = create<AppState>((set) => ({
       return { sessionStatus };
     }),
 
+  setActiveTab: (tab) => set({ activeTab: tab }),
+
+  setEditorOpenFile: (sessionId, filePath) =>
+    set((s) => {
+      const editorOpenFile = new Map(s.editorOpenFile);
+      if (filePath) {
+        editorOpenFile.set(sessionId, filePath);
+      } else {
+        editorOpenFile.delete(sessionId);
+      }
+      return { editorOpenFile };
+    }),
+
+  setEditorUrl: (sessionId, url) =>
+    set((s) => {
+      const editorUrl = new Map(s.editorUrl);
+      editorUrl.set(sessionId, url);
+      return { editorUrl };
+    }),
+
+  setEditorLoading: (sessionId, loading) =>
+    set((s) => {
+      const editorLoading = new Map(s.editorLoading);
+      editorLoading.set(sessionId, loading);
+      return { editorLoading };
+    }),
+
   reset: () =>
     set({
       sessions: new Map(),
@@ -401,7 +521,13 @@ export const useStore = create<AppState>((set) => ({
       sessionStatus: new Map(),
       previousPermissionMode: new Map(),
       sessionTasks: new Map(),
+      changedFiles: new Map(),
       sessionNames: new Map(),
       sessionSubtitles: new Map(),
+      recentlyRenamed: new Set(),
+      activeTab: "chat" as const,
+      editorOpenFile: new Map(),
+      editorUrl: new Map(),
+      editorLoading: new Map(),
     }),
 }));

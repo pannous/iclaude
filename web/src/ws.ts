@@ -1,6 +1,8 @@
 import { useStore } from "./store.js";
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem } from "./types.js";
 import { resultScanner } from "./utils/result-scanner.js";
+import { generateUniqueSessionName } from "./utils/names.js";
+import { playNotificationSound } from "./utils/notification-sound.js";
 
 const sockets = new Map<string, WebSocket>();
 const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -26,10 +28,7 @@ function extractTasksFromBlocks(sessionId: string, blocks: ContentBlock[]) {
 
   for (const block of blocks) {
     if (block.type !== "tool_use") continue;
-    const name = (block as { name?: string }).name;
-    const input = (block as { input?: Record<string, unknown> }).input;
-    const toolUseId = (block as { id?: string }).id;
-    if (!name || !input) continue;
+    const { name, input, id: toolUseId } = block;
 
     // Deduplicate by tool_use_id
     if (toolUseId) {
@@ -80,6 +79,17 @@ function extractTasksFromBlocks(sessionId: string, blocks: ContentBlock[]) {
         if (input.addBlockedBy) updates.blockedBy = input.addBlockedBy as string[];
         store.updateTask(sessionId, taskId, updates);
       }
+    }
+  }
+}
+
+function extractChangedFilesFromBlocks(sessionId: string, blocks: ContentBlock[]) {
+  const store = useStore.getState();
+  for (const block of blocks) {
+    if (block.type !== "tool_use") continue;
+    const { name, input } = block;
+    if ((name === "Edit" || name === "Write") && typeof input.file_path === "string") {
+      store.addChangedFile(sessionId, input.file_path);
     }
   }
 }
@@ -192,9 +202,10 @@ function handleMessage(sessionId: string, event: MessageEvent) {
         store.setStreamingStats(sessionId, { startedAt: Date.now() });
       }
 
-      // Extract tasks from tool_use content blocks
+      // Extract tasks and changed files from tool_use content blocks
       if (msg.content?.length) {
         extractTasksFromBlocks(sessionId, msg.content);
+        extractChangedFilesFromBlocks(sessionId, msg.content);
       }
 
       break;
@@ -237,20 +248,20 @@ function handleMessage(sessionId: string, event: MessageEvent) {
         num_turns: r.num_turns,
       };
       // Forward lines changed if present
-      const raw = r as unknown as Record<string, unknown>;
-      if (typeof raw.total_lines_added === "number") {
-        sessionUpdates.total_lines_added = raw.total_lines_added;
+      if (typeof r.total_lines_added === "number") {
+        sessionUpdates.total_lines_added = r.total_lines_added;
       }
-      if (typeof raw.total_lines_removed === "number") {
-        sessionUpdates.total_lines_removed = raw.total_lines_removed;
+      if (typeof r.total_lines_removed === "number") {
+        sessionUpdates.total_lines_removed = r.total_lines_removed;
       }
       // Compute context % from modelUsage if available
       if (r.modelUsage) {
         for (const usage of Object.values(r.modelUsage)) {
           if (usage.contextWindow > 0) {
-            sessionUpdates.context_used_percent = Math.round(
+            const pct = Math.round(
               ((usage.inputTokens + usage.outputTokens) / usage.contextWindow) * 100
             );
+            sessionUpdates.context_used_percent = Math.max(0, Math.min(pct, 100));
           }
         }
       }
@@ -258,6 +269,10 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       store.setStreaming(sessionId, null);
       store.setStreamingStats(sessionId, null);
       store.setSessionStatus(sessionId, "idle");
+      // Play notification sound if enabled and tab is not focused
+      if (!document.hasFocus() && store.notificationSound) {
+        playNotificationSound();
+      }
       if (r.is_error && r.errors?.length) {
         store.appendMessage(sessionId, {
           id: nextId(),
@@ -273,15 +288,17 @@ function handleMessage(sessionId: string, event: MessageEvent) {
 
     case "permission_request": {
       store.addPermission(sessionId, data.request);
-      // Also extract tasks from permission requests (tool_name + input available)
+      // Also extract tasks and changed files from permission requests
       const req = data.request;
       if (req.tool_name && req.input) {
-        extractTasksFromBlocks(sessionId, [{
-          type: "tool_use",
+        const permBlocks = [{
+          type: "tool_use" as const,
           id: req.tool_use_id,
           name: req.tool_name,
           input: req.input,
-        }]);
+        }];
+        extractTasksFromBlocks(sessionId, permBlocks);
+        extractChangedFilesFromBlocks(sessionId, permBlocks);
       }
       break;
     }
@@ -356,6 +373,17 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       break;
     }
 
+    case "session_name_update": {
+      // Only apply auto-name if user hasn't manually renamed (still has random Adj+Noun name)
+      const currentName = store.sessionNames.get(sessionId);
+      const isRandomName = currentName && /^[A-Z][a-z]+ [A-Z][a-z]+$/.test(currentName);
+      if (!currentName || isRandomName) {
+        store.setSessionName(sessionId, data.name);
+        store.markRecentlyRenamed(sessionId);
+      }
+      break;
+    }
+
     case "message_history": {
       const chatMessages: ChatMessage[] = [];
       const seenIds = new Set<string>();
@@ -390,9 +418,10 @@ function handleMessage(sessionId: string, event: MessageEvent) {
             model: msg.model,
             stopReason: msg.stop_reason,
           });
-          // Also extract tasks from history
+          // Also extract tasks and changed files from history
           if (msg.content?.length) {
             extractTasksFromBlocks(sessionId, msg.content);
+            extractChangedFilesFromBlocks(sessionId, msg.content);
           }
         } else if (histMsg.type === "result") {
           const r = histMsg.data;
@@ -407,7 +436,13 @@ function handleMessage(sessionId: string, event: MessageEvent) {
         }
       }
       if (chatMessages.length > 0) {
-        store.setMessages(sessionId, chatMessages);
+        const existing = store.messages.get(sessionId) || [];
+        // Only replace if history has at least as many messages as current state,
+        // or if the current state is empty (initial connect). This prevents a race
+        // condition where live messages (e.g., tool_use) are lost by a stale history replay.
+        if (existing.length === 0 || chatMessages.length >= existing.length) {
+          store.setMessages(sessionId, chatMessages);
+        }
       }
       break;
     }

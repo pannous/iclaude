@@ -1,4 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
+import { homedir } from "node:os";
 
 // Mock env-manager and git-utils modules before any imports
 vi.mock("./env-manager.js", () => ({
@@ -7,6 +8,15 @@ vi.mock("./env-manager.js", () => ({
   createEnv: vi.fn(),
   updateEnv: vi.fn(),
   deleteEnv: vi.fn(),
+}));
+
+vi.mock("node:child_process", () => ({
+  execSync: vi.fn(() => ""),
+}));
+
+vi.mock("node:fs", () => ({
+  existsSync: vi.fn(() => false),
+  readFileSync: vi.fn(() => ""),
 }));
 
 vi.mock("./git-utils.js", () => ({
@@ -18,13 +28,24 @@ vi.mock("./git-utils.js", () => ({
   isWorktreeDirty: vi.fn(() => false),
 }));
 
+vi.mock("./session-names.js", () => ({
+  getName: vi.fn(() => undefined),
+  setName: vi.fn(),
+  getAllNames: vi.fn(() => ({})),
+  removeName: vi.fn(),
+  _resetForTest: vi.fn(),
+}));
+
 import { Hono } from "hono";
 import { homedir } from "node:os";
+import { execSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { createRoutes } from "./routes.js";
 import * as envManager from "./env-manager.js";
 import * as gitUtils from "./git-utils.js";
+import * as sessionNames from "./session-names.js";
 
-const TEST_CWD = `${homedir()}/test`;
+const TEST_CWD = `${homedir()}${homedir()}/test`;
 
 // ─── Mock factories ──────────────────────────────────────────────────────────
 
@@ -192,27 +213,44 @@ describe("POST /api/sessions/create", () => {
     const json = await res.json();
     expect(json).toEqual({ error: "CLI binary not found" });
   });
+
+  it("returns 400 for invalid backend values", async () => {
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: `${homedir()}/test`, backend: "invalid-backend" }),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain("Invalid backend");
+    expect(launcher.launch).not.toHaveBeenCalled();
+  });
 });
 
 describe("GET /api/sessions", () => {
-  it("returns the list of sessions", async () => {
+  it("returns the list of sessions enriched with names", async () => {
     const sessions = [
       { sessionId: "s1", state: "running", cwd: "/a" },
       { sessionId: "s2", state: "stopped", cwd: "/b" },
     ];
     launcher.listSessions.mockReturnValue(sessions);
+    vi.mocked(sessionNames.getAllNames).mockReturnValue({ s1: "Fix auth bug" });
 
     const res = await app.request("/api/sessions", { method: "GET" });
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json).toEqual(sessions);
+    expect(json).toEqual([
+      { sessionId: "s1", state: "running", cwd: "/a", name: "Fix auth bug" },
+      { sessionId: "s2", state: "stopped", cwd: "/b" },
+    ]);
   });
 });
 
 describe("GET /api/sessions/:id", () => {
   it("returns the session when found", async () => {
-    const session = { sessionId: "s1", state: "running", cwd: "/test" };
+    const session = { sessionId: "s1", state: "running", cwd: `${homedir()}/test` };
     launcher.getSession.mockReturnValue(session);
 
     const res = await app.request("/api/sessions/s1", { method: "GET" });
@@ -549,6 +587,76 @@ describe("DELETE /api/git/worktree", () => {
   });
 });
 
+// ─── Session Naming ─────────────────────────────────────────────────────────
+
+describe("PATCH /api/sessions/:id/name", () => {
+  it("updates session name and returns ok", async () => {
+    launcher.getSession.mockReturnValue({ sessionId: "s1", state: "running", cwd: `${homedir()}/test` });
+
+    const res = await app.request("/api/sessions/s1/name", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Fix auth bug" }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({ ok: true, name: "Fix auth bug" });
+    expect(sessionNames.setName).toHaveBeenCalledWith("s1", "Fix auth bug");
+  });
+
+  it("trims whitespace from name", async () => {
+    launcher.getSession.mockReturnValue({ sessionId: "s1", state: "running", cwd: `${homedir()}/test` });
+
+    const res = await app.request("/api/sessions/s1/name", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "  My Session  " }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({ ok: true, name: "My Session" });
+    expect(sessionNames.setName).toHaveBeenCalledWith("s1", "My Session");
+  });
+
+  it("returns 404 when session not found", async () => {
+    launcher.getSession.mockReturnValue(undefined);
+
+    const res = await app.request("/api/sessions/nonexistent/name", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Some name" }),
+    });
+
+    expect(res.status).toBe(404);
+    const json = await res.json();
+    expect(json).toEqual({ error: "Session not found" });
+  });
+
+  it("returns 400 when name is empty", async () => {
+    const res = await app.request("/api/sessions/s1/name", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "" }),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json).toEqual({ error: "name is required" });
+  });
+
+  it("returns 400 when name is missing", async () => {
+    const res = await app.request("/api/sessions/s1/name", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(400);
+  });
+});
+
 // ─── Filesystem ──────────────────────────────────────────────────────────────
 
 describe("GET /api/fs/home", () => {
@@ -561,5 +669,180 @@ describe("GET /api/fs/home", () => {
     expect(json).toHaveProperty("cwd");
     expect(typeof json.home).toBe("string");
     expect(typeof json.cwd).toBe("string");
+  });
+});
+
+describe("GET /api/fs/diff", () => {
+  it("returns 400 when path is missing", async () => {
+    const res = await app.request("/api/fs/diff", { method: "GET" });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json).toEqual({ error: "path required" });
+  });
+
+  it("returns unified diff for a file", async () => {
+    const diffOutput = `diff --git a/file.ts b/file.ts
+--- a/file.ts
++++ b/file.ts
+@@ -1,3 +1,3 @@
+ line1
+-old line
++new line
+ line3`;
+    vi.mocked(execSync).mockReturnValueOnce(diffOutput);
+
+    const res = await app.request("/api/fs/diff?path=/repo/file.ts", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.diff).toBe(diffOutput);
+    expect(json.path).toContain("file.ts");
+    expect(vi.mocked(execSync)).toHaveBeenCalledWith(
+      expect.stringContaining("git diff HEAD"),
+      expect.objectContaining({ encoding: "utf-8", timeout: 5000 }),
+    );
+  });
+
+  it("returns empty diff when git command fails", async () => {
+    vi.mocked(execSync).mockImplementationOnce(() => {
+      throw new Error("not a git repository");
+    });
+
+    const res = await app.request("/api/fs/diff?path=/not-a-repo/file.ts", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.diff).toBe("");
+    expect(json.path).toContain("file.ts");
+  });
+});
+
+// ─── Backends ─────────────────────────────────────────────────────────────────
+
+describe("GET /api/backends", () => {
+  it("returns both backends with availability status", async () => {
+    // First call: `which claude` succeeds, second: `which codex` succeeds
+    vi.mocked(execSync)
+      .mockReturnValueOnce("/usr/bin/claude")
+      .mockReturnValueOnce("/usr/bin/codex");
+
+    const res = await app.request("/api/backends", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual([
+      { id: "claude", name: "Claude Code", available: true },
+      { id: "codex", name: "Codex", available: true },
+    ]);
+  });
+
+  it("marks backends as unavailable when CLI is not found", async () => {
+    vi.mocked(execSync)
+      .mockImplementationOnce(() => { throw new Error("not found"); })
+      .mockImplementationOnce(() => { throw new Error("not found"); });
+
+    const res = await app.request("/api/backends", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual([
+      { id: "claude", name: "Claude Code", available: false },
+      { id: "codex", name: "Codex", available: false },
+    ]);
+  });
+
+  it("handles mixed availability", async () => {
+    vi.mocked(execSync)
+      .mockReturnValueOnce("/usr/bin/claude") // claude found
+      .mockImplementationOnce(() => { throw new Error("not found"); }); // codex not found
+
+    const res = await app.request("/api/backends", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json[0].available).toBe(true);
+    expect(json[1].available).toBe(false);
+  });
+});
+
+describe("GET /api/backends/:id/models", () => {
+  it("returns codex models from cache file sorted by priority", async () => {
+    const cacheContent = JSON.stringify({
+      models: [
+        { slug: "gpt-5.1-codex-mini", display_name: "gpt-5.1-codex-mini", description: "Fast model", visibility: "list", priority: 10 },
+        { slug: "gpt-5.2-codex", display_name: "gpt-5.2-codex", description: "Frontier model", visibility: "list", priority: 0 },
+        { slug: "gpt-5-codex", display_name: "gpt-5-codex", description: "Old model", visibility: "hide", priority: 8 },
+      ],
+    });
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue(cacheContent);
+
+    const res = await app.request("/api/backends/codex/models", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    // Should only include visible models, sorted by priority
+    expect(json).toEqual([
+      { value: "gpt-5.2-codex", label: "gpt-5.2-codex", description: "Frontier model" },
+      { value: "gpt-5.1-codex-mini", label: "gpt-5.1-codex-mini", description: "Fast model" },
+    ]);
+  });
+
+  it("returns 404 when codex cache file does not exist", async () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+
+    const res = await app.request("/api/backends/codex/models", { method: "GET" });
+
+    expect(res.status).toBe(404);
+    const json = await res.json();
+    expect(json.error).toContain("Codex models cache not found");
+  });
+
+  it("returns 500 when cache file is malformed", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readFileSync).mockReturnValue("not valid json{{{");
+
+    const res = await app.request("/api/backends/codex/models", { method: "GET" });
+
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toContain("Failed to parse");
+  });
+
+  it("returns 404 for claude backend (uses frontend defaults)", async () => {
+    const res = await app.request("/api/backends/claude/models", { method: "GET" });
+
+    expect(res.status).toBe(404);
+  });
+});
+
+// ─── Session creation with backend type ──────────────────────────────────────
+
+describe("POST /api/sessions/create with backend", () => {
+  it("passes backendType codex to launcher", async () => {
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "gpt-5.2-codex", cwd: `${homedir()}/test`, backend: "codex" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(launcher.launch).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "gpt-5.2-codex", backendType: "codex" }),
+    );
+  });
+
+  it("defaults to claude backend when not specified", async () => {
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: `${homedir()}/test` }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(launcher.launch).toHaveBeenCalledWith(
+      expect.objectContaining({ backendType: "claude" }),
+    );
   });
 });

@@ -33,10 +33,13 @@ export function Sidebar() {
   const setCurrentSession = useStore((s) => s.setCurrentSession);
   const darkMode = useStore((s) => s.darkMode);
   const toggleDarkMode = useStore((s) => s.toggleDarkMode);
+  const notificationSound = useStore((s) => s.notificationSound);
+  const toggleNotificationSound = useStore((s) => s.toggleNotificationSound);
   const cliConnected = useStore((s) => s.cliConnected);
   const sessionStatus = useStore((s) => s.sessionStatus);
   const removeSession = useStore((s) => s.removeSession);
   const sessionNames = useStore((s) => s.sessionNames);
+  const recentlyRenamed = useStore((s) => s.recentlyRenamed);
   const pendingPermissions = useStore((s) => s.pendingPermissions);
   const sessionTasks = useStore((s) => s.sessionTasks);
 
@@ -46,7 +49,23 @@ export function Sidebar() {
     async function poll() {
       try {
         const list = await api.listSessions();
-        if (active) useStore.getState().setSdkSessions(list);
+        if (active) {
+          useStore.getState().setSdkSessions(list);
+          // Hydrate session names from server (server is source of truth for auto-generated names)
+          const store = useStore.getState();
+          for (const s of list) {
+            if (s.name && (!store.sessionNames.has(s.sessionId) || /^[A-Z][a-z]+ [A-Z][a-z]+$/.test(store.sessionNames.get(s.sessionId)!))) {
+              const currentStoreName = store.sessionNames.get(s.sessionId);
+              const hadRandomName = !!currentStoreName && /^[A-Z][a-z]+ [A-Z][a-z]+$/.test(currentStoreName);
+              if (currentStoreName !== s.name) {
+                store.setSessionName(s.sessionId, s.name);
+                if (hadRandomName) {
+                  store.markRecentlyRenamed(s.sessionId);
+                }
+              }
+            }
+          }
+        }
       } catch {
         // server not ready
       }
@@ -146,10 +165,10 @@ export function Sidebar() {
       const title = editingName.trim();
       // Update local store immediately for instant feedback
       useStore.getState().setSessionName(editingSessionId, title);
-      // Update server-side title
+      // Update server-side title + rename
       try {
         await api.setSessionTitle(editingSessionId, title);
-        // Refresh SDK sessions to get the updated title
+        api.renameSession(editingSessionId, title).catch(() => {});
         const list = await api.listSessions();
         useStore.getState().setSdkSessions(list);
       } catch (err) {
@@ -269,6 +288,7 @@ export function Sidebar() {
       createdAt: sdkInfo?.createdAt ?? 0,
       archived: sdkInfo?.archived ?? false,
       title: sdkInfo?.title,
+      backendType: bridgeState?.backend_type || sdkInfo?.backendType || "claude",
     };
   }).sort((a, b) => b.createdAt - a.createdAt);
 
@@ -279,6 +299,8 @@ export function Sidebar() {
   );
   const activeSessions = validSessions.filter((s) => !s.archived);
   const archivedSessions = validSessions.filter((s) => s.archived);
+  const currentSession = currentSessionId ? validSessions.find((s) => s.id === currentSessionId) : null;
+  const logoSrc = currentSession?.backendType === "codex" ? "/logo-codex.svg" : "/logo.svg";
 
   function renderSessionItem(s: typeof allSessionList[number], options?: { isArchived?: boolean }) {
     const isActive = currentSessionId === s.id;
@@ -380,8 +402,14 @@ export function Sidebar() {
                 className="text-[13px] font-medium flex-1 text-cc-fg bg-transparent border border-cc-border rounded-md px-1 py-0 outline-none focus:border-cc-primary/50 min-w-0"
               />
             ) : (
-              <span className="text-[13px] font-medium truncate flex-1 text-cc-fg">
-                {label}
+              <span
+                className={`text-[13px] font-medium truncate flex-1 text-cc-fg ${recentlyRenamed.has(s.id) ? "animate-name-appear" : ""} flex items-center gap-1.5`}
+                onAnimationEnd={() => useStore.getState().clearRecentlyRenamed(s.id)}
+              >
+                <span className="truncate">{label}</span>
+                {s.backendType === "codex" && (
+                  <span className="text-[9px] px-1 py-0.5 rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 shrink-0">codex</span>
+                )}
               </span>
             )}
           </div>
@@ -484,11 +512,7 @@ export function Sidebar() {
       {/* Header */}
       <div className="p-4 pb-3">
         <div className="flex items-center gap-2 mb-4">
-          <div className="w-7 h-7 rounded-lg bg-cc-primary flex items-center justify-center">
-            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-white">
-              <path d="M8 9h8M8 13h5M21 12c0 4.97-4.03 9-9 9a8.96 8.96 0 01-4.57-1.24L3 21l1.24-4.43A8.96 8.96 0 013 12c0-4.97 4.03-9 9-9s9 4.03 9 9z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
+          <img src={logoSrc} alt="" className="w-7 h-7" />
           <span className="text-sm font-semibold text-cc-fg tracking-tight">The Vibe Companion</span>
         </div>
 
@@ -645,6 +669,21 @@ export function Sidebar() {
             <circle cx="8" cy="8" r="7" strokeOpacity="0.3" />
           </svg>
           <span>{cleaningUp ? "Cleaning..." : "Cleanup Sessions"}</span>
+        </button>
+        <button
+          onClick={toggleNotificationSound}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+        >
+          {notificationSound ? (
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+              <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          )}
+          <span>{notificationSound ? "Sound on" : "Sound off"}</span>
         </button>
         <button
           onClick={toggleDarkMode}

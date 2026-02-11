@@ -16,6 +16,8 @@ export function TopBar() {
   const setTaskPanelOpen = useStore((s) => s.setTaskPanelOpen);
   const messages = useStore((s) => currentSessionId ? s.messages.get(currentSessionId) ?? EMPTY_MESSAGES : EMPTY_MESSAGES);
   const getConversationText = useCallback(() => conversationToText(messages), [messages]);
+  const activeTab = useStore((s) => s.activeTab);
+  const setActiveTab = useStore((s) => s.setActiveTab);
 
   const sessionTitle = useStore((s) => {
     if (!currentSessionId) return undefined;
@@ -29,7 +31,7 @@ export function TopBar() {
   const status = currentSessionId ? (sessionStatus.get(currentSessionId) ?? null) : null;
 
   return (
-    <header className="shrink-0 flex items-center justify-between px-4 py-2.5 bg-cc-card border-b border-cc-border">
+    <header className="shrink-0 flex items-center justify-between px-2 sm:px-4 py-2 sm:py-2.5 bg-cc-card border-b border-cc-border">
       <div className="flex items-center gap-3">
         {/* Sidebar toggle */}
         <button
@@ -73,7 +75,7 @@ export function TopBar() {
 
       {/* Right side */}
       {currentSessionId && (
-        <div className="flex items-center gap-3 text-[12px] text-cc-muted">
+        <div className="flex items-center gap-2 sm:gap-3 text-[12px] text-cc-muted">
           {status === "compacting" && (
             <span className="text-cc-warning font-medium animate-pulse">Compacting...</span>
           )}
@@ -88,6 +90,30 @@ export function TopBar() {
           {messages.length > 0 && (
             <CopyButton getText={getConversationText} size="md" title="Copy entire conversation" />
           )}
+
+          {/* Chat / Editor tab toggle */}
+          <div className="flex items-center bg-cc-hover rounded-lg p-0.5">
+            <button
+              onClick={() => setActiveTab("chat")}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+                activeTab === "chat"
+                  ? "bg-cc-card text-cc-fg shadow-sm"
+                  : "text-cc-muted hover:text-cc-fg"
+              }`}
+            >
+              Chat
+            </button>
+            <button
+              onClick={() => setActiveTab("editor")}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+                activeTab === "editor"
+                  ? "bg-cc-card text-cc-fg shadow-sm"
+                  : "text-cc-muted hover:text-cc-fg"
+              }`}
+            >
+              Editor
+            </button>
+          </div>
 
           <button
             onClick={() => setTaskPanelOpen(!taskPanelOpen)}

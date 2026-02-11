@@ -9,6 +9,7 @@ import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
 import { HomePage } from "./components/HomePage.js";
 import { TaskPanel } from "./components/TaskPanel.js";
+import { EditorPanel } from "./components/EditorPanel.js";
 import { Playground } from "./components/Playground.js";
 
 function useHash() {
@@ -24,6 +25,7 @@ export default function App() {
   const sidebarOpen = useStore((s) => s.sidebarOpen);
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
   const homeResetKey = useStore((s) => s.homeResetKey);
+  const activeTab = useStore((s) => s.activeTab);
   const hash = useHash();
   const [showArchiveAllConfirm, setShowArchiveAllConfirm] = useState(false);
 
@@ -348,7 +350,7 @@ export default function App() {
         className={`
           fixed md:relative z-40 md:z-auto
           h-full shrink-0 transition-all duration-200
-          ${sidebarOpen ? "w-[260px] translate-x-0" : "w-0 -translate-x-full md:translate-x-0"}
+          ${sidebarOpen ? "w-[260px] translate-x-0" : "w-0 -translate-x-full md:w-0 md:-translate-x-full"}
           overflow-hidden
         `}
       >
@@ -358,11 +360,21 @@ export default function App() {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <TopBar />
-        <div className="flex-1 overflow-hidden">
-          {currentSessionId ? (
-            <ChatView sessionId={currentSessionId} />
-          ) : (
-            <HomePage key={homeResetKey} />
+        <div className="flex-1 overflow-hidden relative">
+          {/* Chat tab — visible when activeTab is "chat" or no session */}
+          <div className={`absolute inset-0 ${activeTab === "chat" || !currentSessionId ? "" : "hidden"}`}>
+            {currentSessionId ? (
+              <ChatView sessionId={currentSessionId} />
+            ) : (
+              <HomePage key={homeResetKey} />
+            )}
+          </div>
+
+          {/* Editor tab */}
+          {currentSessionId && activeTab === "editor" && (
+            <div className="absolute inset-0">
+              <EditorPanel sessionId={currentSessionId} />
+            </div>
           )}
         </div>
       </div>
@@ -382,7 +394,7 @@ export default function App() {
             className={`
               fixed lg:relative z-40 lg:z-auto right-0 top-0
               h-full shrink-0 transition-all duration-200
-              ${taskPanelOpen ? "w-[280px] translate-x-0" : "w-0 translate-x-full lg:translate-x-0"}
+              ${taskPanelOpen ? "w-[280px] translate-x-0" : "w-0 translate-x-full lg:w-0 lg:translate-x-full"}
               overflow-hidden
             `}
           >

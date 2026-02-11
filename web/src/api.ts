@@ -34,6 +34,19 @@ async function put<T = unknown>(path: string, body?: object): Promise<T> {
   return res.json();
 }
 
+async function patch<T = unknown>(path: string, body?: object): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
 async function del<T = unknown>(path: string, body?: object): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "DELETE",
@@ -52,12 +65,14 @@ export interface CreateSessionOpts {
   permissionMode?: string;
   cwd?: string;
   claudeBinary?: string;
+  codexBinary?: string;
   allowedTools?: string[];
   envSlug?: string;
   branch?: string;
   createBranch?: boolean;
   useWorktree?: boolean;
   resumeSessionId?: string;
+  backend?: "claude" | "codex";
 }
 
 export interface ResumableSession {
@@ -65,6 +80,18 @@ export interface ResumableSession {
   project: string;
   lastModified: number;
   title: string;
+}
+
+export interface BackendInfo {
+  id: string;
+  name: string;
+  available: boolean;
+}
+
+export interface BackendModelInfo {
+  value: string;
+  label: string;
+  description: string;
 }
 
 export interface GitRepoInfo {
@@ -118,12 +145,32 @@ export interface DirListResult {
   error?: string;
 }
 
+export interface TreeNode {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  children?: TreeNode[];
+}
+
+export interface UsageLimits {
+  five_hour: { utilization: number; resets_at: string | null } | null;
+  seven_day: { utilization: number; resets_at: string | null } | null;
+  extra_usage: {
+    is_enabled: boolean;
+    monthly_limit: number;
+    used_credits: number;
+    utilization: number | null;
+  } | null;
+}
+
 export const api = {
   createSession: (opts?: CreateSessionOpts) =>
-    post<{ sessionId: string; state: string; cwd: string }>("/sessions/create", opts),
+    post<{ sessionId: string; state: string; cwd: string }>(
+      "/sessions/create",
+      opts,
+    ),
 
-  listSessions: () =>
-    get<SdkSessionInfo[]>("/sessions"),
+  listSessions: () => get<SdkSessionInfo[]>("/sessions"),
 
   cleanupSessions: () =>
     post<{ success: boolean }>("/sessions/cleanup"),
@@ -149,37 +196,94 @@ export const api = {
   listResumableSessions: () =>
     get<ResumableSession[]>("/sessions/resumable"),
 
-  listDirs: (path?: string) =>
-    get<DirListResult>(`/fs/list${path ? `?path=${encodeURIComponent(path)}` : ""}`),
+  renameSession: (sessionId: string, name: string) =>
+    patch<{ ok: boolean; name: string }>(
+      `/sessions/${encodeURIComponent(sessionId)}/name`,
+      { name },
+    ),
 
-  getHome: () =>
-    get<{ home: string; cwd: string }>("/fs/home"),
+  listDirs: (path?: string) =>
+    get<DirListResult>(
+      `/fs/list${path ? `?path=${encodeURIComponent(path)}` : ""}`,
+    ),
+
+  getHome: () => get<{ home: string; cwd: string }>("/fs/home"),
 
   getRecentProjects: () =>
     get<{ projects: string[] }>("/fs/recent-projects"),
 
   // Environments
   listEnvs: () => get<CompanionEnv[]>("/envs"),
-  getEnv: (slug: string) => get<CompanionEnv>(`/envs/${encodeURIComponent(slug)}`),
+  getEnv: (slug: string) =>
+    get<CompanionEnv>(`/envs/${encodeURIComponent(slug)}`),
   createEnv: (name: string, variables: Record<string, string>) =>
     post<CompanionEnv>("/envs", { name, variables }),
-  updateEnv: (slug: string, data: { name?: string; variables?: Record<string, string> }) =>
-    put<CompanionEnv>(`/envs/${encodeURIComponent(slug)}`, data),
+  updateEnv: (
+    slug: string,
+    data: { name?: string; variables?: Record<string, string> },
+  ) => put<CompanionEnv>(`/envs/${encodeURIComponent(slug)}`, data),
   deleteEnv: (slug: string) => del(`/envs/${encodeURIComponent(slug)}`),
 
   // Git operations
   getRepoInfo: (path: string) =>
     get<GitRepoInfo>(`/git/repo-info?path=${encodeURIComponent(path)}`),
   listBranches: (repoRoot: string) =>
-    get<GitBranchInfo[]>(`/git/branches?repoRoot=${encodeURIComponent(repoRoot)}`),
+    get<GitBranchInfo[]>(
+      `/git/branches?repoRoot=${encodeURIComponent(repoRoot)}`,
+    ),
   listWorktrees: (repoRoot: string) =>
-    get<GitWorktreeInfo[]>(`/git/worktrees?repoRoot=${encodeURIComponent(repoRoot)}`),
-  createWorktree: (repoRoot: string, branch: string, opts?: { baseBranch?: string; createBranch?: boolean }) =>
+    get<GitWorktreeInfo[]>(
+      `/git/worktrees?repoRoot=${encodeURIComponent(repoRoot)}`,
+    ),
+  createWorktree: (
+    repoRoot: string,
+    branch: string,
+    opts?: { baseBranch?: string; createBranch?: boolean },
+  ) =>
     post<WorktreeCreateResult>("/git/worktree", { repoRoot, branch, ...opts }),
   removeWorktree: (repoRoot: string, worktreePath: string, force?: boolean) =>
-    del<{ removed: boolean; reason?: string }>("/git/worktree", { repoRoot, worktreePath, force }),
+    del<{ removed: boolean; reason?: string }>("/git/worktree", {
+      repoRoot,
+      worktreePath,
+      force,
+    }),
   gitFetch: (repoRoot: string) =>
     post<{ success: boolean; output: string }>("/git/fetch", { repoRoot }),
   gitPull: (cwd: string) =>
-    post<{ success: boolean; output: string; git_ahead: number; git_behind: number }>("/git/pull", { cwd }),
+    post<{
+      success: boolean;
+      output: string;
+      git_ahead: number;
+      git_behind: number;
+    }>("/git/pull", { cwd }),
+
+  // Backends
+  getBackends: () => get<BackendInfo[]>("/backends"),
+  getBackendModels: (backendId: string) =>
+    get<BackendModelInfo[]>(`/backends/${encodeURIComponent(backendId)}/models`),
+
+  // Editor
+  startEditor: (sessionId: string) =>
+    post<{ url: string }>(
+      `/sessions/${encodeURIComponent(sessionId)}/editor/start`,
+    ),
+
+  // Editor filesystem
+  getFileTree: (path: string) =>
+    get<{ path: string; tree: TreeNode[] }>(
+      `/fs/tree?path=${encodeURIComponent(path)}`,
+    ),
+  readFile: (path: string) =>
+    get<{ path: string; content: string }>(
+      `/fs/read?path=${encodeURIComponent(path)}`,
+    ),
+  writeFile: (path: string, content: string) =>
+    put<{ ok: boolean; path: string }>("/fs/write", { path, content }),
+  getFileDiff: (path: string) =>
+    get<{ path: string; diff: string }>(
+      `/fs/diff?path=${encodeURIComponent(path)}`,
+    ),
+
+  // Usage limits
+  getUsageLimits: () => get<UsageLimits>("/usage-limits"),
 };

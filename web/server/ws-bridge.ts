@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import type {
   CLIMessage,
   CLISystemInitMessage,
+  CLISystemStatusMessage,
   CLIAssistantMessage,
   CLIResultMessage,
   CLIStreamEventMessage,
@@ -18,8 +19,10 @@ import type {
   BrowserIncomingMessage,
   SessionState,
   PermissionRequest,
+  BackendType,
 } from "./session-types.js";
 import type { SessionStore } from "./session-store.js";
+import type { CodexAdapter } from "./codex-adapter.js";
 
 /** Truncate a message to use as a session title (max ~50 chars at word boundary). */
 function truncateTitle(message: string): string {
@@ -52,7 +55,9 @@ export type SocketData = CLISocketData | BrowserSocketData;
 
 interface Session {
   id: string;
+  backendType: BackendType;
   cliSocket: ServerWebSocket<SocketData> | null;
+  codexAdapter: CodexAdapter | null;
   browserSockets: Set<ServerWebSocket<SocketData>>;
   state: SessionState;
   pendingPermissions: Map<string, PermissionRequest>;
@@ -67,9 +72,10 @@ interface Session {
   createdAt?: number;
 }
 
-function makeDefaultState(sessionId: string): SessionState {
+function makeDefaultState(sessionId: string, backendType: BackendType = "claude"): SessionState {
   return {
     session_id: sessionId,
+    backend_type: backendType,
     model: "",
     cwd: "",
     tools: [],
@@ -101,6 +107,8 @@ export class WsBridge {
   private onCLISessionId: ((sessionId: string, cliSessionId: string) => void) | null = null;
   private onCLIRelaunchNeeded: ((sessionId: string) => void) | null = null;
   private onTitleGenerated: ((sessionId: string, title: string) => void) | null = null;
+  private onFirstTurnCompleted: ((sessionId: string, firstUserMessage: string) => void) | null = null;
+  private autoNamingAttempted = new Set<string>();
 
   /** Register a callback for when we learn the CLI's internal session ID. */
   onCLISessionIdReceived(cb: (sessionId: string, cliSessionId: string) => void): void {
@@ -117,6 +125,11 @@ export class WsBridge {
     this.onCLIRelaunchNeeded = cb;
   }
 
+  /** Register a callback for when a session completes its first turn. */
+  onFirstTurnCompletedCallback(cb: (sessionId: string, firstUserMessage: string) => void): void {
+    this.onFirstTurnCompleted = cb;
+  }
+
   /** Attach a persistent store. Call restoreFromDisk() after. */
   setStore(store: SessionStore): void {
     this.store = store;
@@ -131,7 +144,9 @@ export class WsBridge {
       if (this.sessions.has(p.id)) continue; // don't overwrite live sessions
       const session: Session = {
         id: p.id,
+        backendType: p.state.backend_type || "claude",
         cliSocket: null,
+        codexAdapter: null,
         browserSockets: new Set(),
         state: p.state,
         pendingPermissions: new Map(p.pendingPermissions || []),
@@ -141,7 +156,12 @@ export class WsBridge {
         title: p.title,
         createdAt: p.createdAt,
       };
+      session.state.backend_type = session.backendType;
       this.sessions.set(p.id, session);
+      // Restored sessions with completed turns don't need auto-naming re-triggered
+      if (session.state.num_turns > 0) {
+        this.autoNamingAttempted.add(session.id);
+      }
       count++;
     }
     if (count > 0) {
@@ -261,14 +281,16 @@ export class WsBridge {
     }
   }
 
-  getOrCreateSession(sessionId: string, opts?: { resumeCliSessionId?: string; cwd?: string }): Session {
+  getOrCreateSession(sessionId: string, backendType: BackendType = "claude", opts?: { resumeCliSessionId?: string; cwd?: string }): Session {
     let session = this.sessions.get(sessionId);
     if (!session) {
       session = {
         id: sessionId,
+        backendType,
         cliSocket: null,
+        codexAdapter: null,
         browserSockets: new Set(),
-        state: makeDefaultState(sessionId),
+        state: makeDefaultState(sessionId, backendType),
         pendingPermissions: new Map(),
         messageHistory: [],
         pendingMessages: [],
@@ -286,6 +308,8 @@ export class WsBridge {
 
       this.sessions.set(sessionId, session);
     }
+    session.backendType = backendType;
+    session.state.backend_type = backendType;
     return session;
   }
 
@@ -298,7 +322,12 @@ export class WsBridge {
   }
 
   isCliConnected(sessionId: string): boolean {
-    return !!this.sessions.get(sessionId)?.cliSocket;
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    if (session.backendType === "codex") {
+      return !!session.codexAdapter?.isConnected();
+    }
+    return !!session.cliSocket;
   }
 
   /** Set the title for a session, persist it, and notify browsers. */
@@ -313,6 +342,7 @@ export class WsBridge {
 
   removeSession(sessionId: string) {
     this.sessions.delete(sessionId);
+    this.autoNamingAttempted.delete(sessionId);
     this.store?.remove(sessionId);
   }
 
@@ -321,7 +351,7 @@ export class WsBridge {
    * Loads message history from the CLI's session file.
    */
   initializeResumedSession(sessionId: string, resumeCliSessionId: string, cwd?: string): void {
-    this.getOrCreateSession(sessionId, { resumeCliSessionId, cwd });
+    this.getOrCreateSession(sessionId, "claude", { resumeCliSessionId, cwd });
   }
 
   /**
@@ -331,10 +361,16 @@ export class WsBridge {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    // Close CLI socket
+    // Close CLI socket (Claude)
     if (session.cliSocket) {
       try { session.cliSocket.close(); } catch {}
       session.cliSocket = null;
+    }
+
+    // Disconnect Codex adapter
+    if (session.codexAdapter) {
+      session.codexAdapter.disconnect().catch(() => {});
+      session.codexAdapter = null;
     }
 
     // Close all browser sockets
@@ -344,7 +380,114 @@ export class WsBridge {
     session.browserSockets.clear();
 
     this.sessions.delete(sessionId);
+    this.autoNamingAttempted.delete(sessionId);
     this.store?.remove(sessionId);
+  }
+
+  // ── Codex adapter attachment ────────────────────────────────────────────
+
+  /**
+   * Attach a CodexAdapter to a session. The adapter handles all message
+   * translation between the Codex app-server (stdio JSON-RPC) and the
+   * browser WebSocket protocol.
+   */
+  attachCodexAdapter(sessionId: string, adapter: CodexAdapter): void {
+    const session = this.getOrCreateSession(sessionId, "codex");
+    session.backendType = "codex";
+    session.state.backend_type = "codex";
+    session.codexAdapter = adapter;
+
+    // Forward translated messages to browsers
+    adapter.onBrowserMessage((msg) => {
+      if (msg.type === "session_init") {
+        session.state = { ...session.state, ...msg.session, backend_type: "codex" };
+        this.persistSession(session);
+      } else if (msg.type === "session_update") {
+        session.state = { ...session.state, ...msg.session, backend_type: "codex" };
+        this.persistSession(session);
+      } else if (msg.type === "status_change") {
+        session.state.is_compacting = msg.status === "compacting";
+        this.persistSession(session);
+      }
+
+      // Store assistant/result messages in history for replay
+      if (msg.type === "assistant" || msg.type === "result") {
+        session.messageHistory.push(msg);
+        this.persistSession(session);
+      }
+
+      // Diagnostic: log tool_use assistant messages
+      if (msg.type === "assistant") {
+        const content = (msg as { message?: { content?: Array<{ type: string }> } }).message?.content;
+        const hasToolUse = content?.some((b) => b.type === "tool_use");
+        if (hasToolUse) {
+          console.log(`[ws-bridge] Broadcasting tool_use assistant to ${session.browserSockets.size} browser(s) for session ${session.id}`);
+        }
+      }
+
+      // Handle permission requests
+      if (msg.type === "permission_request") {
+        session.pendingPermissions.set(msg.request.request_id, msg.request);
+        this.persistSession(session);
+      }
+
+      this.broadcastToBrowsers(session, msg);
+
+      // Trigger auto-naming after the first result
+      if (
+        msg.type === "result" &&
+        !(msg.data as { is_error?: boolean }).is_error &&
+        this.onFirstTurnCompleted &&
+        !this.autoNamingAttempted.has(session.id)
+      ) {
+        this.autoNamingAttempted.add(session.id);
+        const firstUserMsg = session.messageHistory.find((m) => m.type === "user_message");
+        if (firstUserMsg && firstUserMsg.type === "user_message") {
+          this.onFirstTurnCompleted(session.id, firstUserMsg.content);
+        }
+      }
+    });
+
+    // Handle session metadata updates
+    adapter.onSessionMeta((meta) => {
+      if (meta.cliSessionId && this.onCLISessionId) {
+        this.onCLISessionId(session.id, meta.cliSessionId);
+      }
+      if (meta.model) session.state.model = meta.model;
+      if (meta.cwd) session.state.cwd = meta.cwd;
+      session.state.backend_type = "codex";
+      this.persistSession(session);
+    });
+
+    // Handle disconnect
+    adapter.onDisconnect(() => {
+      for (const [reqId] of session.pendingPermissions) {
+        this.broadcastToBrowsers(session, { type: "permission_cancelled", request_id: reqId });
+      }
+      session.pendingPermissions.clear();
+      session.codexAdapter = null;
+      this.persistSession(session);
+      console.log(`[ws-bridge] Codex adapter disconnected for session ${sessionId}`);
+      this.broadcastToBrowsers(session, { type: "cli_disconnected" });
+    });
+
+    // Flush any messages queued while waiting for the adapter
+    if (session.pendingMessages.length > 0) {
+      console.log(`[ws-bridge] Flushing ${session.pendingMessages.length} queued message(s) to Codex adapter for session ${sessionId}`);
+      const queued = session.pendingMessages.splice(0);
+      for (const raw of queued) {
+        try {
+          const msg = JSON.parse(raw) as BrowserOutgoingMessage;
+          adapter.sendBrowserMessage(msg);
+        } catch {
+          console.warn(`[ws-bridge] Failed to parse queued message for Codex: ${raw.substring(0, 100)}`);
+        }
+      }
+    }
+
+    // Notify browsers that the backend is connected
+    this.broadcastToBrowsers(session, { type: "cli_connected" });
+    console.log(`[ws-bridge] Codex adapter attached for session ${sessionId}`);
   }
 
   // ── CLI WebSocket handlers ──────────────────────────────────────────────
@@ -428,11 +571,15 @@ export class WsBridge {
       this.sendToBrowser(ws, { type: "permission_request", request: perm });
     }
 
-    // Notify if CLI is not connected and request relaunch
-    if (!session.cliSocket) {
+    // Notify if backend is not connected and request relaunch
+    const backendConnected = session.backendType === "codex"
+      ? session.codexAdapter?.isConnected()
+      : !!session.cliSocket;
+
+    if (!backendConnected) {
       this.sendToBrowser(ws, { type: "cli_disconnected" });
       if (this.onCLIRelaunchNeeded) {
-        console.log(`[ws-bridge] Browser connected but CLI is dead for session ${sessionId}, requesting relaunch`);
+        console.log(`[ws-bridge] Browser connected but backend is dead for session ${sessionId}, requesting relaunch`);
         this.onCLIRelaunchNeeded(sessionId);
       }
     }
@@ -473,31 +620,31 @@ export class WsBridge {
         break;
 
       case "assistant":
-        this.handleAssistantMessage(session, msg as CLIAssistantMessage);
+        this.handleAssistantMessage(session, msg);
         break;
 
       case "result":
-        this.handleResultMessage(session, msg as CLIResultMessage);
+        this.handleResultMessage(session, msg);
         break;
 
       case "stream_event":
-        this.handleStreamEvent(session, msg as CLIStreamEventMessage);
+        this.handleStreamEvent(session, msg);
         break;
 
       case "control_request":
-        this.handleControlRequest(session, msg as CLIControlRequestMessage);
+        this.handleControlRequest(session, msg);
         break;
 
       case "tool_progress":
-        this.handleToolProgress(session, msg as CLIToolProgressMessage);
+        this.handleToolProgress(session, msg);
         break;
 
       case "tool_use_summary":
-        this.handleToolUseSummary(session, msg as CLIToolUseSummaryMessage);
+        this.handleToolUseSummary(session, msg);
         break;
 
       case "auth_status":
-        this.handleAuthStatus(session, msg as CLIAuthStatusMessage);
+        this.handleAuthStatus(session, msg);
         break;
 
       case "keep_alive":
@@ -510,34 +657,29 @@ export class WsBridge {
     }
   }
 
-  private handleSystemMessage(session: Session, msg: CLIMessage) {
-    if (msg.type !== "system") return;
-
-    const subtype = (msg as { subtype?: string }).subtype;
-
-    if (subtype === "init") {
-      const init = msg as unknown as CLISystemInitMessage;
+  private handleSystemMessage(session: Session, msg: CLISystemInitMessage | CLISystemStatusMessage) {
+    if (msg.subtype === "init") {
       // Keep the launcher-assigned session_id as the canonical ID.
       // The CLI may report its own internal session_id which differs
       // from the launcher UUID, causing duplicate entries in the sidebar.
 
       // Store the CLI's internal session_id so we can --resume on relaunch
-      if (init.session_id) {
-        session.cliSessionId = init.session_id;
+      if (msg.session_id) {
+        session.cliSessionId = msg.session_id;
         if (this.onCLISessionId) {
-          this.onCLISessionId(session.id, init.session_id);
+          this.onCLISessionId(session.id, msg.session_id);
         }
       }
 
-      session.state.model = init.model;
-      session.state.cwd = init.cwd;
-      session.state.tools = init.tools;
-      session.state.permissionMode = init.permissionMode;
-      session.state.claude_code_version = init.claude_code_version;
-      session.state.mcp_servers = init.mcp_servers;
-      session.state.agents = init.agents ?? [];
-      session.state.slash_commands = init.slash_commands ?? [];
-      session.state.skills = init.skills ?? [];
+      session.state.model = msg.model;
+      session.state.cwd = msg.cwd;
+      session.state.tools = msg.tools;
+      session.state.permissionMode = msg.permissionMode;
+      session.state.claude_code_version = msg.claude_code_version;
+      session.state.mcp_servers = msg.mcp_servers;
+      session.state.agents = msg.agents ?? [];
+      session.state.slash_commands = msg.slash_commands ?? [];
+      session.state.skills = msg.skills ?? [];
 
       // Resolve git info from session cwd
       if (session.state.cwd) {
@@ -586,18 +728,16 @@ export class WsBridge {
         session: session.state,
       });
       this.persistSession(session);
-    } else if (subtype === "status") {
-      const status = (msg as { status?: "compacting" | null }).status;
-      session.state.is_compacting = status === "compacting";
+    } else if (msg.subtype === "status") {
+      session.state.is_compacting = msg.status === "compacting";
 
-      const permMode = (msg as { permissionMode?: string }).permissionMode;
-      if (permMode) {
-        session.state.permissionMode = permMode;
+      if (msg.permissionMode) {
+        session.state.permissionMode = msg.permissionMode;
       }
 
       this.broadcastToBrowsers(session, {
         type: "status_change",
-        status: status ?? null,
+        status: msg.status ?? null,
       });
     }
     // Other system subtypes (compact_boundary, task_notification, etc.) can be forwarded as needed
@@ -637,9 +777,10 @@ export class WsBridge {
     if (msg.modelUsage) {
       for (const usage of Object.values(msg.modelUsage)) {
         if (usage.contextWindow > 0) {
-          session.state.context_used_percent = Math.round(
+          const pct = Math.round(
             ((usage.inputTokens + usage.outputTokens) / usage.contextWindow) * 100
           );
+          session.state.context_used_percent = Math.max(0, Math.min(pct, 100));
         }
       }
     }
@@ -651,6 +792,23 @@ export class WsBridge {
     session.messageHistory.push(browserMsg);
     this.broadcastToBrowsers(session, browserMsg);
     this.persistSession(session);
+
+    // Trigger auto-naming after the first successful result for this session.
+    // Note: num_turns counts all internal tool-use turns, so it's typically > 1
+    // even on the first user interaction. We track per-session instead.
+    if (
+      !msg.is_error &&
+      this.onFirstTurnCompleted &&
+      !this.autoNamingAttempted.has(session.id)
+    ) {
+      this.autoNamingAttempted.add(session.id);
+      const firstUserMsg = session.messageHistory.find(
+        (m) => m.type === "user_message",
+      );
+      if (firstUserMsg && firstUserMsg.type === "user_message") {
+        this.onFirstTurnCompleted(session.id, firstUserMsg.content);
+      }
+    }
   }
 
   private handleStreamEvent(session: Session, msg: CLIStreamEventMessage) {
@@ -684,7 +842,7 @@ export class WsBridge {
         request_id: msg.request_id,
         tool_name: msg.request.tool_name,
         input: msg.request.input,
-        permission_suggestions: msg.request.permission_suggestions as PermissionRequest["permission_suggestions"],
+        permission_suggestions: msg.request.permission_suggestions,
         description: msg.request.description,
         tool_use_id: msg.request.tool_use_id,
         agent_id: msg.request.agent_id,
@@ -729,6 +887,35 @@ export class WsBridge {
   // ── Browser message routing ─────────────────────────────────────────────
 
   private routeBrowserMessage(session: Session, msg: BrowserOutgoingMessage) {
+    // For Codex sessions, delegate entirely to the adapter
+    if (session.backendType === "codex") {
+      // Store user messages in history for replay
+      if (msg.type === "user_message") {
+        session.messageHistory.push({
+          type: "user_message",
+          content: msg.content,
+          timestamp: Date.now(),
+        });
+        this.persistSession(session);
+      }
+      if (msg.type === "permission_response") {
+        session.pendingPermissions.delete(msg.request_id);
+        this.persistSession(session);
+      }
+
+      if (session.codexAdapter) {
+        session.codexAdapter.sendBrowserMessage(msg);
+      } else {
+        // Adapter not yet attached — queue for when it's ready.
+        // The adapter itself also queues during init, but this covers
+        // the window between session creation and adapter attachment.
+        console.log(`[ws-bridge] Codex adapter not yet attached for session ${session.id}, queuing ${msg.type}`);
+        session.pendingMessages.push(JSON.stringify(msg));
+      }
+      return;
+    }
+
+    // Claude Code path (existing logic)
     switch (msg.type) {
       case "user_message":
         void this.handleUserMessage(session, msg);
@@ -884,7 +1071,18 @@ export class WsBridge {
     }
   }
 
+  /** Push a session name update to all connected browsers for a session. */
+  broadcastNameUpdate(sessionId: string, name: string): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    this.broadcastToBrowsers(session, { type: "session_name_update", name });
+  }
+
   private broadcastToBrowsers(session: Session, msg: BrowserIncomingMessage) {
+    // Debug: warn when assistant messages are broadcast to 0 browsers (they may be lost)
+    if (session.browserSockets.size === 0 && (msg.type === "assistant" || msg.type === "stream_event" || msg.type === "result")) {
+      console.log(`[ws-bridge] ⚠ Broadcasting ${msg.type} to 0 browsers for session ${session.id} (stored in history: ${msg.type === "assistant" || msg.type === "result"})`);
+    }
     const json = JSON.stringify(msg);
     for (const ws of session.browserSockets) {
       try {

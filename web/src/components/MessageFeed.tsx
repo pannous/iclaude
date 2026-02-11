@@ -1,8 +1,10 @@
-import { useEffect, useRef, useMemo, useState } from "react";
+import { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { useStore } from "../store.js";
 import { MessageBubble } from "./MessageBubble.js";
 import { getToolIcon, getToolLabel, getPreview, ToolIcon } from "./ToolBlock.js";
 import type { ChatMessage, ContentBlock } from "../types.js";
+
+const FEED_PAGE_SIZE = 100;
 
 function formatElapsed(ms: number): string {
   const secs = Math.floor(ms / 1000);
@@ -76,8 +78,9 @@ function getTaskIdsFromEntry(entry: FeedEntry): string[] {
   if (entry.kind === "message") {
     const blocks = entry.msg.contentBlocks || [];
     return blocks
-      .filter(b => b.type === "tool_use" && (b as { name?: string }).name === "Task")
-      .map(b => (b as { id: string }).id);
+      .filter((b): b is Extract<ContentBlock, { type: "tool_use" }> => b.type === "tool_use")
+      .filter(b => b.name === "Task")
+      .map(b => b.id);
   }
   if (entry.kind === "tool_msg_group" && entry.toolName === "Task") {
     return entry.items.map(item => item.id);
@@ -151,9 +154,8 @@ function groupMessages(messages: ChatMessage[]): FeedEntry[] {
   for (const msg of messages) {
     if (!msg.contentBlocks) continue;
     for (const b of msg.contentBlocks) {
-      if (b.type === "tool_use" && (b as { name?: string }).name === "Task") {
-        const input = (b as { id: string; input: Record<string, unknown> }).input;
-        const id = (b as { id: string }).id;
+      if (b.type === "tool_use" && b.name === "Task") {
+        const { input, id } = b;
         taskInfo.set(id, {
           description: String(input?.description || "Subagent"),
           agentType: String(input?.subagent_type || ""),
@@ -303,8 +305,10 @@ function SubagentContainer({ group }: { group: SubagentGroup }) {
     if (lastEntry.kind === "message" && lastEntry.msg.role === "assistant") {
       const text = lastEntry.msg.content?.trim();
       if (text) return text.length > 60 ? text.slice(0, 60) + "..." : text;
-      const toolBlock = lastEntry.msg.contentBlocks?.find(b => b.type === "tool_use");
-      if (toolBlock) return getToolLabel((toolBlock as { name: string }).name);
+      const toolBlock = lastEntry.msg.contentBlocks?.find(
+        (b): b is Extract<ContentBlock, { type: "tool_use" }> => b.type === "tool_use"
+      );
+      if (toolBlock) return getToolLabel(toolBlock.name);
     }
     return "";
   }, [lastEntry]);
@@ -371,8 +375,32 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isNearBottom = useRef(true);
   const [elapsed, setElapsed] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
 
   const grouped = useMemo(() => groupMessages(messages), [messages]);
+
+  // Reset visible count when switching sessions
+  useEffect(() => {
+    setVisibleCount(FEED_PAGE_SIZE);
+  }, [sessionId]);
+
+  const totalEntries = grouped.length;
+  const hasMore = totalEntries > visibleCount;
+  const visibleEntries = hasMore ? grouped.slice(totalEntries - visibleCount) : grouped;
+  const hiddenCount = totalEntries - visibleEntries.length;
+
+  const handleLoadMore = useCallback(() => {
+    const el = containerRef.current;
+    const prevHeight = el?.scrollHeight ?? 0;
+    setVisibleCount((c) => c + FEED_PAGE_SIZE);
+    // Preserve scroll position after DOM updates
+    requestAnimationFrame(() => {
+      if (el) {
+        const newHeight = el.scrollHeight;
+        el.scrollTop += newHeight - prevHeight;
+      }
+    });
+  }, []);
 
   // Tick elapsed time every second while generating
   useEffect(() => {
@@ -426,7 +454,20 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
         className="h-full overflow-y-auto scroll-smooth px-3 sm:px-4 py-4 sm:py-6"
       >
         <div className="max-w-3xl mx-auto space-y-3 sm:space-y-5">
-          <FeedEntries entries={grouped} />
+          {hasMore && (
+            <div className="flex justify-center pb-2">
+              <button
+                onClick={handleLoadMore}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-cc-muted hover:text-cc-fg bg-cc-card border border-cc-border rounded-lg hover:bg-cc-hover transition-colors cursor-pointer"
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                  <path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z" />
+                </svg>
+                Load {Math.min(FEED_PAGE_SIZE, hiddenCount)} more ({hiddenCount} hidden)
+              </button>
+            </div>
+          )}
+          <FeedEntries entries={visibleEntries} />
 
           {/* Streaming indicator */}
           {streamingText && (

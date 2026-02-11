@@ -10,6 +10,8 @@ import { CliLauncher } from "./cli-launcher.js";
 import { WsBridge } from "./ws-bridge.js";
 import { SessionStore } from "./session-store.js";
 import { WorktreeTracker } from "./worktree-tracker.js";
+import { generateSessionTitle } from "./auto-namer.js";
+import * as sessionNames from "./session-names.js";
 import type { SocketData } from "./ws-bridge.js";
 import type { ServerWebSocket } from "bun";
 
@@ -46,6 +48,13 @@ wsBridge.onTitleGeneratedCallback((sessionId, title) => {
   wsBridge.setTitle(sessionId, title);
 });
 
+// When a Codex adapter is created, attach it to the WsBridge
+launcher.onCodexAdapterCreated((sessionId, adapter) => {
+  wsBridge.attachCodexAdapter(sessionId, adapter);
+});
+
+// Auto-relaunch CLI when a browser connects to a session with no CLI
+const relaunchingSet = new Set<string>();
 wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
   const now = Date.now();
   const cooldown = relaunchCooldowns.get(sessionId);
@@ -65,6 +74,23 @@ wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
   }
 });
 
+// Auto-generate session title after first turn completes
+wsBridge.onFirstTurnCompletedCallback(async (sessionId, firstUserMessage) => {
+  // Don't overwrite a name that was already set (manual rename or prior auto-name)
+  if (sessionNames.getName(sessionId)) return;
+  const info = launcher.getSession(sessionId);
+  const model = info?.model || "claude-sonnet-4-5-20250929";
+  const backendType = info?.backendType || "claude";
+  console.log(`[server] Auto-naming session ${sessionId} with model ${model} (${backendType})...`);
+  const title = await generateSessionTitle(firstUserMessage, model, { backendType });
+  // Re-check: a manual rename may have occurred while we were generating
+  if (title && !sessionNames.getName(sessionId)) {
+    console.log(`[server] Auto-named session ${sessionId}: "${title}"`);
+    sessionNames.setName(sessionId, title);
+    wsBridge.broadcastNameUpdate(sessionId, title);
+  }
+});
+
 console.log(`[server] Session persistence: ${sessionStore.directory}`);
 
 const app = new Hono();
@@ -81,7 +107,7 @@ if (process.env.NODE_ENV === "production") {
 
 const server = Bun.serve<SocketData>({
   port,
-  fetch(req, server) {
+  async fetch(req, server) {
     const url = new URL(req.url);
 
     // ── CLI WebSocket — Claude Code CLI connects here via --sdk-url ────

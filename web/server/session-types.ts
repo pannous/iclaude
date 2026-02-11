@@ -116,7 +116,7 @@ export interface CLIControlRequestMessage {
     subtype: "can_use_tool";
     tool_name: string;
     input: Record<string, unknown>;
-    permission_suggestions?: unknown[];
+    permission_suggestions?: PermissionUpdate[];
     description?: string;
     tool_use_id: string;
     agent_id?: string;
@@ -146,8 +146,7 @@ export type CLIMessage =
   | CLIToolUseSummaryMessage
   | CLIControlRequestMessage
   | CLIKeepAliveMessage
-  | CLIAuthStatusMessage
-  | { type: string; subtype?: string; [key: string]: unknown };
+  | CLIAuthStatusMessage;
 
 // ─── Content Block Types ──────────────────────────────────────────────────────
 
@@ -186,12 +185,16 @@ export type BrowserIncomingMessage =
   | { type: "title_updated"; title: string }
   | { type: "subtitle_updated"; subtitle: string }
   | { type: "user_message"; content: string; timestamp: number }
-  | { type: "message_history"; messages: BrowserIncomingMessage[] };
+  | { type: "message_history"; messages: BrowserIncomingMessage[] }
+  | { type: "session_name_update"; name: string };
 
 // ─── Session State ────────────────────────────────────────────────────────────
 
+export type BackendType = "claude" | "codex";
+
 export interface SessionState {
   session_id: string;
+  backend_type?: BackendType;
   model: string;
   cwd: string;
   tools: string[];
