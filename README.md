@@ -18,7 +18,7 @@ Claude Code in your browser. We reverse-engineered the undocumented WebSocket pr
 bunx the-vibe-companion
 ```
 
-Open [localhost:3456](http://localhost:3456). That's it.
+Open [localhost:3456](http://localhost:3456) in production, or [localhost:2345](http://localhost:2345) in dev mode.
 
 ## Why
 
@@ -61,7 +61,7 @@ We documented the full protocol (13 control subtypes, permission flow, reconnect
 git clone https://github.com/The-Vibe-Company/companion.git
 cd companion/web
 bun install
-bun run dev       # backend + Vite HMR on :5174
+bun run dev       # backend on :3456 + Vite HMR on :2345
 ```
 
 Production: `bun run build && bun run start` serves everything on `:3456`.
