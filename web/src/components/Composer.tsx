@@ -225,8 +225,8 @@ export function Composer({ sessionId }: { sessionId: string }) {
     if (!isConnected) return;
     const store = useStore.getState();
 
-    // Cycle through: bypassPermissions -> plan -> dontAsk -> bypassPermissions
-    const modeOrder = ["bypassPermissions", "plan", "dontAsk"];
+    // Cycle through: bypassPermissions -> plan -> default -> bypassPermissions
+    const modeOrder = ["bypassPermissions", "plan", "default"];
     const currentIndex = modeOrder.indexOf(currentMode);
     const nextIndex = (currentIndex + 1) % modeOrder.length;
     const nextMode = modeOrder[nextIndex];
@@ -387,7 +387,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   ? "opacity-30 cursor-not-allowed text-cc-muted"
                   : isPlan
                   ? "text-cc-primary hover:bg-cc-primary/10"
-                  : currentMode === "dontAsk"
+                  : currentMode === "default"
                   ? "text-cc-warning hover:bg-cc-warning/10"
                   : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
               }`}
@@ -398,7 +398,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   <rect x="3" y="3" width="3.5" height="10" rx="0.75" />
                   <rect x="9.5" y="3" width="3.5" height="10" rx="0.75" />
                 </svg>
-              ) : currentMode === "dontAsk" ? (
+              ) : currentMode === "default" ? (
                 <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5">
                   <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
                   <path d="M6.5 6.5a1.5 1.5 0 012.83.7c0 1-1.33 1.3-1.33 1.3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
@@ -411,7 +411,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 </svg>
               )}
               <span>
-                {isPlan ? "plan" : currentMode === "dontAsk" ? "ask" : "agent"}
+                {isPlan ? "plan" : currentMode === "default" ? "ask" : "agent"}
               </span>
             </button>
 
