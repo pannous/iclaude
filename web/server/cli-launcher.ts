@@ -114,10 +114,13 @@ export class CliLauncher {
    * Remove all exited sessions. Manually triggered, so cleans everything.
    */
   cleanupOldSessions(): void {
+    if (!this.store) return;
+
     let removed = 0;
     for (const session of this.sessions.values()) {
       if (session.state === "exited") {
         this.sessions.delete(session.sessionId);
+        this.store.remove(session.sessionId);
         removed++;
       }
     }
