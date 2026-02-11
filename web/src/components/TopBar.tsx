@@ -1,5 +1,10 @@
+import { useCallback } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
+import { CopyButton } from "./CopyButton.js";
+import { conversationToText } from "../utils/message-text.js";
+
+const EMPTY_MESSAGES: import("../types.js").ChatMessage[] = [];
 
 export function TopBar() {
   const currentSessionId = useStore((s) => s.currentSessionId);
@@ -9,6 +14,8 @@ export function TopBar() {
   const setSidebarOpen = useStore((s) => s.setSidebarOpen);
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
   const setTaskPanelOpen = useStore((s) => s.setTaskPanelOpen);
+  const messages = useStore((s) => currentSessionId ? s.messages.get(currentSessionId) ?? EMPTY_MESSAGES : EMPTY_MESSAGES);
+  const getConversationText = useCallback(() => conversationToText(messages), [messages]);
 
   const sessionTitle = useStore((s) => {
     if (!currentSessionId) return undefined;
@@ -76,6 +83,10 @@ export function TopBar() {
               <span className="w-1.5 h-1.5 rounded-full bg-cc-primary animate-[pulse-dot_1s_ease-in-out_infinite]" />
               <span className="text-cc-primary font-medium">Thinking</span>
             </div>
+          )}
+
+          {messages.length > 0 && (
+            <CopyButton getText={getConversationText} size="md" title="Copy entire conversation" />
           )}
 
           <button

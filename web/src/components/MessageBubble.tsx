@@ -1,8 +1,10 @@
-import { useState, useMemo, type ComponentProps } from "react";
+import { useState, useMemo, useCallback, type ComponentProps } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage, ContentBlock } from "../types.js";
 import { ToolBlock, getToolIcon, getToolLabel, getPreview, ToolIcon } from "./ToolBlock.js";
+import { CopyButton } from "./CopyButton.js";
+import { messageToText } from "../utils/message-text.js";
 
 export function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.role === "system") {
@@ -19,7 +21,10 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
 
   if (message.role === "user") {
     return (
-      <div className="flex justify-end animate-[fadeSlideIn_0.2s_ease-out]">
+      <div className="group/msg flex justify-end gap-1.5 items-start animate-[fadeSlideIn_0.2s_ease-out]">
+        <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity mt-2">
+          <CopyButton getText={() => messageToText(message)} title="Copy message" />
+        </div>
         <div className="max-w-[80%] px-4 py-2.5 rounded-[14px] rounded-br-[4px] bg-cc-user-bubble text-cc-fg">
           {message.images && message.images.length > 0 && (
             <div className="flex gap-2 flex-wrap mb-2">
@@ -84,37 +89,45 @@ function groupContentBlocks(blocks: ContentBlock[]): GroupedBlock[] {
 
 function AssistantMessage({ message }: { message: ChatMessage }) {
   const blocks = message.contentBlocks || [];
-
   const grouped = useMemo(() => groupContentBlocks(blocks), [blocks]);
+  const getText = useCallback(() => messageToText(message), [message]);
+
+  const hasText = message.content || blocks.some(b => b.type === "text" || b.type === "thinking");
 
   if (blocks.length === 0 && message.content) {
     return (
-      <div className="flex items-start gap-3">
+      <div className="group/msg flex items-start gap-3">
         <AssistantAvatar />
         <div className="flex-1 min-w-0">
           <MarkdownContent text={message.content} />
+        </div>
+        <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity mt-0.5">
+          <CopyButton getText={getText} title="Copy response" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex items-start gap-3">
+    <div className="group/msg flex items-start gap-3">
       <AssistantAvatar />
       <div className="flex-1 min-w-0 space-y-3">
         {grouped.map((group, i) => {
           if (group.kind === "content") {
             return <ContentBlockRenderer key={i} block={group.block} />;
           }
-          // Single tool_use renders as before
           if (group.items.length === 1) {
             const item = group.items[0];
             return <ToolBlock key={i} name={item.name} input={item.input} toolUseId={item.id} />;
           }
-          // Grouped tool_uses
           return <ToolGroupBlock key={i} name={group.name} items={group.items} />;
         })}
       </div>
+      {hasText && (
+        <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity mt-0.5">
+          <CopyButton getText={getText} title="Copy response" />
+        </div>
+      )}
     </div>
   );
 }
