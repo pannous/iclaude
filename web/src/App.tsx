@@ -1,6 +1,5 @@
-import { useEffect, useSyncExternalStore, useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "./store.js";
-import { safeStorage } from "./utils/safe-storage.js";
 import { connectSession } from "./ws.js";
 import { disconnectSession } from "./ws.js";
 import { api } from "./api.js";
@@ -10,14 +9,6 @@ import { TopBar } from "./components/TopBar.js";
 import { HomePage } from "./components/HomePage.js";
 import { TaskPanel } from "./components/TaskPanel.js";
 import { EditorPanel } from "./components/EditorPanel.js";
-import { Playground } from "./components/Playground.js";
-
-function useHash() {
-  return useSyncExternalStore(
-    (cb) => { window.addEventListener("hashchange", cb); return () => window.removeEventListener("hashchange", cb); },
-    () => window.location.hash,
-  );
-}
 
 export default function App() {
   const darkMode = useStore((s) => s.darkMode);
@@ -26,55 +17,18 @@ export default function App() {
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
   const homeResetKey = useStore((s) => s.homeResetKey);
   const activeTab = useStore((s) => s.activeTab);
-  const hash = useHash();
   const [showArchiveAllConfirm, setShowArchiveAllConfirm] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
   }, [darkMode]);
 
-  // Sync hash → session on mount and hashchange
+  // Restore last session from localStorage on mount
   useEffect(() => {
-    function syncFromHash() {
-      const h = window.location.hash;
-      const match = h.match(/^#\/session\/(.+)$/);
-      const store = useStore.getState();
-
-      if (match) {
-        const hashSessionId = match[1];
-        if (store.currentSessionId !== hashSessionId) {
-          if (store.currentSessionId) disconnectSession(store.currentSessionId);
-          // Use setState directly to avoid re-writing the hash we just read
-          useStore.setState({ currentSessionId: hashSessionId });
-          safeStorage.setItem("cc-current-session", hashSessionId);
-          connectSession(hashSessionId);
-        }
-      } else if (h === "" || h === "#" || h === "#/") {
-        // Home — only clear if we were on a session hash before
-        if (store.currentSessionId) {
-          disconnectSession(store.currentSessionId);
-          store.newSession();
-        }
-      }
-      // #/playground is handled by the render logic, no session sync needed
+    const restoredId = useStore.getState().currentSessionId;
+    if (restoredId) {
+      connectSession(restoredId);
     }
-
-    // On mount: if hash has a session, use it; otherwise restore from localStorage
-    const h = window.location.hash;
-    if (h.match(/^#\/session\/.+$/)) {
-      syncFromHash();
-    } else {
-      // No session in hash — restore from localStorage (existing behavior)
-      const restoredId = useStore.getState().currentSessionId;
-      if (restoredId) {
-        // Update hash to reflect the restored session
-        window.location.hash = `#/session/${restoredId}`;
-        connectSession(restoredId);
-      }
-    }
-
-    window.addEventListener("hashchange", syncFromHash);
-    return () => window.removeEventListener("hashchange", syncFromHash);
   }, []);
 
   // Global keyboard shortcuts for starting a new session and navigating between sessions
@@ -165,11 +119,6 @@ export default function App() {
 
         // Clear current session and reset home page
         store.newSession();
-
-        // Navigate to home if on playground (newSession only clears #/session/*)
-        if (window.location.hash === "#/playground") {
-          window.location.hash = "";
-        }
         return;
       }
 
@@ -267,10 +216,6 @@ export default function App() {
       window.removeEventListener("mouseup", handleMouseButton);
     };
   }, []);
-
-  if (hash === "#/playground") {
-    return <Playground />;
-  }
 
   async function handleArchiveAll() {
     const store = useStore.getState();
