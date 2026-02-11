@@ -25,6 +25,7 @@ export function Sidebar() {
   const [resumeLoading, setResumeLoading] = useState(false);
   const [resumingId, setResumingId] = useState<string | null>(null);
   const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
+  const [cleaningUp, setCleaningUp] = useState(false);
   const editInputRef = useRef<HTMLInputElement>(null);
   const sessions = useStore((s) => s.sessions);
   const sdkSessions = useStore((s) => s.sdkSessions);
@@ -230,6 +231,18 @@ export function Sidebar() {
     } catch {
       // best-effort
     }
+  }, []);
+
+  const handleCleanupSessions = useCallback(async () => {
+    setCleaningUp(true);
+    try {
+      await api.cleanupSessions();
+      const list = await api.listSessions();
+      useStore.getState().setSdkSessions(list);
+    } catch (err) {
+      console.error("Failed to cleanup sessions:", err);
+    }
+    setCleaningUp(false);
   }, []);
 
   // Combine sessions from WsBridge state + SDK sessions list
@@ -620,6 +633,18 @@ export function Sidebar() {
             <path d="M8 1a2 2 0 012 2v1h2a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h2V3a2 2 0 012-2zm0 1.5a.5.5 0 00-.5.5v1h1V3a.5.5 0 00-.5-.5zM4 5.5a.5.5 0 00-.5.5v6a.5.5 0 00.5.5h8a.5.5 0 00.5-.5V6a.5.5 0 00-.5-.5H4z" />
           </svg>
           <span>Environments</span>
+        </button>
+        <button
+          onClick={handleCleanupSessions}
+          disabled={cleaningUp}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Remove old disconnected sessions (48h+)"
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+            <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+            <circle cx="8" cy="8" r="7" strokeOpacity="0.3" />
+          </svg>
+          <span>{cleaningUp ? "Cleaning..." : "Cleanup Sessions"}</span>
         </button>
         <button
           onClick={toggleDarkMode}

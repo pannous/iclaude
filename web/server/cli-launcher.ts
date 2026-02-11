@@ -107,10 +107,6 @@ export class CliLauncher {
     if (recovered > 0) {
       console.log(`[cli-launcher] Recovered ${recovered} live session(s) from disk`);
     }
-
-    // Clean up old sessions after restore to prevent accumulation
-    this.cleanupOldSessions();
-
     return recovered;
   }
 

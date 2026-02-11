@@ -153,6 +153,12 @@ export function createRoutes(launcher: CliLauncher, wsBridge: WsBridge, sessionS
     return c.json(launcher.listSessions());
   });
 
+  api.post("/sessions/cleanup", (c) => {
+    launcher.cleanupOldSessions();
+    wsBridge.cleanupOldSessions();
+    return c.json({ success: true });
+  });
+
   api.get("/sessions/resumable", async (c) => {
     try {
       const projectsDir = join(homedir(), ".claude", "projects");

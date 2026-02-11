@@ -147,10 +147,6 @@ export class WsBridge {
     if (count > 0) {
       console.log(`[ws-bridge] Restored ${count} session(s) from disk`);
     }
-
-    // Clean up old sessions after restore to prevent accumulation
-    this.cleanupOldSessions();
-
     return count;
   }
 

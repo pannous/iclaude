@@ -125,6 +125,9 @@ export const api = {
   listSessions: () =>
     get<SdkSessionInfo[]>("/sessions"),
 
+  cleanupSessions: () =>
+    post<{ success: boolean }>("/sessions/cleanup"),
+
   killSession: (sessionId: string) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/kill`),
 

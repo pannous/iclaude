@@ -163,11 +163,3 @@ if (starting.length > 0) {
     }
   }, RECONNECT_GRACE_MS);
 }
-
-// ── Periodic session cleanup ─────────────────────────────────────────────────
-// Run cleanup every 6 hours to prevent session accumulation
-const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
-setInterval(() => {
-  launcher.cleanupOldSessions();
-  wsBridge.cleanupOldSessions();
-}, CLEANUP_INTERVAL_MS);
