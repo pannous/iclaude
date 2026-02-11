@@ -18,7 +18,7 @@ Claude Code in your browser. We reverse-engineered the undocumented WebSocket pr
 bunx the-vibe-companion
 ```
 
-Open [localhost:3456](http://localhost:3456) in production, or [localhost:2345](http://localhost:2345) in dev mode.
+Open [localhost:3456](http://localhost:3456). In production, the backend serves the built frontend on this port. In dev mode, open [localhost:2345](http://localhost:2345) for the Vite dev server with HMR.
 
 ## Why
 
@@ -64,7 +64,9 @@ bun install
 bun run dev       # backend on :3456 + Vite HMR on :2345
 ```
 
-Production: `bun run build && bun run start` serves everything on `:3456`.
+The dev server runs two ports: backend API/WebSocket on `:3456`, frontend with HMR on `:2345`.
+
+Production: `bun run build && bun run start` serves frontend + backend on a single port (`:3456`).
 
 ## Tech stack
 
