@@ -58,7 +58,7 @@ export function Sidebar() {
     };
   }, []);
 
-  function handleSelectSession(sessionId: string) {
+  function handleSelectSession(sessionId: string, options?: { isArchived?: boolean }) {
     if (currentSessionId === sessionId) return;
     // Disconnect from old session, connect to new
     if (currentSessionId) {
@@ -66,6 +66,10 @@ export function Sidebar() {
     }
     setCurrentSession(sessionId);
     connectSession(sessionId);
+    // Auto-collapse archived section when clicking an archived session
+    if (options?.isArchived) {
+      setShowArchived(false);
+    }
     // Close sidebar on mobile
     if (window.innerWidth < 768) {
       useStore.getState().setSidebarOpen(false);
@@ -281,7 +285,7 @@ export function Sidebar() {
     return (
       <div key={s.id} className={`relative group ${archived ? "opacity-60" : ""}`}>
         <button
-          onClick={() => handleSelectSession(s.id)}
+          onClick={() => handleSelectSession(s.id, { isArchived: archived })}
           onDoubleClick={(e) => {
             e.preventDefault();
             setEditingSessionId(s.id);
