@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { useStore } from "./store.js";
 import { connectSession } from "./ws.js";
 import { disconnectSession } from "./ws.js";
@@ -8,7 +8,8 @@ import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
 import { HomePage } from "./components/HomePage.js";
 import { TaskPanel } from "./components/TaskPanel.js";
-import { EditorPanel } from "./components/EditorPanel.js";
+
+const EditorPanel = lazy(() => import("./components/EditorPanel.js").then(m => ({ default: m.EditorPanel })));
 
 export default function App() {
   const darkMode = useStore((s) => s.darkMode);
@@ -315,10 +316,16 @@ export default function App() {
             )}
           </div>
 
-          {/* Editor tab */}
+          {/* Editor tab — lazy-loaded to reduce initial bundle */}
           {currentSessionId && activeTab === "editor" && (
             <div className="absolute inset-0">
-              <EditorPanel sessionId={currentSessionId} />
+              <Suspense fallback={
+                <div className="h-full flex items-center justify-center">
+                  <div className="w-5 h-5 border-2 border-cc-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              }>
+                <EditorPanel sessionId={currentSessionId} />
+              </Suspense>
             </div>
           )}
         </div>
