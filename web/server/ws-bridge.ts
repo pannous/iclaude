@@ -147,7 +147,66 @@ export class WsBridge {
     if (count > 0) {
       console.log(`[ws-bridge] Restored ${count} session(s) from disk`);
     }
+
+    // Clean up old sessions after restore to prevent accumulation
+    this.cleanupOldSessions();
+
     return count;
+  }
+
+  /**
+   * Remove old disconnected sessions to prevent unbounded growth.
+   * Keeps: sessions with active connections + recent sessions (48h) + max 100 total
+   */
+  cleanupOldSessions(): void {
+    if (!this.store) return;
+
+    const MAX_TOTAL_SESSIONS = 100;
+    const MAX_DISCONNECTED_AGE_MS = 48 * 60 * 60 * 1000; // 48 hours
+    const now = Date.now();
+
+    // Separate connected and disconnected sessions
+    const connected: Session[] = [];
+    const disconnected: Session[] = [];
+
+    for (const session of this.sessions.values()) {
+      if (session.cliSocket || session.browserSockets.size > 0) {
+        connected.push(session);
+      } else {
+        disconnected.push(session);
+      }
+    }
+
+    // Remove old disconnected sessions (only if they have a valid createdAt)
+    let removed = 0;
+    for (const session of disconnected) {
+      if (!session.createdAt) continue; // Skip sessions without timestamp
+      const age = now - session.createdAt;
+      if (age > MAX_DISCONNECTED_AGE_MS) {
+        this.sessions.delete(session.id);
+        if (this.store) this.store.remove(session.id);
+        removed++;
+      }
+    }
+
+    // If still over limit, remove oldest disconnected sessions
+    const remaining = this.sessions.size;
+    if (remaining > MAX_TOTAL_SESSIONS) {
+      const sortedDisconnected = Array.from(this.sessions.values())
+        .filter(s => !s.cliSocket && s.browserSockets.size === 0)
+        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+      const toRemove = remaining - MAX_TOTAL_SESSIONS;
+      for (let i = 0; i < Math.min(toRemove, sortedDisconnected.length); i++) {
+        this.sessions.delete(sortedDisconnected[i].id);
+        if (this.store) this.store.delete(sortedDisconnected[i].id);
+        removed++;
+      }
+    }
+
+    if (removed > 0) {
+      console.log(`[ws-bridge] Cleaned up ${removed} old session(s) (${this.sessions.size} remaining)`);
+    }
   }
 
   /** Persist a session to disk (debounced). */
