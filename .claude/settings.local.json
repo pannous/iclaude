@@ -5,7 +5,12 @@
       "Bash(git commit:*)",
       "Bash(lsof:*)",
       "Bash(python3 -m json.tool:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(tsc:*)",
+      "Bash(bun run test:*)",
+      "Bash(git push:*)",
+      "Bash(bun run typecheck:*)",
+      "Bash(bun test:*)"
     ]
   }
 }
