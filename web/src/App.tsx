@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore, useState } from "react";
 import { useStore } from "./store.js";
+import { safeStorage } from "./utils/safe-storage.js";
 import { connectSession } from "./ws.js";
 import { disconnectSession } from "./ws.js";
 import { api } from "./api.js";
@@ -30,12 +31,48 @@ export default function App() {
     document.documentElement.classList.toggle("dark", darkMode);
   }, [darkMode]);
 
-  // Auto-connect to restored session on mount
+  // Sync hash → session on mount and hashchange
   useEffect(() => {
-    const restoredId = useStore.getState().currentSessionId;
-    if (restoredId) {
-      connectSession(restoredId);
+    function syncFromHash() {
+      const h = window.location.hash;
+      const match = h.match(/^#\/session\/(.+)$/);
+      const store = useStore.getState();
+
+      if (match) {
+        const hashSessionId = match[1];
+        if (store.currentSessionId !== hashSessionId) {
+          if (store.currentSessionId) disconnectSession(store.currentSessionId);
+          // Use setState directly to avoid re-writing the hash we just read
+          useStore.setState({ currentSessionId: hashSessionId });
+          safeStorage.setItem("cc-current-session", hashSessionId);
+          connectSession(hashSessionId);
+        }
+      } else if (h === "" || h === "#" || h === "#/") {
+        // Home — only clear if we were on a session hash before
+        if (store.currentSessionId) {
+          disconnectSession(store.currentSessionId);
+          store.newSession();
+        }
+      }
+      // #/playground is handled by the render logic, no session sync needed
     }
+
+    // On mount: if hash has a session, use it; otherwise restore from localStorage
+    const h = window.location.hash;
+    if (h.match(/^#\/session\/.+$/)) {
+      syncFromHash();
+    } else {
+      // No session in hash — restore from localStorage (existing behavior)
+      const restoredId = useStore.getState().currentSessionId;
+      if (restoredId) {
+        // Update hash to reflect the restored session
+        window.location.hash = `#/session/${restoredId}`;
+        connectSession(restoredId);
+      }
+    }
+
+    window.addEventListener("hashchange", syncFromHash);
+    return () => window.removeEventListener("hashchange", syncFromHash);
   }, []);
 
   // Global keyboard shortcuts for starting a new session and navigating between sessions
@@ -127,7 +164,7 @@ export default function App() {
         // Clear current session and reset home page
         store.newSession();
 
-        // Navigate to home if on playground
+        // Navigate to home if on playground (newSession only clears #/session/*)
         if (window.location.hash === "#/playground") {
           window.location.hash = "";
         }

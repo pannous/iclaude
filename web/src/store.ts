@@ -100,6 +100,10 @@ function getInitialSessionNames(): Map<string, string> {
 
 function getInitialSessionId(): string | null {
   if (typeof window === "undefined") return null;
+  // Hash takes priority over localStorage
+  const hash = window.location?.hash || "";
+  const match = hash.match(/^#\/session\/(.+)$/);
+  if (match) return match[1];
   return safeStorage.getItem("cc-current-session") || null;
 }
 
@@ -145,14 +149,26 @@ export const useStore = create<AppState>((set) => ({
   setTaskPanelOpen: (open) => set({ taskPanelOpen: open }),
   newSession: () => {
     safeStorage.removeItem("cc-current-session");
+    if (typeof window !== "undefined" && window.location.hash.startsWith("#/session/")) {
+      window.location.hash = "";
+    }
     set((s) => ({ currentSessionId: null, homeResetKey: s.homeResetKey + 1 }));
   },
 
   setCurrentSession: (id) => {
     if (id) {
       safeStorage.setItem("cc-current-session", id);
+      if (typeof window !== "undefined") {
+        const expected = `#/session/${id}`;
+        if (window.location.hash !== expected) {
+          window.location.hash = expected;
+        }
+      }
     } else {
       safeStorage.removeItem("cc-current-session");
+      if (typeof window !== "undefined" && window.location.hash.startsWith("#/session/")) {
+        window.location.hash = "";
+      }
     }
     set({ currentSessionId: id });
   },
