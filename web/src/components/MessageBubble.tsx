@@ -390,6 +390,53 @@ function ThinkingBlock({ text }: { text: string }) {
 function HtmlPreview({ html, preview }: { html: string; preview: string }) {
   const [open, setOpen] = useState(true);
   const yoloMode = useStore((s) => s.yoloMode);
+  const iframeRef = useState<HTMLIFrameElement | null>(null)[0];
+
+  // Inject vibeCommand API when iframe loads in YOLO mode
+  const handleIframeLoad = (iframe: HTMLIFrameElement) => {
+    if (!yoloMode || !iframe.contentWindow) return;
+
+    // Inject the vibeCommand API
+    iframe.contentWindow.eval(`
+      window.vibeCommand = async function(command, options = {}) {
+        try {
+          const response = await fetch('/api/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              command: command,
+              cwd: options.cwd
+            })
+          });
+          const result = await response.json();
+          if (result.success) {
+            return { success: true, output: result.output };
+          } else {
+            return {
+              success: false,
+              error: result.error,
+              exitCode: result.exitCode,
+              stderr: result.stderr,
+              stdout: result.stdout
+            };
+          }
+        } catch (err) {
+          return { success: false, error: err.message };
+        }
+      };
+
+      window.vibe = {
+        command: window.vibeCommand,
+        playSound: (sound = 'Ping') => window.vibeCommand(\`afplay /System/Library/Sounds/\${sound}.aiff\`),
+        notify: (title, message) => window.vibeCommand(\`osascript -e 'display notification "\${message}" with title "\${title}"'\`)
+      };
+
+      console.log('🎯 Vibe Companion API injected! Try: await vibe.playSound() or vibe.command("ls -la")');
+    `);
+  };
+
+  // Prepare enhanced HTML with YOLO mode
+  const enhancedHtml = yoloMode ? html : html;
 
   return (
     <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
@@ -422,7 +469,12 @@ function HtmlPreview({ html, preview }: { html: string; preview: string }) {
       {open && (
         <div className="border-t border-cc-border">
           <iframe
-            srcDoc={html}
+            ref={(el) => {
+              if (el && el !== iframeRef) {
+                handleIframeLoad(el);
+              }
+            }}
+            srcDoc={enhancedHtml}
             className="w-full h-[400px] bg-white"
             sandbox={yoloMode ? undefined : "allow-scripts"}
             title="HTML preview"

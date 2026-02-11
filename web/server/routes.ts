@@ -748,6 +748,50 @@ export function createRoutes(
     return c.json(limits);
   });
 
+  // ─── Command Execution (for HTML fragments in YOLO mode) ─────────────
+
+  api.post("/exec", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const { command, cwd } = body;
+
+    if (!command || typeof command !== "string") {
+      return c.json({ error: "command required" }, 400);
+    }
+
+    // Security: Validate cwd if provided
+    let workingDir = homedir();
+    if (cwd) {
+      if (typeof cwd !== "string") {
+        return c.json({ error: "Invalid cwd" }, 400);
+      }
+      const resolvedCwd = resolve(cwd);
+      const allowedBase = homedir();
+      if (!resolvedCwd.startsWith(allowedBase + sep) && resolvedCwd !== allowedBase) {
+        return c.json({ error: "cwd must be within home directory" }, 403);
+      }
+      workingDir = resolvedCwd;
+    }
+
+    try {
+      const output = execSync(command, {
+        cwd: workingDir,
+        encoding: "utf-8",
+        timeout: 30000, // 30s timeout
+        maxBuffer: 1024 * 1024, // 1MB max output
+      });
+      return c.json({ success: true, output: output.trim() });
+    } catch (err: unknown) {
+      const error = err as { status?: number; stderr?: string; stdout?: string; message?: string };
+      return c.json({
+        success: false,
+        error: error.message || "Command failed",
+        exitCode: error.status,
+        stderr: error.stderr,
+        stdout: error.stdout,
+      }, 500);
+    }
+  });
+
   // ─── Helper ─────────────────────────────────────────────────────────
 
   function cleanupWorktree(
