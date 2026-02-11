@@ -397,7 +397,7 @@ function HtmlPreview({ html, preview }: { html: string; preview: string }) {
     if (!yoloMode || !iframe.contentWindow) return;
 
     // Inject the vibeCommand API
-    iframe.contentWindow.eval(`
+    (iframe.contentWindow as any).eval(`
       window.vibeCommand = async function(command, options = {}) {
         try {
           const response = await fetch('/api/exec', {

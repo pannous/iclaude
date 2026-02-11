@@ -168,6 +168,7 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
   const allTasksDone = tasks.length > 0 && completedCount === tasks.length;
   const isCodex = (session?.backend_type || sdkBackendType) === "codex";
   const showTasks = !!session && !isCodex;
+  const contextPct = Math.round(session?.context_used_percent ?? 0);
 
   return (
     <aside className="w-[280px] h-full flex flex-col bg-cc-card border-l border-cc-border">
