@@ -78,13 +78,25 @@ web/server/index.ts         - Added periodic cleanup interval
 - No more session accumulation beyond 100 total
 - Server restarts cleanly with reasonable session count
 
+## Resolution (2026-02-11)
+
+**FIXED by upgrading Bun from 1.1.29 → 1.3.9**
+
+The segfault was a known Bun bug in WebSocket handling on macOS Silicon. Upgrading to 1.3.9 completely resolved the crash. Server now runs stably with 5+ concurrent WebSocket sessions.
+
+Related Bun issues:
+- https://github.com/oven-sh/bun/issues/14402
+- https://github.com/oven-sh/bun/issues/19688
+- https://github.com/oven-sh/bun/issues/24619
+
+**Lesson**: Session cleanup was a workaround, not a fix. The real solution was upgrading Bun.
+
 ## Future Improvements
 
 1. **Rate Limiting**: Add concurrency limits for CLI spawning
 2. **Health Checks**: Monitor for rapid crash/restart cycles
-3. **Bun Upgrade**: Monitor Bun releases for segfault fixes
-4. **Session TTL**: Consider shorter TTL for inactive sessions (24h?)
-5. **Manual Cleanup UI**: Add "Delete Old Sessions" button in UI
+3. **Session TTL**: Consider shorter TTL for inactive sessions (24h?)
+4. **Manual Cleanup UI**: Add "Delete Old Sessions" button in UI
 
 ## Related Issues
 

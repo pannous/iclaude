@@ -11,6 +11,8 @@ The Vibe Companion — a web UI for Claude Code. It reverse-engineers the undocu
 ```bash
 # Dev server (Hono backend on :3456 + Vite HMR on :2345)
 cd web && bun install && bun run dev
+# Usually the server is already running so don't kill it just use it it will automatically update!
+
 
 # Or from repo root
 make dev
