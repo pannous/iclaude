@@ -226,6 +226,7 @@ export class WsBridge {
       const content = readFileSync(sessionFile, "utf-8");
       const lines = content.split("\n").filter(l => l.trim());
       const messages: BrowserIncomingMessage[] = [];
+      const seenIds = new Set<string>();
 
       for (const line of lines) {
         try {
@@ -254,10 +255,13 @@ export class WsBridge {
             });
           } else if (entry.type === "assistant" && entry.message) {
             const msg = entry.message;
+            const id = msg.id || `cli-${entry.uuid}`;
+            if (seenIds.has(id)) continue;
+            seenIds.add(id);
             messages.push({
               type: "assistant",
               message: {
-                id: msg.id || `cli-${entry.uuid}`,
+                id,
                 type: "message",
                 role: "assistant",
                 content: msg.content || [],
@@ -749,6 +753,13 @@ export class WsBridge {
       message: msg.message,
       parent_tool_use_id: msg.parent_tool_use_id,
     };
+    // Deduplicate: skip if this message ID is already in history (e.g. from resume replay)
+    const msgId = msg.message?.id;
+    if (msgId && session.messageHistory.some(
+      m => m.type === "assistant" && (m as any).message?.id === msgId
+    )) {
+      return;
+    }
     session.messageHistory.push(browserMsg);
     this.broadcastToBrowsers(session, browserMsg);
     this.persistSession(session);

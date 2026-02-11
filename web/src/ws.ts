@@ -184,7 +184,7 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       // Deduplicate: check if message with same ID already exists
       const existingMessages = store.messages.get(sessionId) || [];
       if (existingMessages.some((m) => m.id === msg.id)) {
-        console.warn(`[ws] Duplicate assistant message detected (id: ${msg.id}), skipping`);
+        console.debug(`[ws] Duplicate assistant message detected (id: ${msg.id}), skipping`);
         break;
       }
 
@@ -410,7 +410,7 @@ function handleMessage(sessionId: string, event: MessageEvent) {
 
           // Deduplicate by message ID
           if (seenIds.has(msg.id)) {
-            console.warn(`[ws] Duplicate message in history (id: ${msg.id}), skipping`);
+            console.debug(`[ws] Duplicate message in history (id: ${msg.id}), skipping`);
             continue;
           }
           seenIds.add(msg.id);
