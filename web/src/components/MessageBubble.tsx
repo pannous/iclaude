@@ -113,6 +113,13 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
               ))}
             </div>
           )}
+          {message.scannedHtml && message.scannedHtml.length > 0 && (
+            <div className="space-y-2 mt-3">
+              {message.scannedHtml.map((htmlFragment, i) => (
+                <HtmlPreview key={i} html={htmlFragment.html} preview={htmlFragment.preview} />
+              ))}
+            </div>
+          )}
         </div>
         <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity mt-0.5">
           <CopyButton getText={getText} title="Copy response" />
@@ -145,6 +152,13 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
                 className="max-w-[400px] max-h-[300px] rounded-lg border border-cc-border object-contain"
                 loading="lazy"
               />
+            ))}
+          </div>
+        )}
+        {message.scannedHtml && message.scannedHtml.length > 0 && (
+          <div className="space-y-2">
+            {message.scannedHtml.map((htmlFragment, i) => (
+              <HtmlPreview key={i} html={htmlFragment.html} preview={htmlFragment.preview} />
             ))}
           </div>
         )}
@@ -366,6 +380,46 @@ function ThinkingBlock({ text }: { text: string }) {
           <pre className="text-xs text-cc-muted font-mono-code whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
             {text}
           </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HtmlPreview({ html, preview }: { html: string; preview: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-cc-hover transition-colors cursor-pointer"
+      >
+        <svg
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          className={`w-3 h-3 text-cc-muted transition-transform shrink-0 ${open ? "rotate-90" : ""}`}
+        >
+          <path d="M6 4l4 4-4 4" />
+        </svg>
+        <svg
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          className="w-3.5 h-3.5 text-cc-primary shrink-0"
+        >
+          <path d="M2 3h12v2H2V3zm0 4h12v2H2V7zm0 4h8v2H2v-2z" />
+        </svg>
+        <span className="font-medium text-cc-fg">HTML Fragment</span>
+        <span className="text-cc-muted/70 truncate flex-1 text-left">{preview}</span>
+      </button>
+      {open && (
+        <div className="border-t border-cc-border">
+          <iframe
+            srcDoc={html}
+            className="w-full h-[400px] bg-white"
+            sandbox="allow-scripts allow-same-origin"
+            title="HTML preview"
+          />
         </div>
       )}
     </div>

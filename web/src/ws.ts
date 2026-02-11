@@ -1,6 +1,6 @@
 import { useStore } from "./store.js";
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem } from "./types.js";
-import { resultScanner } from "./utils/result-scanner.js";
+import { resultScanner, scanContent } from "./utils/result-scanner.js";
 import { generateUniqueSessionName } from "./utils/names.js";
 import { playNotificationSound } from "./utils/notification-sound.js";
 
@@ -140,13 +140,20 @@ function extractTextFromBlocks(blocks: ContentBlock[]): string {
     .join("\n");
 }
 
-function scanForImages(text: string): { src: string; original: string }[] | undefined {
-  const scanned = resultScanner.scan(text);
-  if (scanned.length === 0) return undefined;
-  return scanned.map((img) => ({
-    src: resultScanner.toDisplaySrc(img),
-    original: img.original,
-  }));
+function scanForImagesAndHtml(text: string): {
+  images?: { src: string; original: string }[];
+  html?: { html: string; original: string; preview: string }[];
+} {
+  const scanned = scanContent(text);
+  return {
+    images: scanned.images.length > 0
+      ? scanned.images.map((img) => ({
+          src: resultScanner.toDisplaySrc(img),
+          original: img.original,
+        }))
+      : undefined,
+    html: scanned.html.length > 0 ? scanned.html : undefined,
+  };
 }
 
 function handleMessage(sessionId: string, event: MessageEvent) {
@@ -182,12 +189,14 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       }
 
       const textContent = extractTextFromBlocks(msg.content);
+      const scanned = scanForImagesAndHtml(textContent);
       const chatMsg: ChatMessage = {
         id: msg.id,
         role: "assistant",
         content: textContent,
         contentBlocks: msg.content,
-        scannedImages: scanForImages(textContent),
+        scannedImages: scanned.images,
+        scannedHtml: scanned.html,
         timestamp: Date.now(),
         parentToolUseId: data.parent_tool_use_id,
         model: msg.model,
@@ -407,12 +416,14 @@ function handleMessage(sessionId: string, event: MessageEvent) {
           seenIds.add(msg.id);
 
           const textContent = extractTextFromBlocks(msg.content);
+          const scanned = scanForImagesAndHtml(textContent);
           chatMessages.push({
             id: msg.id,
             role: "assistant",
             content: textContent,
             contentBlocks: msg.content,
-            scannedImages: scanForImages(textContent),
+            scannedImages: scanned.images,
+            scannedHtml: scanned.html,
             timestamp: Date.now(),
             parentToolUseId: histMsg.parent_tool_use_id,
             model: msg.model,

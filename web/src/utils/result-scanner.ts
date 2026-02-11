@@ -1,6 +1,6 @@
 /**
  * ResultScanner — scans assistant message text for image references
- * (URLs and local file paths) and extracts them for inline display.
+ * (URLs and local file paths) and HTML fragments, extracting them for inline display.
  */
 
 const IMAGE_EXTENSIONS = /\.(png|jpg|jpeg|gif|webp|svg|bmp|ico|heic|avif|tiff?)$/i;
@@ -10,6 +10,9 @@ const URL_PATTERN = /https?:\/\/[^\s)<>"']+/g;
 // Absolute paths: /Users/..., /tmp/..., ~/... (macOS/Linux)
 const LOCAL_PATH_PATTERN = /(?:~\/|\/)[^\s<>"'*?|:,;(){}\[\]]+/g;
 
+// HTML fragments: looks for blocks starting with <!DOCTYPE, <html, or multi-line tags
+const HTML_PATTERN = /(?:<!DOCTYPE\s+html[^>]*>[\s\S]*?<html[\s\S]*?<\/html>|<html[\s\S]*?<\/html>|(?:<(?:div|section|article|main|header|footer|nav|aside)[^>]*>[\s\S]{50,}?<\/(?:div|section|article|main|header|footer|nav|aside)>))/gi;
+
 export interface ScannedImage {
   src: string;
   kind: "url" | "local";
@@ -17,12 +20,20 @@ export interface ScannedImage {
   original: string;
 }
 
+export interface ScannedHtml {
+  html: string;
+  /** Original text matched in the content */
+  original: string;
+  /** Truncated preview for display */
+  preview: string;
+}
+
 export class ResultScanner {
   /**
    * Scan text content for image references.
    * Returns deduplicated list of images found.
    */
-  scan(text: string): ScannedImage[] {
+  scanImages(text: string): ScannedImage[] {
     const seen = new Set<string>();
     const images: ScannedImage[] = [];
 
@@ -59,6 +70,35 @@ export class ResultScanner {
     if (image.kind === "url") return image.src;
     return `/api/fs/image?path=${encodeURIComponent(image.src)}`;
   }
+
+  /**
+   * Scan text content for HTML fragments.
+   * Returns deduplicated list of HTML blocks found.
+   */
+  scanHtml(text: string): ScannedHtml[] {
+    const seen = new Set<string>();
+    const htmlFragments: ScannedHtml[] = [];
+
+    for (const match of text.matchAll(HTML_PATTERN)) {
+      const html = match[0].trim();
+      if (seen.has(html)) continue;
+      seen.add(html);
+
+      const preview = this.createHtmlPreview(html);
+      htmlFragments.push({ html, original: match[0], preview });
+    }
+
+    return htmlFragments;
+  }
+
+  /**
+   * Create a short preview of HTML content for display.
+   */
+  private createHtmlPreview(html: string): string {
+    // Strip tags and get first 100 chars
+    const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    return text.length > 100 ? text.slice(0, 97) + "..." : text;
+  }
 }
 
 /** Strip common trailing punctuation that gets captured by greedy regex */
@@ -73,6 +113,17 @@ function extractPathFromUrl(url: string): string {
   } catch {
     return url;
   }
+}
+
+/**
+ * Scan text for both images and HTML fragments.
+ */
+export function scanContent(text: string): { images: ScannedImage[]; html: ScannedHtml[] } {
+  const scanner = new ResultScanner();
+  return {
+    images: scanner.scanImages(text),
+    html: scanner.scanHtml(text),
+  };
 }
 
 /** Singleton for convenience */
