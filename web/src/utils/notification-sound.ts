@@ -1,8 +1,23 @@
 let audioContext: AudioContext | null = null;
+let hasUserGesture = false;
 
-function getAudioContext(): AudioContext {
+function initOnGesture() {
+  if (hasUserGesture) return;
+  hasUserGesture = true;
+  document.removeEventListener("click", initOnGesture);
+  document.removeEventListener("keydown", initOnGesture);
+}
+
+document.addEventListener("click", initOnGesture, { once: false });
+document.addEventListener("keydown", initOnGesture, { once: false });
+
+function getAudioContext(): AudioContext | null {
+  if (!hasUserGesture) return null;
   if (!audioContext) {
     audioContext = new AudioContext();
+  }
+  if (audioContext.state === "suspended") {
+    audioContext.resume();
   }
   return audioContext;
 }
@@ -14,10 +29,7 @@ function getAudioContext(): AudioContext {
 export function playNotificationSound(): void {
   try {
     const ctx = getAudioContext();
-
-    if (ctx.state === "suspended") {
-      ctx.resume();
-    }
+    if (!ctx) return;
 
     const now = ctx.currentTime;
 
