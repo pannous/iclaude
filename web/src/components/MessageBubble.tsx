@@ -387,7 +387,7 @@ function ThinkingBlock({ text }: { text: string }) {
 }
 
 function HtmlPreview({ html, preview }: { html: string; preview: string }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   return (
     <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
