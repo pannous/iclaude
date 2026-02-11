@@ -48,10 +48,10 @@ export function TopBar() {
           <div className="flex items-center gap-2">
             <div className="flex flex-col min-w-0">
               {sessionTitle && (
-                <span className="text-[13px] font-medium text-cc-fg truncate max-w-[200px] sm:max-w-[300px]">{sessionTitle}</span>
+                <span className="text-[13px] font-medium text-cc-fg truncate">{sessionTitle}</span>
               )}
               {sessionSubtitle && (
-                <span className="text-[11px] text-cc-muted truncate max-w-[200px] sm:max-w-[300px]">{sessionSubtitle}</span>
+                <span className="text-[11px] text-cc-muted truncate">{sessionSubtitle}</span>
               )}
             </div>
             <div className="flex items-center gap-1.5">
