@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { api, type DirEntry } from "../api.js";
+import { useStore } from "../store.js";
 import { getRecentDirs, addRecentDir } from "../utils/recent-dirs.js";
 
 interface FolderPickerProps {
@@ -16,6 +17,16 @@ export function FolderPicker({ initialPath, onSelect, onClose }: FolderPickerPro
   const [dirInput, setDirInput] = useState("");
   const [showDirInput, setShowDirInput] = useState(false);
   const [recentDirs] = useState<string[]>(() => getRecentDirs());
+  const sdkSessions = useStore((s) => s.sdkSessions);
+
+  const sessionDirs = useMemo(() => {
+    const recentSet = new Set(recentDirs);
+    const seen = new Set<string>();
+    return sdkSessions
+      .filter((s) => s.cwd && !recentSet.has(s.cwd) && !seen.has(s.cwd) && seen.add(s.cwd))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((s) => s.cwd);
+  }, [sdkSessions, recentDirs]);
 
   const loadDirs = useCallback(async (path?: string) => {
     setBrowseLoading(true);
@@ -68,24 +79,46 @@ export function FolderPicker({ initialPath, onSelect, onClose }: FolderPickerPro
           </button>
         </div>
 
-        {/* Recent directories */}
-        {recentDirs.length > 0 && (
-          <div className="border-b border-cc-border shrink-0">
-            <div className="px-4 pt-2.5 pb-1 text-[10px] text-cc-muted uppercase tracking-wider">Recent</div>
-            {recentDirs.map((dir) => (
-              <button
-                key={dir}
-                onClick={() => selectDir(dir)}
-                className="w-full px-4 py-2 sm:py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 text-cc-fg"
-              >
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-30 shrink-0">
-                  <path d="M8 3.5a.5.5 0 00-1 0V8a.5.5 0 00.252.434l3.5 2a.5.5 0 00.496-.868L8 7.71V3.5z" />
-                  <path fillRule="evenodd" d="M8 16A8 8 0 108 0a8 8 0 000 16zm7-8A7 7 0 111 8a7 7 0 0114 0z" />
-                </svg>
-                <span className="font-medium truncate">{dir.split("/").pop() || dir}</span>
-                <span className="text-cc-muted font-mono-code text-[10px] truncate ml-auto">{dir}</span>
-              </button>
-            ))}
+        {/* Recent directories + session folders */}
+        {(recentDirs.length > 0 || sessionDirs.length > 0) && (
+          <div className="border-b border-cc-border shrink-0 max-h-[200px] overflow-y-auto">
+            {recentDirs.length > 0 && (
+              <>
+                <div className="px-4 pt-2.5 pb-1 text-[10px] text-cc-muted uppercase tracking-wider">Recent</div>
+                {recentDirs.map((dir) => (
+                  <button
+                    key={dir}
+                    onClick={() => selectDir(dir)}
+                    className="w-full px-4 py-2 sm:py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 text-cc-fg"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-30 shrink-0">
+                      <path d="M8 3.5a.5.5 0 00-1 0V8a.5.5 0 00.252.434l3.5 2a.5.5 0 00.496-.868L8 7.71V3.5z" />
+                      <path fillRule="evenodd" d="M8 16A8 8 0 108 0a8 8 0 000 16zm7-8A7 7 0 111 8a7 7 0 0114 0z" />
+                    </svg>
+                    <span className="font-medium truncate">{dir.split("/").pop() || dir}</span>
+                    <span className="text-cc-muted font-mono-code text-[10px] truncate ml-auto">{dir}</span>
+                  </button>
+                ))}
+              </>
+            )}
+            {sessionDirs.length > 0 && (
+              <>
+                <div className="px-4 pt-2.5 pb-1 text-[10px] text-cc-muted uppercase tracking-wider">Sessions</div>
+                {sessionDirs.map((dir) => (
+                  <button
+                    key={dir}
+                    onClick={() => selectDir(dir)}
+                    className="w-full px-4 py-2 sm:py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 text-cc-fg"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-30 shrink-0">
+                      <path d="M1 3.5A1.5 1.5 0 012.5 2h3.379a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.353.146H13.5A1.5 1.5 0 0115 4.707V12.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z" />
+                    </svg>
+                    <span className="font-medium truncate">{dir.split("/").pop() || dir}</span>
+                    <span className="text-cc-muted font-mono-code text-[10px] truncate ml-auto">{dir}</span>
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         )}
 
