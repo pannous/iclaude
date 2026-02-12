@@ -10,8 +10,8 @@ const URL_PATTERN = /https?:\/\/[^\s)<>"']+/g;
 // Absolute paths: /Users/..., /tmp/..., ~/... (macOS/Linux)
 const LOCAL_PATH_PATTERN = /(?:~\/|\/)[^\s<>"'*?|:,;(){}\[\]]+/g;
 
-// HTML fragments: looks for blocks starting with <!DOCTYPE, <html, or multi-line tags
-const HTML_PATTERN = /(?:<!DOCTYPE\s+html[^>]*>[\s\S]*?<html[\s\S]*?<\/html>|<html[\s\S]*?<\/html>|(?:<(?:div|section|article|main|header|footer|nav|aside)[^>]*>[\s\S]{50,}?<\/(?:div|section|article|main|header|footer|nav|aside)>))/gi;
+// HTML fragments: full documents or blocks with nested tags
+const HTML_PATTERN = /(?:<!DOCTYPE\s+html[^>]*>[\s\S]*?<html[\s\S]*?<\/html>|<html[\s\S]*?<\/html>|(?:<(?:div|section|article|main|header|footer|nav|aside)[^>]*>[\s\S]*?<[^>]+>[\s\S]*?<\/(?:div|section|article|main|header|footer|nav|aside)>))/gi;
 
 export interface ScannedImage {
   src: string;
@@ -85,6 +85,11 @@ export class ResultScanner {
       seen.add(html);
 
       const preview = this.createHtmlPreview(html);
+
+      // Skip if preview is too short or meaningless (just punctuation/whitespace)
+      const meaningfulChars = preview.replace(/[.\s,;:!?-]+/g, "");
+      if (meaningfulChars.length < 10) continue;
+
       htmlFragments.push({ html, original: match[0], preview });
     }
 
@@ -95,8 +100,9 @@ export class ResultScanner {
    * Create a short preview of HTML content for display.
    */
   private createHtmlPreview(html: string): string {
-    // Strip tags and get first 100 chars
-    const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    // Strip script/style content, then strip all tags
+    const withoutScripts = html.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, " ");
+    const text = withoutScripts.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     return text.length > 100 ? text.slice(0, 97) + "..." : text;
   }
 }
