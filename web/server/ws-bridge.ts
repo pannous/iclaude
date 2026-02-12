@@ -359,10 +359,12 @@ export class WsBridge {
         if (cliHistory.length > 0) {
           console.log(`[ws-bridge] Resuming session ${sessionId} from CLI session ${opts.resumeCliSessionId}, loading ${cliHistory.length} message(s) from CLI history`);
           session.messageHistory = cliHistory;
+          session.cliSessionId = opts.resumeCliSessionId;
         }
       }
 
       this.sessions.set(sessionId, session);
+      this.persistSession(session);
     } else if (backendType) {
       // Only overwrite backendType when explicitly provided (e.g. attachCodexAdapter)
       // Prevents handleBrowserOpen from resetting codex→claude
@@ -560,11 +562,28 @@ export class WsBridge {
 
   // ── CLI WebSocket handlers ──────────────────────────────────────────────
 
-  handleCLIOpen(ws: ServerWebSocket<SocketData>, sessionId: string) {
+  handleCLIOpen(ws: ServerWebSocket<SocketData>, sessionId: string, opts?: { cliSessionId?: string; cwd?: string }) {
     const session = this.getOrCreateSession(sessionId);
     session.cliSocket = ws;
     console.log(`[ws-bridge] CLI connected for session ${sessionId}`);
     this.broadcastToBrowsers(session, { type: "cli_connected" });
+
+    // If the session has no message history (e.g. after server restart),
+    // try to reload it from the CLI's session file
+    if (session.messageHistory.length === 0 && opts?.cliSessionId) {
+      const cliHistory = this.loadCLIHistory(opts.cliSessionId, opts.cwd);
+      if (cliHistory.length > 0) {
+        console.log(`[ws-bridge] Reloaded ${cliHistory.length} message(s) from CLI history for session ${sessionId}`);
+        session.messageHistory = cliHistory;
+        session.cliSessionId = opts.cliSessionId;
+        this.persistSession(session);
+        // Push history to any already-connected browsers
+        this.broadcastToBrowsers(session, {
+          type: "message_history",
+          messages: cliHistory,
+        });
+      }
+    }
 
     // Flush any messages that were queued while waiting for CLI to connect
     if (session.pendingMessages.length > 0) {
@@ -739,6 +758,21 @@ export class WsBridge {
         session.cliSessionId = msg.session_id;
         if (this.onCLISessionId) {
           this.onCLISessionId(session.id, msg.session_id);
+        }
+
+        // If the session has no message history (e.g. after server restart),
+        // try to reload it from the CLI's session file
+        if (session.messageHistory.length === 0) {
+          const cliHistory = this.loadCLIHistory(msg.session_id, msg.cwd);
+          if (cliHistory.length > 0) {
+            console.log(`[ws-bridge] Reloaded ${cliHistory.length} message(s) from CLI history for session ${session.id}`);
+            session.messageHistory = cliHistory;
+            // Push history to any already-connected browsers
+            this.broadcastToBrowsers(session, {
+              type: "message_history",
+              messages: cliHistory,
+            });
+          }
         }
       }
 

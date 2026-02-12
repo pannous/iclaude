@@ -139,7 +139,11 @@ const server = Bun.serve<SocketData>({
     open(ws: ServerWebSocket<SocketData>) {
       const data = ws.data;
       if (data.kind === "cli") {
-        wsBridge.handleCLIOpen(ws, data.sessionId);
+        const info = launcher.getSession(data.sessionId);
+        wsBridge.handleCLIOpen(ws, data.sessionId, {
+          cliSessionId: info?.cliSessionId,
+          cwd: info?.cwd,
+        });
         launcher.markConnected(data.sessionId);
       } else if (data.kind === "browser") {
         wsBridge.handleBrowserOpen(ws, data.sessionId);
