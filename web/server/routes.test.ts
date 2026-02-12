@@ -110,6 +110,7 @@ function createMockBridge() {
     closeSession: vi.fn(),
     getSession: vi.fn(() => null),
     getAllSessions: vi.fn(() => []),
+    getSessionTitle: vi.fn(() => undefined),
     getCodexRateLimits: vi.fn(() => null),
   } as any;
 }
@@ -396,6 +397,24 @@ describe("GET /api/sessions", () => {
         gitBranch: "", gitAhead: 0, gitBehind: 0, totalLinesAdded: 0, totalLinesRemoved: 0,
       },
     ]);
+  });
+
+  it("enriches untitled sessions with title from bridge first user message", async () => {
+    const sessions = [
+      { sessionId: "s1", state: "running", cwd: "/a" },
+      { sessionId: "s2", state: "running", cwd: "/b", title: "Existing Title" },
+    ];
+    launcher.listSessions.mockReturnValue(sessions);
+    vi.mocked(sessionNames.getAllNames).mockReturnValue({});
+    bridge.getSessionTitle.mockImplementation((id: string) =>
+      id === "s1" ? "Fix the login page alignment issue" : undefined,
+    );
+
+    const res = await app.request("/api/sessions", { method: "GET" });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json[0].title).toBe("Fix the login page alignment issue");
+    expect(json[1].title).toBe("Existing Title");
   });
 
   it("enriches sessions with git data from bridge state", async () => {

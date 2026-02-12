@@ -453,6 +453,18 @@ export class WsBridge {
     return Array.from(this.sessions.values()).map((s) => s.state);
   }
 
+  /** Get session title, falling back to first user message content. */
+  getSessionTitle(sessionId: string): string | undefined {
+    const session = this.sessions.get(sessionId);
+    if (!session) return undefined;
+    if (session.title) return session.title;
+    const firstUserMsg = session.messageHistory.find((m) => m.type === "user_message");
+    if (firstUserMsg && firstUserMsg.type === "user_message") {
+      return firstUserMsg.content.slice(0, 60) + (firstUserMsg.content.length > 60 ? "..." : "");
+    }
+    return undefined;
+  }
+
   getCodexRateLimits(sessionId: string) {
     const session = this.sessions.get(sessionId);
     return session?.codexAdapter?.getRateLimits() ?? null;

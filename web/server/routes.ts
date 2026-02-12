@@ -210,6 +210,7 @@ export function createRoutes(
       const bridge = bridgeMap.get(s.sessionId);
       return {
         ...s,
+        title: s.title || wsBridge.getSessionTitle(s.sessionId),
         name: names[s.sessionId] ?? s.name,
         gitBranch: bridge?.git_branch || "",
         gitAhead: bridge?.git_ahead || 0,
