@@ -249,15 +249,18 @@ export function createRoutes(
       candidates.sort((a, b) => b.mtime - a.mtime);
       const top = candidates.slice(0, 20);
 
-      const results = await Promise.all(top.map(async (item) => {
+      const results: { sessionId: string; project: string; lastModified: number; title: string }[] = [];
+      for (const item of top) {
         const title = await extractSessionTitle(item.filePath);
-        return {
+        // Skip ephemeral title-generation sessions spawned by auto-namer
+        if (title === "") continue;
+        results.push({
           sessionId: item.sessionId,
           project: item.project,
           lastModified: item.mtime,
           title,
-        };
-      }));
+        });
+      }
 
       return c.json(results);
     } catch (e: unknown) {
@@ -902,6 +905,14 @@ export function createRoutes(
 }
 
 /** Read first user message from a session JSONL as a title. */
+const TITLE_GEN_PREFIX = "Generate a concise 3-5 word session title";
+
+function stripTitleGenPrompt(text: string): string {
+  if (!text.startsWith(TITLE_GEN_PREFIX)) return text;
+  // This is an auto-namer session — return empty to filter it out
+  return "";
+}
+
 async function extractSessionTitle(filePath: string): Promise<string> {
   return new Promise((resolve) => {
     const rl = createInterface({ input: createReadStream(filePath), crlfDelay: Infinity });
@@ -913,7 +924,7 @@ async function extractSessionTitle(filePath: string): Promise<string> {
         if (data.type === "summary") {
           found = true;
           rl.close();
-          resolve(data.summary?.slice(0, 120) || "");
+          resolve(stripTitleGenPrompt(data.summary?.slice(0, 120) || ""));
           return;
         }
         if (data.type !== "user") return;
@@ -925,14 +936,14 @@ async function extractSessionTitle(filePath: string): Promise<string> {
             if (block?.type === "text" && block.text) {
               found = true;
               rl.close();
-              resolve(block.text.slice(0, 120));
+              resolve(stripTitleGenPrompt(block.text.slice(0, 120)));
               return;
             }
           }
         } else if (typeof content === "string") {
           found = true;
           rl.close();
-          resolve(content.slice(0, 120));
+          resolve(stripTitleGenPrompt(content.slice(0, 120)));
         }
       } catch { /* skip malformed lines */ }
     });
