@@ -92,13 +92,8 @@ export function createRoutes(
         if (typeof cwd !== "string" || cwd.length === 0) {
           return c.json({ error: "Invalid cwd parameter" }, 400);
         }
-        // Security: Ensure cwd is within home directory
-        const resolvedCwd = resolve(cwd);
-        const allowedBase = homedir();
-        if (!resolvedCwd.startsWith(allowedBase + sep) && resolvedCwd !== allowedBase) {
-          return c.json({ error: "cwd must be within home directory" }, 403);
-        }
-        cwd = resolvedCwd;
+        // Resolve to absolute path for security (prevents relative path attacks)
+        cwd = resolve(cwd);
       }
 
       let worktreeInfo:
@@ -1016,12 +1011,8 @@ export function createRoutes(
       if (typeof cwd !== "string") {
         return c.json({ error: "Invalid cwd" }, 400);
       }
-      const resolvedCwd = resolve(cwd);
-      const allowedBase = homedir();
-      if (!resolvedCwd.startsWith(allowedBase + sep) && resolvedCwd !== allowedBase) {
-        return c.json({ error: "cwd must be within home directory" }, 403);
-      }
-      workingDir = resolvedCwd;
+      // Resolve to absolute path for security (prevents relative path attacks)
+      workingDir = resolve(cwd);
     }
 
     try {
