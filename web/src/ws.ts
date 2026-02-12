@@ -105,7 +105,8 @@ function notifySessionDone(sessionId: string, isError: boolean) {
   if (store.currentSessionId === sessionId) return;
   if (!("Notification" in window)) return;
 
-  const name = store.sessionNames.get(sessionId) || sessionId.slice(0, 8);
+  const sdkTitle = store.sdkSessions.find((s) => s.sessionId === sessionId)?.title;
+  const name = sdkTitle || store.sessionNames.get(sessionId) || sessionId.slice(0, 8);
   const title = isError ? `Session failed: ${name}` : `Session done: ${name}`;
   const tasks = store.sessionTasks.get(sessionId) || [];
   const completedCount = tasks.filter((t) => t.status === "completed").length;

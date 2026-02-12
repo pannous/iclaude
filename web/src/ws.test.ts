@@ -323,6 +323,101 @@ describe("handleMessage: result", () => {
 });
 
 // ===========================================================================
+// notifySessionDone (triggered via result)
+// ===========================================================================
+describe("notifySessionDone", () => {
+  let notificationSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    notificationSpy = vi.fn();
+    vi.stubGlobal("Notification", Object.assign(notificationSpy, { permission: "granted" }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.stubGlobal("WebSocket", MockWebSocket);
+    vi.stubGlobal("location", { protocol: "http:", host: "localhost:3456" });
+  });
+
+  function fireResult(sessionId: string, isError = false) {
+    fireMessage({
+      type: "result",
+      data: {
+        type: "result",
+        subtype: isError ? "error_during_execution" : "success",
+        is_error: isError,
+        duration_ms: 100,
+        duration_api_ms: 50,
+        num_turns: 1,
+        total_cost_usd: 0.01,
+        stop_reason: isError ? null : "end_turn",
+        usage: { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+        uuid: "u1",
+        session_id: sessionId,
+      },
+    });
+  }
+
+  it("uses SDK title in notification when available", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+    // Switch away so s1 is a background session
+    useStore.getState().setCurrentSession("other");
+    // Set SDK session with a title
+    useStore.getState().setSdkSessions([
+      { sessionId: "s1", state: "running", cwd: "/home", createdAt: Date.now(), title: "Fix Auth Bug" },
+    ]);
+
+    fireResult("s1");
+
+    expect(notificationSpy).toHaveBeenCalledWith(
+      "Session done: Fix Auth Bug",
+      expect.objectContaining({ tag: "session-done-s1" }),
+    );
+  });
+
+  it("falls back to session name when no SDK title", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+    useStore.getState().setCurrentSession("other");
+    useStore.getState().setSessionName("s1", "My Session");
+
+    fireResult("s1");
+
+    expect(notificationSpy).toHaveBeenCalledWith(
+      "Session done: My Session",
+      expect.objectContaining({ tag: "session-done-s1" }),
+    );
+  });
+
+  it("shows 'Session failed' for error results", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+    useStore.getState().setCurrentSession("other");
+    useStore.getState().setSdkSessions([
+      { sessionId: "s1", state: "running", cwd: "/home", createdAt: Date.now(), title: "Deploy API" },
+    ]);
+
+    fireResult("s1", true);
+
+    expect(notificationSpy).toHaveBeenCalledWith(
+      "Session failed: Deploy API",
+      expect.objectContaining({ tag: "session-done-s1" }),
+    );
+  });
+
+  it("does not notify for the currently viewed session", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+    useStore.getState().setCurrentSession("s1");
+
+    fireResult("s1");
+
+    expect(notificationSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
 // handleMessage: permission_request
 // ===========================================================================
 describe("handleMessage: permission_request", () => {
