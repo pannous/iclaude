@@ -105,6 +105,7 @@ When submitting a pull request:
 
 ## Duplicated commits?
 When pulling/merging from upstream check if they duplicate a functionality which we already have. 
+Make sure to not lose our own commits! 
 
 ## Additions
 While Claude runs normally in the background all responses are scanned for additional features especially any HTML fragments will be rendered on-screen. So you Claude now have the ability to send me images!
