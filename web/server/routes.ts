@@ -812,6 +812,68 @@ export function createRoutes(
     return c.json(limits);
   });
 
+  // ─── OpenAI-compatible Chat Completions ─────────────────────────────
+
+  api.post("/v1/chat/completions", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const { messages, model, stream = false } = body;
+
+    if (!messages || !Array.isArray(messages)) {
+      return c.json({ error: "messages array is required" }, 400);
+    }
+
+    try {
+      // Create a temporary session
+      const session = launcher.launch({
+        model: model || "claude-sonnet-4-5-20250929",
+        permissionMode: "bypass",
+        backendType: "claude",
+      });
+
+      // Convert messages to a single prompt (simplified for now)
+      const prompt = messages
+        .filter((msg: { role: string; content: string }) => msg.role === "user")
+        .map((msg: { content: string }) => msg.content)
+        .join("\n\n");
+
+      // Wait for response via polling (simplified - production should use WebSocket)
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // For now, return a simple response structure
+      // TODO: Implement proper session message handling via WebSocket
+      const response = {
+        id: session.sessionId,
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
+        model: model || "claude-sonnet-4-5-20250929",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: "Companion service chat endpoint - implement WebSocket handling",
+            },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        },
+      };
+
+      // Clean up session after response
+      setTimeout(() => launcher.kill(session.sessionId), 5000);
+
+      return c.json(response);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[routes] Chat completion failed:", msg);
+      return c.json({ error: msg }, 500);
+    }
+  });
+
   // ─── Command Execution (for HTML fragments in YOLO mode) ─────────────
 
   api.post("/exec", async (c) => {
