@@ -197,7 +197,7 @@ function handleMessage(sessionId: string, event: MessageEvent) {
         contentBlocks: msg.content,
         scannedImages: scanned.images,
         scannedHtml: scanned.html,
-        timestamp: Date.now(),
+        timestamp: data.timestamp || Date.now(),
         parentToolUseId: data.parent_tool_use_id,
         model: msg.model,
         stopReason: msg.stop_reason,
@@ -397,10 +397,11 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       const chatMessages: ChatMessage[] = [];
       const seenIds = new Set<string>();
 
-      for (const histMsg of data.messages) {
+      for (let i = 0; i < data.messages.length; i++) {
+        const histMsg = data.messages[i];
         if (histMsg.type === "user_message") {
           chatMessages.push({
-            id: nextId(),
+            id: histMsg.id || nextId(),
             role: "user",
             content: histMsg.content,
             timestamp: histMsg.timestamp,
@@ -424,7 +425,7 @@ function handleMessage(sessionId: string, event: MessageEvent) {
             contentBlocks: msg.content,
             scannedImages: scanned.images,
             scannedHtml: scanned.html,
-            timestamp: Date.now(),
+            timestamp: histMsg.timestamp || Date.now(),
             parentToolUseId: histMsg.parent_tool_use_id,
             model: msg.model,
             stopReason: msg.stop_reason,
@@ -438,7 +439,7 @@ function handleMessage(sessionId: string, event: MessageEvent) {
           const r = histMsg.data;
           if (r.is_error && r.errors?.length) {
             chatMessages.push({
-              id: nextId(),
+              id: `hist-error-${i}`,
               role: "system",
               content: `Error: ${r.errors.join(", ")}`,
               timestamp: Date.now(),
@@ -448,11 +449,20 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       }
       if (chatMessages.length > 0) {
         const existing = store.messages.get(sessionId) || [];
-        // Only replace if history has at least as many messages as current state,
-        // or if the current state is empty (initial connect). This prevents a race
-        // condition where live messages (e.g., tool_use) are lost by a stale history replay.
-        if (existing.length === 0 || chatMessages.length >= existing.length) {
+        if (existing.length === 0) {
+          // Initial connect: history is the full truth
           store.setMessages(sessionId, chatMessages);
+        } else {
+          // Reconnect: merge history with live messages, dedup by ID
+          const existingIds = new Set(existing.map((m) => m.id));
+          const newFromHistory = chatMessages.filter((m) => !existingIds.has(m.id));
+          if (newFromHistory.length > 0) {
+            // Merge and sort by timestamp to maintain chronological order
+            const merged = [...newFromHistory, ...existing].sort(
+              (a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0),
+            );
+            store.setMessages(sessionId, merged);
+          }
         }
       }
       break;

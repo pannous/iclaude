@@ -46,14 +46,18 @@ interface MockStoreState {
   sdkSessions: SdkSessionInfo[];
   currentSessionId: string | null;
   darkMode: boolean;
+  notificationSound: boolean;
   cliConnected: Map<string, boolean>;
   sessionStatus: Map<string, "idle" | "running" | "compacting" | null>;
   sessionNames: Map<string, string>;
   recentlyRenamed: Set<string>;
   pendingPermissions: Map<string, Map<string, unknown>>;
   sessionTasks: Map<string, unknown[]>;
+  collapsedProjects: Set<string>;
   setCurrentSession: ReturnType<typeof vi.fn>;
   toggleDarkMode: ReturnType<typeof vi.fn>;
+  toggleNotificationSound: ReturnType<typeof vi.fn>;
+  toggleProjectCollapse: ReturnType<typeof vi.fn>;
   removeSession: ReturnType<typeof vi.fn>;
   newSession: ReturnType<typeof vi.fn>;
   setSidebarOpen: ReturnType<typeof vi.fn>;
@@ -109,14 +113,18 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     sdkSessions: [],
     currentSessionId: null,
     darkMode: false,
+    notificationSound: true,
     cliConnected: new Map(),
     sessionStatus: new Map(),
     sessionNames: new Map(),
     recentlyRenamed: new Set(),
     pendingPermissions: new Map(),
     sessionTasks: new Map(),
+    collapsedProjects: new Set(),
     setCurrentSession: vi.fn(),
     toggleDarkMode: vi.fn(),
+    toggleNotificationSound: vi.fn(),
+    toggleProjectCollapse: vi.fn(),
     removeSession: vi.fn(),
     newSession: vi.fn(),
     setSidebarOpen: vi.fn(),
@@ -152,9 +160,9 @@ beforeEach(() => {
 });
 
 describe("Sidebar", () => {
-  it("renders 'New' button", () => {
+  it("renders 'New Session' button", () => {
     render(<Sidebar />);
-    expect(screen.getByText("New")).toBeInTheDocument();
+    expect(screen.getByText("New Session")).toBeInTheDocument();
   });
 
   it("renders 'No sessions yet.' when no sessions exist", () => {
@@ -198,7 +206,7 @@ describe("Sidebar", () => {
     expect(screen.getByText("abcdef12")).toBeInTheDocument();
   });
 
-  it("session items show directory name from cwd", () => {
+  it("session items show project name in group header (not in session row)", () => {
     const session = makeSession("s1", { cwd: "/home/user/projects/myapp" });
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
@@ -207,6 +215,7 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
+    // "myapp" appears in the project group header
     expect(screen.getByText("myapp")).toBeInTheDocument();
   });
 
@@ -302,9 +311,9 @@ describe("Sidebar", () => {
     expect(mockConnectSession).toHaveBeenCalledWith("s1");
   });
 
-  it("New button calls newSession", () => {
+  it("New Session button calls newSession", () => {
     render(<Sidebar />);
-    fireEvent.click(screen.getByText("New"));
+    fireEvent.click(screen.getByText("New Session"));
 
     expect(mockState.newSession).toHaveBeenCalled();
   });
@@ -516,7 +525,7 @@ describe("Sidebar", () => {
     expect(screen.queryByText("from-rest")).not.toBeInTheDocument();
   });
 
-  it("codex session preserves backendType when bridgeState is missing", () => {
+  it("codex session shows Codex pill when bridgeState is missing", () => {
     // Only sdkInfo available (no WS session_init received yet)
     const sdk = makeSdkSession("s1", { backendType: "codex" });
     mockState = createMockState({
@@ -524,12 +533,12 @@ describe("Sidebar", () => {
       sdkSessions: [sdk],
     });
 
-    const { container } = render(<Sidebar />);
-    const avatar = container.querySelector("button img");
-    expect(avatar?.getAttribute("src")).toBe("/logo-codex.svg");
+    render(<Sidebar />);
+    // Should show "Codex" pill text
+    expect(screen.getByText("Codex")).toBeInTheDocument();
   });
 
-  it("session avatar shows correct logo based on backendType", () => {
+  it("session shows correct backend pill based on backendType", () => {
     const session1 = makeSession("s1", { backend_type: "claude" });
     const session2 = makeSession("s2", { backend_type: "codex" });
     const sdk1 = makeSdkSession("s1", { backendType: "claude" });
@@ -539,12 +548,60 @@ describe("Sidebar", () => {
       sdkSessions: [sdk1, sdk2],
     });
 
-    const { container } = render(<Sidebar />);
-    // Find avatar images inside session buttons
-    const avatars = container.querySelectorAll("button img");
-    expect(avatars).toHaveLength(2);
-    const srcs = Array.from(avatars).map((img) => img.getAttribute("src"));
-    expect(srcs).toContain("/logo.svg");
-    expect(srcs).toContain("/logo-codex.svg");
+    render(<Sidebar />);
+    // Both backend pills should be present
+    const claudePills = screen.getAllByText("Claude");
+    const codexPills = screen.getAllByText("Codex");
+    expect(claudePills.length).toBeGreaterThanOrEqual(1);
+    expect(codexPills.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("sessions are grouped by project directory", () => {
+    const session1 = makeSession("s1", { cwd: "/home/user/project-a" });
+    const session2 = makeSession("s2", { cwd: "/home/user/project-a" });
+    const session3 = makeSession("s3", { cwd: "/home/user/project-b" });
+    const sdk1 = makeSdkSession("s1", { cwd: "/home/user/project-a" });
+    const sdk2 = makeSdkSession("s2", { cwd: "/home/user/project-a" });
+    const sdk3 = makeSdkSession("s3", { cwd: "/home/user/project-b" });
+    mockState = createMockState({
+      sessions: new Map([["s1", session1], ["s2", session2], ["s3", session3]]),
+      sdkSessions: [sdk1, sdk2, sdk3],
+    });
+
+    render(<Sidebar />);
+    // Project group headers should be visible (also appears as dirName in session items)
+    expect(screen.getAllByText("project-a").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("project-b").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("project group header shows running count", () => {
+    const session1 = makeSession("s1", { cwd: "/home/user/myapp" });
+    const session2 = makeSession("s2", { cwd: "/home/user/myapp" });
+    const sdk1 = makeSdkSession("s1", { cwd: "/home/user/myapp" });
+    const sdk2 = makeSdkSession("s2", { cwd: "/home/user/myapp" });
+    mockState = createMockState({
+      sessions: new Map([["s1", session1], ["s2", session2]]),
+      sdkSessions: [sdk1, sdk2],
+      sessionStatus: new Map([["s1", "running"], ["s2", "running"]]),
+    });
+
+    render(<Sidebar />);
+    expect(screen.getByText("2 running")).toBeInTheDocument();
+  });
+
+  it("collapsing a project group hides its sessions", () => {
+    const session = makeSession("s1", { cwd: "/home/user/myapp", model: "hidden-model" });
+    const sdk = makeSdkSession("s1", { cwd: "/home/user/myapp" });
+    mockState = createMockState({
+      sessions: new Map([["s1", session]]),
+      sdkSessions: [sdk],
+      collapsedProjects: new Set(["/home/user/myapp"]),
+    });
+
+    render(<Sidebar />);
+    // Group header should still be visible
+    expect(screen.getByText("myapp")).toBeInTheDocument();
+    // But the session inside it should be hidden
+    expect(screen.queryByText("hidden-model")).not.toBeInTheDocument();
   });
 });

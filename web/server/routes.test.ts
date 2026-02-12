@@ -1,7 +1,4 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import { homedir } from "node:os";
-import { execSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
 
 // Mock env-manager and git-utils modules before any imports
 vi.mock("./env-manager.js", () => ({
@@ -26,6 +23,9 @@ vi.mock("./git-utils.js", () => ({
   listBranches: vi.fn(() => []),
   listWorktrees: vi.fn(() => []),
   ensureWorktree: vi.fn(),
+  gitFetch: vi.fn(() => ({ success: true, output: "" })),
+  gitPull: vi.fn(() => ({ success: true, output: "" })),
+  checkoutBranch: vi.fn(),
   removeWorktree: vi.fn(),
   isWorktreeDirty: vi.fn(() => false),
 }));
@@ -51,6 +51,13 @@ import { createRoutes } from "./routes.js";
 import * as envManager from "./env-manager.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
+
+const mockedEnvManager = vi.mocked(envManager);
+const mockedGitUtils = vi.mocked(gitUtils);
+const mockedSessionNames = vi.mocked(sessionNames);
+const mockedExecSync = vi.mocked(execSync);
+const mockedExistsSync = vi.mocked(existsSync);
+const mockedReadFileSync = vi.mocked(readFileSync);
 
 const TEST_CWD = `${homedir()}/test`;
 
@@ -134,7 +141,7 @@ describe("POST /api/sessions/create", () => {
   });
 
   it("injects environment variables when envSlug is provided", async () => {
-    envManager.getEnv.mockReturnValue({
+    mockedEnvManager.getEnv.mockReturnValue({
       name: "Production",
       slug: "production",
       variables: { API_KEY: "secret123", DB_HOST: "db.example.com" },
@@ -159,14 +166,14 @@ describe("POST /api/sessions/create", () => {
 
   it("sets up a worktree when branch is specified", async () => {
     const REPO = `${homedir()}/repo`;
-    gitUtils.getRepoInfo.mockReturnValue({
+    mockedGitUtils.getRepoInfo.mockReturnValue({
       repoRoot: REPO,
       repoName: "my-repo",
       currentBranch: "main",
       defaultBranch: "main",
       isWorktree: false,
     });
-    gitUtils.ensureWorktree.mockReturnValue({
+    mockedGitUtils.ensureWorktree.mockReturnValue({
       worktreePath: `${homedir()}/.companion/worktrees/my-repo/feat-branch`,
       branch: "feat-branch",
       actualBranch: "feat-branch",
@@ -208,6 +215,109 @@ describe("POST /api/sessions/create", () => {
     );
   });
 
+  it("fetches and pulls before create when branch matches current branch", async () => {
+    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
+      repoRoot: TEST_CWD,
+      repoName: "my-repo",
+      currentBranch: "main",
+      defaultBranch: "main",
+      isWorktree: false,
+    });
+
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: TEST_CWD, branch: "main" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(gitUtils.gitFetch).toHaveBeenCalledWith(TEST_CWD);
+    expect(gitUtils.checkoutBranch).not.toHaveBeenCalled();
+    expect(gitUtils.gitPull).toHaveBeenCalledWith(TEST_CWD);
+  });
+
+  it("fetches, checks out selected branch, then pulls before create", async () => {
+    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
+      repoRoot: TEST_CWD,
+      repoName: "my-repo",
+      currentBranch: "develop",
+      defaultBranch: "main",
+      isWorktree: false,
+    });
+
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: TEST_CWD, branch: "main" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(gitUtils.gitFetch).toHaveBeenCalledWith(TEST_CWD);
+    expect(gitUtils.checkoutBranch).toHaveBeenCalledWith(TEST_CWD, "main");
+    expect(gitUtils.gitPull).toHaveBeenCalledWith(TEST_CWD);
+    expect(vi.mocked(gitUtils.gitFetch).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(gitUtils.checkoutBranch).mock.invocationCallOrder[0],
+    );
+    expect(vi.mocked(gitUtils.checkoutBranch).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(gitUtils.gitPull).mock.invocationCallOrder[0],
+    );
+  });
+
+  it("returns 500 and does not launch when fetch fails before create", async () => {
+    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
+      repoRoot: TEST_CWD,
+      repoName: "my-repo",
+      currentBranch: "main",
+      defaultBranch: "main",
+      isWorktree: false,
+    });
+    vi.mocked(gitUtils.gitFetch).mockReturnValueOnce({
+      success: false,
+      output: "network error",
+    });
+
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: TEST_CWD, branch: "main" }),
+    });
+
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json).toEqual({
+      error: "git fetch failed before session create: network error",
+    });
+    expect(gitUtils.gitPull).not.toHaveBeenCalled();
+    expect(launcher.launch).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 and does not launch when pull fails before create", async () => {
+    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
+      repoRoot: TEST_CWD,
+      repoName: "my-repo",
+      currentBranch: "main",
+      defaultBranch: "main",
+      isWorktree: false,
+    });
+    vi.mocked(gitUtils.gitPull).mockReturnValueOnce({
+      success: false,
+      output: "non-fast-forward",
+    });
+
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: TEST_CWD, branch: "main" }),
+    });
+
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json).toEqual({
+      error: "git pull failed before session create: non-fast-forward",
+    });
+    expect(launcher.launch).not.toHaveBeenCalled();
+  });
+
   it("returns 500 when launch throws an error", async () => {
     launcher.launch.mockImplementation(() => {
       throw new Error("CLI binary not found");
@@ -245,7 +355,7 @@ describe("GET /api/sessions", () => {
       { sessionId: "s2", state: "stopped", cwd: "/b" },
     ];
     launcher.listSessions.mockReturnValue(sessions);
-    sessionNames.getAllNames.mockReturnValue({ s1: "Fix auth bug" });
+    mockedSessionNames.getAllNames.mockReturnValue({ s1: "Fix auth bug" });
 
     const res = await app.request("/api/sessions", { method: "GET" });
 
@@ -375,8 +485,8 @@ describe("DELETE /api/sessions/:id", () => {
       createdAt: 1000,
     });
     tracker.isWorktreeInUse.mockReturnValue(false);
-    gitUtils.isWorktreeDirty.mockReturnValue(false);
-    gitUtils.removeWorktree.mockReturnValue({ removed: true });
+    mockedGitUtils.isWorktreeDirty.mockReturnValue(false);
+    mockedGitUtils.removeWorktree.mockReturnValue({ removed: true });
 
     const res = await app.request("/api/sessions/s1", { method: "DELETE" });
 
@@ -405,8 +515,8 @@ describe("DELETE /api/sessions/:id", () => {
       createdAt: 1000,
     });
     tracker.isWorktreeInUse.mockReturnValue(false);
-    gitUtils.isWorktreeDirty.mockReturnValue(false);
-    gitUtils.removeWorktree.mockReturnValue({ removed: true });
+    mockedGitUtils.isWorktreeDirty.mockReturnValue(false);
+    mockedGitUtils.removeWorktree.mockReturnValue({ removed: true });
 
     const res = await app.request("/api/sessions/s1", { method: "DELETE" });
 
@@ -455,7 +565,7 @@ describe("GET /api/envs", () => {
     const envs = [
       { name: "Dev", slug: "dev", variables: { A: "1" }, createdAt: 1, updatedAt: 1 },
     ];
-    envManager.listEnvs.mockReturnValue(envs);
+    mockedEnvManager.listEnvs.mockReturnValue(envs);
 
     const res = await app.request("/api/envs", { method: "GET" });
 
@@ -474,7 +584,7 @@ describe("POST /api/envs", () => {
       createdAt: 1000,
       updatedAt: 1000,
     };
-    envManager.createEnv.mockReturnValue(created);
+    mockedEnvManager.createEnv.mockReturnValue(created);
 
     const res = await app.request("/api/envs", {
       method: "POST",
@@ -489,7 +599,7 @@ describe("POST /api/envs", () => {
   });
 
   it("returns 400 when createEnv throws", async () => {
-    envManager.createEnv.mockImplementation(() => {
+    mockedEnvManager.createEnv.mockImplementation(() => {
       throw new Error("Environment name is required");
     });
 
@@ -514,7 +624,7 @@ describe("PUT /api/envs/:slug", () => {
       createdAt: 1000,
       updatedAt: 2000,
     };
-    envManager.updateEnv.mockReturnValue(updated);
+    mockedEnvManager.updateEnv.mockReturnValue(updated);
 
     const res = await app.request("/api/envs/production", {
       method: "PUT",
@@ -534,7 +644,7 @@ describe("PUT /api/envs/:slug", () => {
 
 describe("DELETE /api/envs/:slug", () => {
   it("deletes an existing environment", async () => {
-    envManager.deleteEnv.mockReturnValue(true);
+    mockedEnvManager.deleteEnv.mockReturnValue(true);
 
     const res = await app.request("/api/envs/staging", { method: "DELETE" });
 
@@ -545,7 +655,7 @@ describe("DELETE /api/envs/:slug", () => {
   });
 
   it("returns 404 when environment not found", async () => {
-    envManager.deleteEnv.mockReturnValue(false);
+    mockedEnvManager.deleteEnv.mockReturnValue(false);
 
     const res = await app.request("/api/envs/nonexistent", { method: "DELETE" });
 
@@ -566,7 +676,7 @@ describe("GET /api/git/repo-info", () => {
       defaultBranch: "main",
       isWorktree: false,
     };
-    gitUtils.getRepoInfo.mockReturnValue(info);
+    mockedGitUtils.getRepoInfo.mockReturnValue(info);
 
     const res = await app.request("/api/git/repo-info?path=/repo", { method: "GET" });
 
@@ -591,7 +701,7 @@ describe("GET /api/git/branches", () => {
       { name: "main", isCurrent: true, isRemote: false, worktreePath: null, ahead: 0, behind: 0 },
       { name: "dev", isCurrent: false, isRemote: false, worktreePath: null, ahead: 2, behind: 0 },
     ];
-    gitUtils.listBranches.mockReturnValue(branches);
+    mockedGitUtils.listBranches.mockReturnValue(branches);
 
     const res = await app.request("/api/git/branches?repoRoot=/repo", { method: "GET" });
 
@@ -610,7 +720,7 @@ describe("POST /api/git/worktree", () => {
       actualBranch: "feat",
       isNew: true,
     };
-    gitUtils.ensureWorktree.mockReturnValue(result);
+    mockedGitUtils.ensureWorktree.mockReturnValue(result);
 
     const res = await app.request("/api/git/worktree", {
       method: "POST",
@@ -630,7 +740,7 @@ describe("POST /api/git/worktree", () => {
 
 describe("DELETE /api/git/worktree", () => {
   it("removes a worktree", async () => {
-    gitUtils.removeWorktree.mockReturnValue({ removed: true });
+    mockedGitUtils.removeWorktree.mockReturnValue({ removed: true });
 
     const res = await app.request("/api/git/worktree", {
       method: "DELETE",
@@ -728,6 +838,67 @@ describe("GET /api/fs/home", () => {
     expect(typeof json.home).toBe("string");
     expect(typeof json.cwd).toBe("string");
   });
+
+  it("returns home as cwd when process.cwd() is the package root", async () => {
+    const origCwd = process.cwd;
+    const origEnv = process.env.__VIBE_PACKAGE_ROOT;
+    try {
+      process.env.__VIBE_PACKAGE_ROOT = "/opt/companion";
+      process.cwd = () => "/opt/companion";
+      const res = await app.request("/api/fs/home", { method: "GET" });
+      const json = await res.json();
+      expect(json.cwd).toBe(json.home);
+    } finally {
+      process.cwd = origCwd;
+      process.env.__VIBE_PACKAGE_ROOT = origEnv;
+    }
+  });
+
+  it("returns home as cwd when process.cwd() is inside the package root", async () => {
+    const origCwd = process.cwd;
+    const origEnv = process.env.__VIBE_PACKAGE_ROOT;
+    try {
+      process.env.__VIBE_PACKAGE_ROOT = "/opt/companion";
+      process.cwd = () => "/opt/companion/node_modules/.bin";
+      const res = await app.request("/api/fs/home", { method: "GET" });
+      const json = await res.json();
+      expect(json.cwd).toBe(json.home);
+    } finally {
+      process.cwd = origCwd;
+      process.env.__VIBE_PACKAGE_ROOT = origEnv;
+    }
+  });
+
+  it("returns actual cwd when launched from a project directory", async () => {
+    const origCwd = process.cwd;
+    const origEnv = process.env.__VIBE_PACKAGE_ROOT;
+    try {
+      process.env.__VIBE_PACKAGE_ROOT = "/opt/companion";
+      process.cwd = () => "/Users/testuser/my-project";
+      const res = await app.request("/api/fs/home", { method: "GET" });
+      const json = await res.json();
+      expect(json.cwd).toBe("/Users/testuser/my-project");
+    } finally {
+      process.cwd = origCwd;
+      process.env.__VIBE_PACKAGE_ROOT = origEnv;
+    }
+  });
+
+  it("returns home as cwd when process.cwd() equals home directory", async () => {
+    const { homedir } = await import("node:os");
+    const origCwd = process.cwd;
+    const origEnv = process.env.__VIBE_PACKAGE_ROOT;
+    try {
+      delete process.env.__VIBE_PACKAGE_ROOT;
+      process.cwd = () => homedir();
+      const res = await app.request("/api/fs/home", { method: "GET" });
+      const json = await res.json();
+      expect(json.cwd).toBe(json.home);
+    } finally {
+      process.cwd = origCwd;
+      process.env.__VIBE_PACKAGE_ROOT = origEnv;
+    }
+  });
 });
 
 describe("GET /api/fs/diff", () => {
@@ -748,7 +919,7 @@ describe("GET /api/fs/diff", () => {
 -old line
 +new line
  line3`;
-    execSync.mockReturnValueOnce(diffOutput);
+    mockedExecSync.mockReturnValueOnce(diffOutput);
 
     const res = await app.request("/api/fs/diff?path=/repo/file.ts", { method: "GET" });
 
@@ -763,7 +934,7 @@ describe("GET /api/fs/diff", () => {
   });
 
   it("returns empty diff when git command fails", async () => {
-    execSync.mockImplementationOnce(() => {
+    mockedExecSync.mockImplementationOnce(() => {
       throw new Error("not a git repository");
     });
 
@@ -833,8 +1004,8 @@ describe("GET /api/backends/:id/models", () => {
         { slug: "gpt-5-codex", display_name: "gpt-5-codex", description: "Old model", visibility: "hide", priority: 8 },
       ],
     });
-    existsSync.mockReturnValue(true);
-    readFileSync.mockReturnValue(cacheContent);
+    mockedExistsSync.mockReturnValue(true);
+    mockedReadFileSync.mockReturnValue(cacheContent);
 
     const res = await app.request("/api/backends/codex/models", { method: "GET" });
 
@@ -848,7 +1019,7 @@ describe("GET /api/backends/:id/models", () => {
   });
 
   it("returns 404 when codex cache file does not exist", async () => {
-    existsSync.mockReturnValue(false);
+    mockedExistsSync.mockReturnValue(false);
 
     const res = await app.request("/api/backends/codex/models", { method: "GET" });
 
@@ -858,8 +1029,8 @@ describe("GET /api/backends/:id/models", () => {
   });
 
   it("returns 500 when cache file is malformed", async () => {
-    existsSync.mockReturnValue(true);
-    readFileSync.mockReturnValue("not valid json{{{");
+    mockedExistsSync.mockReturnValue(true);
+    mockedReadFileSync.mockReturnValue("not valid json{{{");
 
     const res = await app.request("/api/backends/codex/models", { method: "GET" });
 

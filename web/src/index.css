@@ -130,3 +130,13 @@
     opacity: 0;
   }
 }
+
+/* Eliminate 300ms tap delay on interactive elements */
+button,
+[role="button"],
+a,
+input,
+textarea,
+select {
+  touch-action: manipulation;
+}

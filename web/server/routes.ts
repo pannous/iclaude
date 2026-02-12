@@ -138,8 +138,20 @@ export function createRoutes(
       } else if (body.branch && cwd) {
         // Non-worktree: checkout the selected branch in-place
         const repoInfo = gitUtils.getRepoInfo(cwd);
-        if (repoInfo && repoInfo.currentBranch !== body.branch) {
-          gitUtils.checkoutBranch(repoInfo.repoRoot, body.branch);
+        if (repoInfo) {
+          const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
+          if (!fetchResult.success) {
+            throw new Error(`git fetch failed before session create: ${fetchResult.output}`);
+          }
+
+          if (repoInfo.currentBranch !== body.branch) {
+            gitUtils.checkoutBranch(repoInfo.repoRoot, body.branch);
+          }
+
+          const pullResult = gitUtils.gitPull(repoInfo.repoRoot);
+          if (!pullResult.success) {
+            throw new Error(`git pull failed before session create: ${pullResult.output}`);
+          }
         }
       }
 
@@ -149,6 +161,7 @@ export function createRoutes(
         cwd,
         claudeBinary: body.claudeBinary,
         codexBinary: body.codexBinary,
+        codexInternetAccess: backend === "codex" && body.codexInternetAccess === true,
         codexSandbox: backend === "codex" && body.codexInternetAccess === true
           ? "danger-full-access"
           : "workspace-write",
@@ -473,7 +486,15 @@ export function createRoutes(
   });
 
   api.get("/fs/home", (c) => {
-    return c.json({ home: homedir(), cwd: process.cwd() });
+    const home = homedir();
+    const cwd = process.cwd();
+    // Only report cwd if the user launched companion from a real project directory
+    // (not from the package root or the home directory itself)
+    const packageRoot = process.env.__VIBE_PACKAGE_ROOT;
+    const isProjectDir =
+      cwd !== home &&
+      (!packageRoot || !cwd.startsWith(packageRoot));
+    return c.json({ home, cwd: isProjectDir ? cwd : home });
   });
 
   api.get("/fs/recent-projects", async (c) => {

@@ -47,6 +47,17 @@ interface CodexItem {
   [key: string]: unknown;
 }
 
+/** Safely extract a string kind from a Codex file change entry.
+ *  Codex may send kind as a string ("create") or as an object ({ type: "modify" }). */
+function safeKind(kind: unknown): string {
+  if (typeof kind === "string") return kind;
+  if (kind && typeof kind === "object" && "type" in kind) {
+    const t = (kind as Record<string, unknown>).type;
+    if (typeof t === "string") return t;
+  }
+  return "modify";
+}
+
 interface CodexAgentMessageItem extends CodexItem {
   type: "agentMessage";
   text?: string;
@@ -63,7 +74,7 @@ interface CodexCommandExecutionItem extends CodexItem {
 
 interface CodexFileChangeItem extends CodexItem {
   type: "fileChange";
-  changes?: Array<{ path: string; kind: "create" | "modify" | "delete"; diff?: string }>;
+  changes?: Array<{ path: string; kind: unknown; diff?: string }>;
   status: "inProgress" | "completed" | "failed" | "declined";
 }
 
@@ -152,6 +163,12 @@ class JsonRpcTransport {
       console.error("[codex-adapter] stdout reader error:", err);
     } finally {
       this.connected = false;
+      // Reject all pending promises so callers don't hang indefinitely
+      // when the Codex process crashes or exits unexpectedly.
+      for (const [id, { reject }] of this.pending) {
+        reject(new Error("Transport closed"));
+      }
+      this.pending.clear();
     }
   }
 
@@ -263,9 +280,6 @@ export class CodexAdapter {
   // Streaming accumulator for agent messages
   private streamingText = "";
   private streamingItemId: string | null = null;
-
-  // Track message counter for synthesized IDs
-  private msgCounter = 0;
 
   // Accumulate reasoning text by item ID so we can emit final thinking blocks.
   private reasoningTextByItemId = new Map<string, string>();
@@ -427,7 +441,7 @@ export class CodexAdapter {
           model: this.options.model,
           cwd: this.options.cwd,
           approvalPolicy: this.mapApprovalPolicy(this.options.approvalMode),
-          sandbox: this.options.sandbox || "workspace-write",
+          sandbox: this.options.sandbox || this.mapSandboxPolicy(this.options.approvalMode),
         }) as { thread: { id: string } };
         this.threadId = resumeResult.thread.id;
       } else {
@@ -436,7 +450,7 @@ export class CodexAdapter {
           model: this.options.model,
           cwd: this.options.cwd,
           approvalPolicy: this.mapApprovalPolicy(this.options.approvalMode),
-          sandbox: this.options.sandbox || "workspace-write",
+          sandbox: this.options.sandbox || this.mapSandboxPolicy(this.options.approvalMode),
         }) as { thread: { id: string } };
         this.threadId = threadResult.thread.id;
       }
@@ -667,6 +681,21 @@ export class CodexAdapter {
       case "account/rateLimits/updated":
         this.updateRateLimits(params);
         break;
+      case "codex/event/stream_error": {
+        const msg = params.msg as { message?: string } | undefined;
+        if (msg?.message) {
+          console.log(`[codex-adapter] Stream error: ${msg.message}`);
+        }
+        break;
+      }
+      case "codex/event/error": {
+        const msg = params.msg as { message?: string } | undefined;
+        if (msg?.message) {
+          console.error(`[codex-adapter] Codex error: ${msg.message}`);
+          this.emit({ type: "error", message: msg.message });
+        }
+        break;
+      }
       default:
         // Unknown notification, log for debugging
         if (!method.startsWith("account/") && !method.startsWith("codex/event/")) {
@@ -909,7 +938,7 @@ export class CodexAdapter {
           event: {
             type: "message_start",
             message: {
-              id: `codex-msg-${++this.msgCounter}`,
+              id: this.makeMessageId("agent", item.id),
               type: "message",
               role: "assistant",
               model: this.options.model || "",
@@ -943,10 +972,10 @@ export class CodexAdapter {
         const fc = item as CodexFileChangeItem;
         const changes = fc.changes || [];
         const firstChange = changes[0];
-        const toolName = firstChange?.kind === "create" ? "Write" : "Edit";
+        const toolName = safeKind(firstChange?.kind) === "create" ? "Write" : "Edit";
         const toolInput = {
           file_path: firstChange?.path || "",
-          changes: changes.map((c) => ({ path: c.path, kind: c.kind })),
+          changes: changes.map((c) => ({ path: c.path, kind: safeKind(c.kind) })),
         };
         this.emitToolUseStart(item.id, toolName, toolInput);
         break;
@@ -1065,7 +1094,7 @@ export class CodexAdapter {
         this.emit({
           type: "assistant",
           message: {
-            id: `codex-msg-${++this.msgCounter}`,
+            id: this.makeMessageId("agent", item.id),
             type: "message",
             role: "assistant",
             model: this.options.model || "",
@@ -1074,6 +1103,7 @@ export class CodexAdapter {
             usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
           },
           parent_tool_use_id: null,
+          timestamp: Date.now(),
         });
 
         // Reset streaming state
@@ -1094,9 +1124,8 @@ export class CodexAdapter {
         const exitCode = typeof cmd.exitCode === "number" ? cmd.exitCode : 0;
         const failed = cmd.status === "failed" || cmd.status === "declined" || exitCode !== 0;
 
-        // Always emit tool_result so the browser shows a complete tool block.
+        // Keep successful no-output commands silent in the chat feed.
         if (!combinedOutput && !failed) {
-          this.emitToolResult(item.id, "Command completed successfully.", false);
           break;
         }
 
@@ -1115,13 +1144,13 @@ export class CodexAdapter {
         const fc = item as CodexFileChangeItem;
         const changes = fc.changes || [];
         const firstChange = changes[0];
-        const toolName = firstChange?.kind === "create" ? "Write" : "Edit";
+        const toolName = safeKind(firstChange?.kind) === "create" ? "Write" : "Edit";
         // Ensure tool_use was emitted
         this.ensureToolUseEmitted(item.id, toolName, {
           file_path: firstChange?.path || "",
-          changes: changes.map((c) => ({ path: c.path, kind: c.kind })),
+          changes: changes.map((c) => ({ path: c.path, kind: safeKind(c.kind) })),
         });
-        const summary = changes.map((c) => `${c.kind}: ${c.path}`).join("\n");
+        const summary = changes.map((c) => `${safeKind(c.kind)}: ${c.path}`).join("\n");
         this.emitToolResult(item.id, summary || "File changes applied", fc.status === "failed");
         break;
       }
@@ -1155,7 +1184,7 @@ export class CodexAdapter {
           this.emit({
             type: "assistant",
             message: {
-              id: `codex-msg-${++this.msgCounter}`,
+              id: this.makeMessageId("reasoning", item.id),
               type: "message",
               role: "assistant",
               model: this.options.model || "",
@@ -1164,6 +1193,7 @@ export class CodexAdapter {
               usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
             },
             parent_tool_use_id: null,
+            timestamp: Date.now(),
           });
         }
 
@@ -1268,7 +1298,7 @@ export class CodexAdapter {
     this.emit({
       type: "assistant",
       message: {
-        id: `codex-msg-${++this.msgCounter}`,
+        id: this.makeMessageId("tool_use", toolUseId),
         type: "message",
         role: "assistant",
         model: this.options.model || "",
@@ -1284,6 +1314,7 @@ export class CodexAdapter {
         usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
       },
       parent_tool_use_id: null,
+      timestamp: Date.now(),
     });
   }
 
@@ -1321,11 +1352,12 @@ export class CodexAdapter {
   }
 
   /** Emit an assistant message with a tool_result content block. */
-  private emitToolResult(toolUseId: string, content: string, isError: boolean): void {
+  private emitToolResult(toolUseId: string, content: unknown, isError: boolean): void {
+    const safeContent = typeof content === "string" ? content : JSON.stringify(content);
     this.emit({
       type: "assistant",
       message: {
-        id: `codex-msg-${++this.msgCounter}`,
+        id: this.makeMessageId("tool_result", toolUseId),
         type: "message",
         role: "assistant",
         model: this.options.model || "",
@@ -1333,7 +1365,7 @@ export class CodexAdapter {
           {
             type: "tool_result",
             tool_use_id: toolUseId,
-            content,
+            content: safeContent,
             is_error: isError,
           },
         ],
@@ -1341,7 +1373,13 @@ export class CodexAdapter {
         usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
       },
       parent_tool_use_id: null,
+      timestamp: Date.now(),
     });
+  }
+
+  private makeMessageId(kind: string, sourceId?: string): string {
+    if (sourceId) return `codex-${kind}-${sourceId}`;
+    return `codex-${kind}-${randomUUID()}`;
   }
 
   private mapApprovalPolicy(mode?: string): string {
@@ -1353,6 +1391,15 @@ export class CodexAdapter {
       case "default":
       default:
         return "untrusted";
+    }
+  }
+
+  private mapSandboxPolicy(mode?: string): string {
+    switch (mode) {
+      case "bypassPermissions":
+        return "danger-full-access";
+      default:
+        return "workspace-write";
     }
   }
 }

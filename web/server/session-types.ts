@@ -170,7 +170,7 @@ export type BrowserOutgoingMessage =
 export type BrowserIncomingMessage =
   | { type: "session_init"; session: SessionState }
   | { type: "session_update"; session: Partial<SessionState> }
-  | { type: "assistant"; message: CLIAssistantMessage["message"]; parent_tool_use_id: string | null }
+  | { type: "assistant"; message: CLIAssistantMessage["message"]; parent_tool_use_id: string | null; timestamp?: number }
   | { type: "stream_event"; event: unknown; parent_tool_use_id: string | null }
   | { type: "result"; data: CLIResultMessage }
   | { type: "permission_request"; request: PermissionRequest }
@@ -184,7 +184,7 @@ export type BrowserIncomingMessage =
   | { type: "cli_connected" }
   | { type: "title_updated"; title: string }
   | { type: "subtitle_updated"; subtitle: string }
-  | { type: "user_message"; content: string; timestamp: number }
+  | { type: "user_message"; content: string; timestamp: number; id?: string }
   | { type: "message_history"; messages: BrowserIncomingMessage[] }
   | { type: "session_name_update"; name: string };
 

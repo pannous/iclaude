@@ -2,7 +2,7 @@ import type { ServerWebSocket } from "bun";
 import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import type {
   CLIMessage,
@@ -116,9 +116,18 @@ function resolveGitInfo(state: SessionState): void {
     } catch { /* ignore */ }
 
     try {
-      state.repo_root = execSync("git rev-parse --show-toplevel", {
-        cwd: state.cwd, encoding: "utf-8", timeout: 3000,
-      }).trim();
+      if (state.is_worktree) {
+        // For worktrees, --show-toplevel returns the worktree dir, not the original repo.
+        // Use --git-common-dir to find the shared .git dir, then derive the repo root.
+        const commonDir = execSync("git rev-parse --git-common-dir", {
+          cwd: state.cwd, encoding: "utf-8", timeout: 3000,
+        }).trim();
+        state.repo_root = resolve(state.cwd, commonDir, "..");
+      } else {
+        state.repo_root = execSync("git rev-parse --show-toplevel", {
+          cwd: state.cwd, encoding: "utf-8", timeout: 3000,
+        }).trim();
+      }
     } catch { /* ignore */ }
 
     try {
@@ -148,6 +157,7 @@ export class WsBridge {
   private onTitleGenerated: ((sessionId: string, title: string) => void) | null = null;
   private onFirstTurnCompleted: ((sessionId: string, firstUserMessage: string) => void) | null = null;
   private autoNamingAttempted = new Set<string>();
+  private userMsgCounter = 0;
 
   /** Register a callback for when we learn the CLI's internal session ID. */
   onCLISessionIdReceived(cb: (sessionId: string, cliSessionId: string) => void): void {
@@ -466,7 +476,10 @@ export class WsBridge {
       }
 
       // Store assistant/result messages in history for replay
-      if (msg.type === "assistant" || msg.type === "result") {
+      if (msg.type === "assistant") {
+        session.messageHistory.push({ ...msg, timestamp: msg.timestamp || Date.now() });
+        this.persistSession(session);
+      } else if (msg.type === "result") {
         session.messageHistory.push(msg);
         this.persistSession(session);
       }
@@ -628,7 +641,10 @@ export class WsBridge {
 
     // Notify if backend is not connected and request relaunch
     const backendConnected = session.backendType === "codex"
-      ? session.codexAdapter?.isConnected()
+      // Treat an attached adapter as "alive" during init.
+      // `isConnected()` flips true only after initialize/thread start, and
+      // relaunching during that window can kill a healthy startup.
+      ? !!session.codexAdapter
       : !!session.cliSocket;
 
     if (!backendConnected) {
@@ -764,6 +780,7 @@ export class WsBridge {
       type: "assistant",
       message: msg.message,
       parent_tool_use_id: msg.parent_tool_use_id,
+      timestamp: Date.now(),
     };
     // Deduplicate: skip if this message ID is already in history (e.g. from resume replay)
     const msgId = msg.message?.id;
@@ -912,12 +929,14 @@ export class WsBridge {
   private routeBrowserMessage(session: Session, msg: BrowserOutgoingMessage) {
     // For Codex sessions, delegate entirely to the adapter
     if (session.backendType === "codex") {
-      // Store user messages in history for replay
+      // Store user messages in history for replay with stable ID for dedup on reconnect
       if (msg.type === "user_message") {
+        const ts = Date.now();
         session.messageHistory.push({
           type: "user_message",
           content: msg.content,
-          timestamp: Date.now(),
+          timestamp: ts,
+          id: `user-${ts}-${this.userMsgCounter++}`,
         });
         this.persistSession(session);
       }
@@ -970,11 +989,13 @@ export class WsBridge {
     const userMessageCount = session.messageHistory.filter(m => m.type === "user_message").length;
     const isFirstMessage = userMessageCount === 0;
 
-    // Store user message in history for replay (text-only for replay)
+    // Store user message in history for replay with stable ID for dedup on reconnect
+    const ts = Date.now();
     session.messageHistory.push({
       type: "user_message",
       content: msg.content,
-      timestamp: Date.now(),
+      timestamp: ts,
+      id: `user-${ts}-${this.userMsgCounter++}`,
     });
 
     // Use the user's first message directly as the initial title
