@@ -42,7 +42,7 @@ export function SessionItem({
   editInputRef,
 }: SessionItemProps) {
   const shortId = s.id.slice(0, 8);
-  const label = sessionName || s.model || shortId;
+  const label = s.title || sessionName || s.model || shortId;
   const isRunning = s.status === "running";
   const isCompacting = s.status === "compacting";
   const isEditing = editingSessionId === s.id;

@@ -191,6 +191,7 @@ export function Sidebar() {
     const sdkInfo = sdkSessions.find((s) => s.sessionId === id);
     return {
       id,
+      title: sdkInfo?.title,
       model: bridgeState?.model || sdkInfo?.model || "",
       cwd: bridgeState?.cwd || sdkInfo?.cwd || "",
       gitBranch: bridgeState?.git_branch || sdkInfo?.gitBranch || "",
