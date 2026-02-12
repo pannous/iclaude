@@ -3,6 +3,7 @@ import { useStore } from "./store.js";
 import { connectSession } from "./ws.js";
 import { disconnectSession } from "./ws.js";
 import { api } from "./api.js";
+import { addRecentDir } from "./utils/recent-dirs.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
@@ -113,8 +114,12 @@ export default function App() {
         const store = useStore.getState();
         const currentId = store.currentSessionId;
 
-        // Disconnect current session if any
+        // Carry the current session's folder to the new session
         if (currentId) {
+          const bridgeState = store.sessions.get(currentId);
+          const sdkInfo = store.sdkSessions.find((s) => s.sessionId === currentId);
+          const sessionCwd = bridgeState?.cwd || sdkInfo?.cwd;
+          if (sessionCwd) addRecentDir(sessionCwd);
           disconnectSession(currentId);
         }
 
