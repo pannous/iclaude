@@ -15,6 +15,12 @@ import * as skillManager from "./skill-manager.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
 import { getUsageLimits } from "./usage-limits.js";
+import {
+  getUpdateState,
+  checkForUpdate,
+  isUpdateAvailable,
+  setUpdateInProgress,
+} from "./update-checker.js";
 
 function execCaptureStdout(
   command: string,
@@ -961,19 +967,49 @@ export function createRoutes(
     return c.json(limits);
   });
 
-  // ─── OpenAI-compatible Chat Completions ─────────────────────────────
+  // ─── Update checking ─────────────────────────────────────────────────
 
-  api.post("/v1/chat/completions", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
-    const { messages, model, stream = false } = body;
+  api.get("/update-check", (c) => {
+    const state = getUpdateState();
+    return c.json({
+      currentVersion: state.currentVersion,
+      latestVersion: state.latestVersion,
+      updateAvailable: isUpdateAvailable(),
+      isServiceMode: state.isServiceMode,
+      updateInProgress: state.updateInProgress,
+      lastChecked: state.lastChecked,
+    });
+  });
 
-    if (!messages || !Array.isArray(messages)) {
-      return c.json({ error: "messages array is required" }, 400);
+  api.post("/update-check", async (c) => {
+    await checkForUpdate();
+    const state = getUpdateState();
+    return c.json({
+      currentVersion: state.currentVersion,
+      latestVersion: state.latestVersion,
+      updateAvailable: isUpdateAvailable(),
+      isServiceMode: state.isServiceMode,
+      updateInProgress: state.updateInProgress,
+      lastChecked: state.lastChecked,
+    });
+  });
+
+  api.post("/update", async (c) => {
+    const state = getUpdateState();
+    if (!state.isServiceMode) {
+      return c.json(
+        { error: "Update & restart is only available in service mode" },
+        400,
+      );
+    }
+    if (!isUpdateAvailable()) {
+      return c.json({ error: "No update available" }, 400);
+    }
+    if (state.updateInProgress) {
+      return c.json({ error: "Update already in progress" }, 409);
     }
 
-    if (stream) {
-      return c.json({ error: "Streaming not yet implemented" }, 501);
-    }
+    setUpdateInProgress(true);
 
     // Respond immediately, then perform update async
     setTimeout(async () => {
@@ -1004,68 +1040,12 @@ export function createRoutes(
         console.error("[update] Update failed:", err);
         setUpdateInProgress(false);
       }
-      const lastUserMessage = userMessages[userMessages.length - 1];
-      const userContent = lastUserMessage.content;
+    }, 100);
 
-      // Wait for CLI to connect (with timeout)
-      const cliConnected = await waitForCondition(
-        () => {
-          const wsSession = wsBridge.getSession(sessionId!);
-          return wsSession?.cliSocket !== null;
-        },
-        10000,
-        100
-      );
-
-      if (!cliConnected) {
-        throw new Error("CLI failed to connect within timeout");
-      }
-
-      // Send the user message
-      const sent = wsBridge.sendUserMessage(sessionId, userContent);
-      if (!sent) {
-        throw new Error("Failed to send message to session");
-      }
-
-      // Wait for assistant response
-      const response = await waitForAssistantResponse(sessionId, wsBridge, 60000);
-
-      // Clean up session
-      setTimeout(() => launcher.kill(sessionId!), 1000);
-
-      // Return OpenAI-compatible response
-      return c.json({
-        id: sessionId,
-        object: "chat.completion",
-        created: Math.floor(Date.now() / 1000),
-        model: model || "claude-sonnet-4-5-20250929",
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content: response,
-            },
-            finish_reason: "stop",
-          },
-        ],
-        usage: {
-          prompt_tokens: 0,
-          completion_tokens: 0,
-          total_tokens: 0,
-        },
-      });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[routes] Chat completion failed:", msg);
-
-      // Clean up session on error
-      if (sessionId) {
-        setTimeout(() => launcher.kill(sessionId!), 100);
-      }
-
-      return c.json({ error: msg }, 500);
-    }
+    return c.json({
+      ok: true,
+      message: "Update started. Server will restart shortly.",
+    });
   });
 
   // ─── Command Execution (for HTML fragments in YOLO mode) ─────────────

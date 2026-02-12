@@ -19,6 +19,8 @@ export function TopBar() {
   const getConversationText = useCallback(() => conversationToText(messages), [messages]);
   const activeTab = useStore((s) => s.activeTab);
   const setActiveTab = useStore((s) => s.setActiveTab);
+  const openSkills = useStore((s) => s.openSkills);
+  const closeSkill = useStore((s) => s.closeSkill);
   const changedFilesCount = useStore((s) => {
     if (!currentSessionId) return 0;
     const cwd =
