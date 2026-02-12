@@ -85,19 +85,13 @@ export function createRoutes(
         }
       }
 
-      // Validate cwd and apply path traversal protection
+      // Validate cwd
       let cwd = body.cwd;
       if (cwd !== undefined) {
         if (typeof cwd !== "string" || cwd.length === 0) {
           return c.json({ error: "Invalid cwd parameter" }, 400);
         }
-        // Security: Ensure cwd is within home directory
-        const resolvedCwd = resolve(cwd);
-        const allowedBase = homedir();
-        if (!resolvedCwd.startsWith(allowedBase + sep) && resolvedCwd !== allowedBase) {
-          return c.json({ error: "cwd must be within home directory" }, 403);
-        }
-        cwd = resolvedCwd;
+        cwd = resolve(cwd);
       }
 
       let worktreeInfo:
@@ -528,20 +522,7 @@ export function createRoutes(
     const basePath = resolve(rawPath);
 
     try {
-      // Security: Validate the path is within safe boundaries
-      // Resolve to real path to prevent symlink attacks
       const realPath = await realpath(basePath).catch(() => basePath);
-
-      // Only allow access to user's home directory and subdirectories
-      const allowedBase = homedir();
-      if (!realPath.startsWith(allowedBase + sep) && realPath !== allowedBase) {
-        return c.json({
-          error: "Access denied: Path must be within home directory",
-          path: basePath,
-          dirs: [],
-          home: homedir()
-        }, 403);
-      }
 
       const entries = await readdir(realPath, { withFileTypes: true });
       const dirs: { name: string; path: string }[] = [];
@@ -954,18 +935,12 @@ export function createRoutes(
       return c.json({ error: "command required" }, 400);
     }
 
-    // Security: Validate cwd if provided
     let workingDir = homedir();
     if (cwd) {
       if (typeof cwd !== "string") {
         return c.json({ error: "Invalid cwd" }, 400);
       }
-      const resolvedCwd = resolve(cwd);
-      const allowedBase = homedir();
-      if (!resolvedCwd.startsWith(allowedBase + sep) && resolvedCwd !== allowedBase) {
-        return c.json({ error: "cwd must be within home directory" }, 403);
-      }
-      workingDir = resolvedCwd;
+      workingDir = resolve(cwd);
     }
 
     try {
