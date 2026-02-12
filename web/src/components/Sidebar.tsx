@@ -248,6 +248,25 @@ export function Sidebar() {
     }
   }, []);
 
+  const handleClearArchived = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const store = useStore.getState();
+    const archived = store.sdkSessions.filter((s) => s.archived);
+    // Optimistically remove all archived from local state
+    store.setSdkSessions(store.sdkSessions.filter((s) => !s.archived));
+    setShowArchived(false);
+    // Delete on server in parallel
+    await Promise.allSettled(
+      archived.map((s) => api.deleteSession(s.sessionId))
+    );
+    try {
+      const list = await api.listSessions();
+      useStore.getState().setSdkSessions(list);
+    } catch {
+      // best-effort
+    }
+  }, []);
+
   // Combine sessions from WsBridge state + SDK sessions list
   const allSessionIds = new Set<string>();
   for (const id of sessions.keys()) allSessionIds.add(id);
@@ -437,15 +456,24 @@ export function Sidebar() {
 
             {archivedSessions.length > 0 && (
               <div className="mt-2 pt-2 border-t border-cc-border">
-                <button
-                  onClick={() => setShowArchived(!showArchived)}
-                  className="w-full px-3 py-1.5 text-[11px] font-medium text-cc-muted uppercase tracking-wider flex items-center gap-1.5 hover:text-cc-fg transition-colors cursor-pointer"
-                >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 transition-transform ${showArchived ? "rotate-90" : ""}`}>
-                    <path d="M6 4l4 4-4 4" />
-                  </svg>
-                  Archived ({archivedSessions.length})
-                </button>
+                <div className="flex items-center">
+                  <button
+                    onClick={() => setShowArchived(!showArchived)}
+                    className="flex-1 px-3 py-1.5 text-[11px] font-medium text-cc-muted uppercase tracking-wider flex items-center gap-1.5 hover:text-cc-fg transition-colors cursor-pointer"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 transition-transform ${showArchived ? "rotate-90" : ""}`}>
+                      <path d="M6 4l4 4-4 4" />
+                    </svg>
+                    Archived ({archivedSessions.length})
+                  </button>
+                  <button
+                    onClick={handleClearArchived}
+                    title="Delete all archived sessions"
+                    className="px-2 py-1 mr-1 text-[10px] text-cc-muted hover:text-red-400 transition-colors cursor-pointer rounded hover:bg-cc-hover"
+                  >
+                    Clear
+                  </button>
+                </div>
                 {showArchived && (
                   <div className="space-y-0.5 mt-1">
                     {archivedSessions.map((s) => (
