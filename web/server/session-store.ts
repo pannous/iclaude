@@ -147,6 +147,32 @@ export class SessionStore {
     return null;
   }
 
+  /** Remove ghost session files: no cwd and no message history. Returns count of purged files. */
+  purgeGhosts(): number {
+    let purged = 0;
+    try {
+      const files = readdirSync(this.dir).filter((f) => f.endsWith(".json") && f !== "launcher.json");
+      for (const file of files) {
+        try {
+          const raw = readFileSync(join(this.dir, file), "utf-8");
+          const session = JSON.parse(raw) as PersistedSession;
+          if (!session.state?.cwd && (!session.messageHistory || session.messageHistory.length === 0)) {
+            unlinkSync(join(this.dir, file));
+            purged++;
+          }
+        } catch {
+          // Skip corrupt files
+        }
+      }
+    } catch {
+      // Dir doesn't exist
+    }
+    if (purged > 0) {
+      console.log(`[session-store] Purged ${purged} ghost session file(s)`);
+    }
+    return purged;
+  }
+
   get directory(): string {
     return this.dir;
   }

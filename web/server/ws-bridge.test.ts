@@ -129,6 +129,12 @@ describe("Session management", () => {
     expect(session.state.backend_type).toBe("codex");
   });
 
+  it("getOrCreateSession: does NOT persist empty new sessions to disk", () => {
+    bridge.getOrCreateSession("empty-1");
+    // No file should exist on disk — session has no cwd and no messages
+    expect(store.load("empty-1")).toBeNull();
+  });
+
   it("getSession: returns undefined for unknown session", () => {
     expect(bridge.getSession("nonexistent")).toBeUndefined();
   });

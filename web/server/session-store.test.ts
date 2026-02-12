@@ -263,6 +263,37 @@ describe("remove", () => {
 
 // ─── saveLauncher / loadLauncher ──────────────────────────────────────────────
 
+// ─── purgeGhosts ─────────────────────────────────────────────────────────────
+
+describe("purgeGhosts", () => {
+  it("removes session files with no cwd and no messages", () => {
+    // Ghost: empty cwd, no messages
+    store.saveSync(makeSession("ghost-1", {
+      state: { ...makeSession("ghost-1").state, cwd: "" },
+      messageHistory: [],
+    }));
+    // Valid: has cwd
+    store.saveSync(makeSession("valid-1"));
+    // Valid: no cwd but has messages
+    store.saveSync(makeSession("valid-2", {
+      state: { ...makeSession("valid-2").state, cwd: "" },
+      messageHistory: [{ type: "error", message: "test" }],
+    }));
+
+    const purged = store.purgeGhosts();
+    expect(purged).toBe(1);
+    expect(store.load("ghost-1")).toBeNull();
+    expect(store.load("valid-1")).not.toBeNull();
+    expect(store.load("valid-2")).not.toBeNull();
+  });
+
+  it("returns 0 when there are no ghosts", () => {
+    store.saveSync(makeSession("ok-1"));
+    store.saveSync(makeSession("ok-2"));
+    expect(store.purgeGhosts()).toBe(0);
+  });
+});
+
 describe("saveLauncher / loadLauncher", () => {
   it("writes and reads launcher data", () => {
     const data = { pids: [123, 456], lastBoot: "2025-01-01T00:00:00Z" };

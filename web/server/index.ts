@@ -34,6 +34,7 @@ wsBridge.setStore(sessionStore);
 launcher.setStore(sessionStore);
 launcher.restoreFromDisk();
 wsBridge.restoreFromDisk();
+sessionStore.purgeGhosts();
 
 // Auto-relaunch CLI when a browser connects to a session with no CLI.
 // Uses exponential backoff to prevent rapid relaunch loops when a CLI keeps crashing.

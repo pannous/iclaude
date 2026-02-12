@@ -231,6 +231,7 @@ export function createRoutes(
     const before = new Set(launcher.listSessions().map(s => s.sessionId));
     launcher.cleanupOldSessions();
     wsBridge.cleanupOldSessions();
+    sessionStore.purgeGhosts();
     const after = new Set(launcher.listSessions().map(s => s.sessionId));
     for (const id of before) {
       if (!after.has(id)) sessionNames.removeName(id);

@@ -236,7 +236,9 @@ export class WsBridge {
 
     let removed = 0;
     for (const session of this.sessions.values()) {
-      if (!session.cliSocket && session.browserSockets.size === 0) {
+      const isGhost = !session.state.cwd && session.messageHistory.length === 0;
+      const isDisconnected = !session.cliSocket && session.browserSockets.size === 0;
+      if (isGhost || isDisconnected) {
         this.sessions.delete(session.id);
         this.store.remove(session.id);
         removed++;
@@ -244,7 +246,7 @@ export class WsBridge {
     }
 
     if (removed > 0) {
-      console.log(`[ws-bridge] Cleaned up ${removed} disconnected session(s) (${this.sessions.size} remaining)`);
+      console.log(`[ws-bridge] Cleaned up ${removed} disconnected/ghost session(s) (${this.sessions.size} remaining)`);
     }
   }
 
@@ -428,7 +430,12 @@ export class WsBridge {
       }
 
       this.sessions.set(sessionId, session);
-      this.persistSession(session);
+      // Only persist if the session already has meaningful state (e.g. resumed with history).
+      // New empty sessions get persisted later when system.init sets the cwd.
+      // This prevents ghost session files from sessions that never fully initialize.
+      if (session.messageHistory.length > 0 || session.state.cwd) {
+        this.persistSession(session);
+      }
     } else if (backendType) {
       // Only overwrite backendType when explicitly provided (e.g. attachCodexAdapter)
       // Prevents handleBrowserOpen from resetting codex→claude
