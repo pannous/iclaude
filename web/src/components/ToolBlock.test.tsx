@@ -301,7 +301,7 @@ describe("ToolBlock", () => {
   });
 
   it("renders Edit diff view when expanded", () => {
-    render(
+    const { container } = render(
       <ToolBlock
         name="Edit"
         input={{
@@ -315,13 +315,12 @@ describe("ToolBlock", () => {
 
     fireEvent.click(screen.getByRole("button"));
 
-    // The preview header shows "src/app.ts" (last 2 segments), expanded shows full path
-    expect(screen.getByText("/home/user/src/app.ts")).toBeTruthy();
-    // Check diff sections
-    expect(screen.getByText("removed")).toBeTruthy();
-    expect(screen.getByText("added")).toBeTruthy();
-    expect(screen.getByText("const x = 1;")).toBeTruthy();
-    expect(screen.getByText("const x = 2;")).toBeTruthy();
+    // DiffViewer splits path: directory in muted span, filename in bold span
+    expect(screen.getByText("/home/user/src/")).toBeTruthy();
+    expect(screen.getByText("app.ts")).toBeTruthy();
+    // DiffViewer renders del/add lines with CSS classes
+    expect(container.querySelector(".diff-line-del")).toBeTruthy();
+    expect(container.querySelector(".diff-line-add")).toBeTruthy();
   });
 
   it("renders Read file path when expanded", () => {

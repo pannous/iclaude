@@ -94,8 +94,8 @@ describe("BashDisplay", () => {
 // ─── EditDisplay ─────────────────────────────────────────────────────────────
 
 describe("EditDisplay", () => {
-  it("renders old/new strings with added/removed labels", () => {
-    render(
+  it("renders old/new strings as unified diff via DiffViewer", () => {
+    const { container } = render(
       <PermissionBanner
         permission={makePermission({
           tool_name: "Edit",
@@ -108,19 +108,20 @@ describe("EditDisplay", () => {
         sessionId="s1"
       />,
     );
-    expect(screen.getByText("/src/main.ts")).toBeTruthy();
-    expect(screen.getByText("removed")).toBeTruthy();
-    expect(screen.getByText("added")).toBeTruthy();
-    expect(screen.getByText("const a = 1;")).toBeTruthy();
-    expect(screen.getByText("const a = 2;")).toBeTruthy();
+    // DiffViewer splits path: directory in muted span, filename in bold span
+    expect(screen.getByText("/src/")).toBeTruthy();
+    expect(screen.getByText("main.ts")).toBeTruthy();
+    // DiffViewer renders del/add lines with CSS classes and +/- markers
+    expect(container.querySelector(".diff-line-del")).toBeTruthy();
+    expect(container.querySelector(".diff-line-add")).toBeTruthy();
   });
 });
 
 // ─── WriteDisplay ────────────────────────────────────────────────────────────
 
 describe("WriteDisplay", () => {
-  it("renders file path and content preview", () => {
-    render(
+  it("renders file path and content via DiffViewer", () => {
+    const { container } = render(
       <PermissionBanner
         permission={makePermission({
           tool_name: "Write",
@@ -132,13 +133,16 @@ describe("WriteDisplay", () => {
         sessionId="s1"
       />,
     );
-    expect(screen.getByText("/src/output.ts")).toBeTruthy();
-    expect(screen.getByText("export default 42;")).toBeTruthy();
+    // DiffViewer splits path: directory in muted span, filename in bold span
+    expect(screen.getByText("/src/")).toBeTruthy();
+    expect(screen.getByText("output.ts")).toBeTruthy();
+    // Content rendered as all-add lines in DiffViewer
+    expect(container.querySelector(".diff-line-add")).toBeTruthy();
   });
 
-  it("truncates content longer than 500 characters", () => {
+  it("renders long content as diff (DiffViewer handles full content)", () => {
     const longContent = "x".repeat(600);
-    render(
+    const { container } = render(
       <PermissionBanner
         permission={makePermission({
           tool_name: "Write",
@@ -150,9 +154,9 @@ describe("WriteDisplay", () => {
         sessionId="s1"
       />,
     );
-    // The displayed content should be truncated (500 chars + "...")
-    const pre = screen.getByText(/^x+\.\.\.$/);
-    expect(pre.textContent).toBe("x".repeat(500) + "...");
+    // DiffViewer renders the content as add lines (no truncation)
+    const addLines = container.querySelectorAll(".diff-line-add");
+    expect(addLines.length).toBeGreaterThan(0);
   });
 });
 

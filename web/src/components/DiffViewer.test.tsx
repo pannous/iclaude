@@ -34,7 +34,9 @@ index 1234567..abcdefg 100644
     expect(container.querySelector(".diff-viewer")).toBeTruthy();
     expect(container.querySelector(".diff-line-del")).toBeTruthy();
     expect(container.querySelector(".diff-line-add")).toBeTruthy();
-    expect(screen.getByText("src/utils.ts")).toBeTruthy();
+    // FileHeader splits the path: "src/" in muted span, "utils.ts" in bold span
+    expect(screen.getByText("src/")).toBeTruthy();
+    expect(screen.getByText("utils.ts")).toBeTruthy();
   });
 
   it("renders compact mode without line numbers", () => {
