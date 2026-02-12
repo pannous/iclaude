@@ -170,6 +170,7 @@ export function createRoutes(
         backendType: backend,
         worktreeInfo,
         resumeSessionId: body.resumeSessionId,
+        prewarm: body.prewarm === true,
       });
 
       // If resuming, initialize the WsBridge session with message history from the CLI's session file
@@ -197,8 +198,15 @@ export function createRoutes(
     }
   });
 
+  api.post("/sessions/:id/adopt", (c) => {
+    const id = c.req.param("id");
+    const adopted = launcher.adoptPrewarm(id);
+    if (!adopted) return c.json({ error: "Session not found or not a prewarm session" }, 404);
+    return c.json({ ok: true });
+  });
+
   api.get("/sessions", (c) => {
-    const sessions = launcher.listSessions();
+    const sessions = launcher.listSessions().filter(s => !s.prewarm);
     const names = sessionNames.getAllNames();
     const bridgeStates = wsBridge.getAllSessions();
     const bridgeMap = new Map(bridgeStates.map((s) => [s.session_id, s]));

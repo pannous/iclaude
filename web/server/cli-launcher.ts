@@ -46,6 +46,8 @@ export interface SdkSessionInfo {
   codexInternetAccess?: boolean;
   /** Sandbox mode selected for Codex sessions */
   codexSandbox?: "workspace-write" | "danger-full-access";
+  /** Pre-warmed standby session, hidden from session lists until adopted */
+  prewarm?: boolean;
 }
 
 export interface LaunchOptions {
@@ -63,6 +65,8 @@ export interface LaunchOptions {
   codexSandbox?: "workspace-write" | "danger-full-access";
   /** Whether Codex internet/web search should be enabled for this session. */
   codexInternetAccess?: boolean;
+  /** Pre-warmed standby session (hidden from lists until adopted) */
+  prewarm?: boolean;
   /** Pre-resolved worktree info from the session creation flow */
   worktreeInfo?: {
     isWorktree: boolean;
@@ -184,6 +188,10 @@ export class CliLauncher {
     // Pre-set cliSessionId so subsequent relaunches use --resume
     if (options.resumeSessionId) {
       info.cliSessionId = options.resumeSessionId;
+    }
+
+    if (options.prewarm) {
+      info.prewarm = true;
     }
 
     if (backendType === "codex") {
@@ -580,6 +588,17 @@ ${MARKER_END}`;
   isAlive(sessionId: string): boolean {
     const session = this.sessions.get(sessionId);
     return !!session && session.state !== "exited";
+  }
+
+  /**
+   * Adopt a pre-warmed session: clear the prewarm flag so it appears in listings.
+   */
+  adoptPrewarm(sessionId: string): boolean {
+    const info = this.sessions.get(sessionId);
+    if (!info?.prewarm) return false;
+    info.prewarm = false;
+    this.persistState();
+    return true;
   }
 
   /**
