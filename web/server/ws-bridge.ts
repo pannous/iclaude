@@ -276,8 +276,12 @@ export class WsBridge {
 
       const content = readFileSync(sessionFile, "utf-8");
       const lines = content.split("\n").filter(l => l.trim());
-      const messages: BrowserIncomingMessage[] = [];
-      const seenIds = new Set<string>();
+
+      // Assistant messages arrive as streaming chunks with the same ID.
+      // Collect all chunks per message ID and merge their content.
+      const assistantChunks = new Map<string, { chunks: any[]; timestamp: number; firstSeen: number }>();
+      const allMessages: Array<{ type: "user" | "assistant"; data: any; order: number }> = [];
+      let order = 0;
 
       for (const line of lines) {
         try {
@@ -299,35 +303,88 @@ export class WsBridge {
               continue;
             }
 
-            messages.push({
-              type: "user_message",
-              content: textContent,
-              timestamp: new Date(entry.timestamp).getTime(),
+            allMessages.push({
+              type: "user",
+              order: order++,
+              data: {
+                content: textContent,
+                timestamp: new Date(entry.timestamp).getTime(),
+              },
             });
           } else if (entry.type === "assistant" && entry.message) {
             const msg = entry.message;
             const id = msg.id || `cli-${entry.uuid}`;
-            if (seenIds.has(id)) continue;
-            seenIds.add(id);
-            messages.push({
-              type: "assistant",
-              message: {
-                id,
-                type: "message",
-                role: "assistant",
-                content: msg.content || [],
-                model: msg.model,
-                stop_reason: msg.stop_reason,
-                usage: msg.usage,
-              },
-              parent_tool_use_id: null,
-            });
+            const timestamp = new Date(entry.timestamp).getTime();
+
+            if (!assistantChunks.has(id)) {
+              assistantChunks.set(id, { chunks: [], timestamp, firstSeen: order++ });
+            }
+            assistantChunks.get(id)!.chunks.push(msg);
           }
         } catch (e) {
           // Skip invalid lines
           console.warn(`[ws-bridge] Failed to parse CLI history line:`, e);
         }
       }
+
+      // Merge assistant chunks
+      for (const [id, data] of assistantChunks.entries()) {
+        const mergedContent: any[] = [];
+        let model: string | undefined;
+        let stop_reason: string | null = null;
+        let usage: any;
+
+        // Merge content from all chunks
+        for (const chunk of data.chunks) {
+          if (Array.isArray(chunk.content)) {
+            mergedContent.push(...chunk.content);
+          }
+          // Use metadata from last chunk (most complete)
+          model = chunk.model || model;
+          stop_reason = chunk.stop_reason ?? stop_reason;
+          usage = chunk.usage || usage;
+        }
+
+        allMessages.push({
+          type: "assistant",
+          order: data.firstSeen,
+          data: {
+            id,
+            content: mergedContent,
+            model,
+            stop_reason,
+            usage,
+            timestamp: data.timestamp,
+          },
+        });
+      }
+
+      // Sort by order and build final message list
+      allMessages.sort((a, b) => a.order - b.order);
+      const messages: BrowserIncomingMessage[] = allMessages.map((m) => {
+        if (m.type === "user") {
+          return {
+            type: "user_message",
+            content: m.data.content,
+            timestamp: m.data.timestamp,
+          };
+        } else {
+          return {
+            type: "assistant",
+            message: {
+              id: m.data.id,
+              type: "message",
+              role: "assistant",
+              content: m.data.content,
+              model: m.data.model,
+              stop_reason: m.data.stop_reason,
+              usage: m.data.usage,
+            },
+            parent_tool_use_id: null,
+            timestamp: m.data.timestamp,
+          };
+        }
+      });
 
       return messages;
     } catch (error) {
