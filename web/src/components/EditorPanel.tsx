@@ -1,13 +1,8 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import CodeMirror from "@uiw/react-codemirror";
+import { type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { javascript } from "@codemirror/lang-javascript";
-import { python } from "@codemirror/lang-python";
-import { json } from "@codemirror/lang-json";
-import { html } from "@codemirror/lang-html";
-import { css } from "@codemirror/lang-css";
-import { markdown } from "@codemirror/lang-markdown";
 import { useStore } from "../store.js";
 import { api, type TreeNode } from "../api.js";
 
@@ -36,32 +31,32 @@ const warmTheme = EditorView.theme({
   },
 });
 
-function getLanguageExtension(filename: string) {
+async function loadLanguageExtension(filename: string): Promise<Extension | undefined> {
   const ext = filename.split(".").pop()?.toLowerCase();
   switch (ext) {
     case "js":
     case "jsx":
     case "mjs":
-      return javascript({ jsx: true });
+      return (await import("@codemirror/lang-javascript")).javascript({ jsx: true });
     case "ts":
     case "tsx":
     case "mts":
-      return javascript({ jsx: true, typescript: true });
+      return (await import("@codemirror/lang-javascript")).javascript({ jsx: true, typescript: true });
     case "json":
-      return json();
+      return (await import("@codemirror/lang-json")).json();
     case "py":
-      return python();
+      return (await import("@codemirror/lang-python")).python();
     case "html":
     case "htm":
     case "svelte":
     case "vue":
-      return html();
+      return (await import("@codemirror/lang-html")).html();
     case "css":
     case "scss":
-      return css();
+      return (await import("@codemirror/lang-css")).css();
     case "md":
     case "mdx":
-      return markdown();
+      return (await import("@codemirror/lang-markdown")).markdown();
     default:
       return undefined;
   }
@@ -293,15 +288,24 @@ export function EditorPanel({ sessionId }: { sessionId: string }) {
 
   const fileName = openFilePath?.split("/").pop() ?? null;
 
+  const [langExtension, setLangExtension] = useState<Extension | undefined>();
+
+  useEffect(() => {
+    setLangExtension(undefined);
+    if (!fileName) return;
+    let cancelled = false;
+    loadLanguageExtension(fileName).then((ext) => {
+      if (!cancelled) setLangExtension(ext);
+    });
+    return () => { cancelled = true; };
+  }, [fileName]);
+
   const extensions = useMemo(() => {
-    const exts = [warmTheme];
+    const exts: Extension[] = [warmTheme];
     if (darkMode) exts.push(oneDark);
-    if (fileName) {
-      const lang = getLanguageExtension(fileName);
-      if (lang) exts.push(lang);
-    }
+    if (langExtension) exts.push(langExtension);
     return exts;
-  }, [fileName, darkMode]);
+  }, [langExtension, darkMode]);
 
   if (!cwd) {
     return (

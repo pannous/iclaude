@@ -205,10 +205,11 @@ describe("Composer plan mode toggle", () => {
 
     fireEvent.keyDown(textarea, { key: "Tab", shiftKey: true });
 
-    // Should call sendToSession to set plan mode
+    // Cycles: bypassPermissions -> plan -> dontAsk
+    // Current mode is "acceptEdits" (not in cycle), so next is index 0 = "bypassPermissions"
     expect(mockSendToSession).toHaveBeenCalledWith("s1", {
       type: "set_permission_mode",
-      mode: "plan",
+      mode: "bypassPermissions",
     });
   });
 });

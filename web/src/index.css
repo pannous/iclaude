@@ -121,6 +121,16 @@
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
+/* Touch devices: always show action buttons since there's no hover */
+@media (pointer: coarse) {
+  .group .opacity-0.group-hover\:opacity-100 {
+    opacity: 0.7;
+  }
+  .group .group-hover\:opacity-0 {
+    opacity: 0;
+  }
+}
+
 /* Eliminate 300ms tap delay on interactive elements */
 button,
 [role="button"],

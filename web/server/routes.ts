@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import { execSync } from "node:child_process";
-import { readdir, readFile, writeFile, stat } from "node:fs/promises";
-import { resolve, join, dirname } from "node:path";
+import { readdir, stat, realpath, readFile, writeFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { createInterface } from "node:readline";
+import { resolve, join, sep, dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readFileSync } from "node:fs";
 import type { CliLauncher } from "./cli-launcher.js";
-import type { WsBridge } from "./ws-bridge.js";
+import { WsBridge } from "./ws-bridge.js";
 import type { SessionStore } from "./session-store.js";
 import type { WorktreeTracker } from "./worktree-tracker.js";
 import * as envManager from "./env-manager.js";
@@ -31,9 +33,44 @@ export function createRoutes(
         return c.json({ error: `Invalid backend: ${String(backend)}` }, 400);
       }
 
+      // Validate model (if provided)
+      if (body.model !== undefined) {
+        if (typeof body.model !== "string" || body.model.length === 0 || body.model.length > 100) {
+          return c.json({ error: "Invalid model parameter" }, 400);
+        }
+      }
+
+      // Validate permissionMode (if provided)
+      if (body.permissionMode !== undefined) {
+        const validModes = ["bypass", "bypassPermissions", "acceptEdits", "delegate", "dontAsk", "default", "plan"];
+        if (typeof body.permissionMode !== "string" || !validModes.includes(body.permissionMode)) {
+          return c.json({ error: "Invalid permissionMode parameter" }, 400);
+        }
+      }
+
+      // Validate claudeBinary (if provided)
+      if (body.claudeBinary !== undefined) {
+        if (typeof body.claudeBinary !== "string" || !/^[a-zA-Z0-9_\-\/\.]+$/.test(body.claudeBinary)) {
+          return c.json({ error: "Invalid claudeBinary parameter" }, 400);
+        }
+      }
+
+      // Validate allowedTools (if provided)
+      if (body.allowedTools !== undefined) {
+        if (!Array.isArray(body.allowedTools)) {
+          return c.json({ error: "allowedTools must be an array" }, 400);
+        }
+        if (!body.allowedTools.every((t: unknown) => typeof t === "string" && t.length > 0 && t.length < 100)) {
+          return c.json({ error: "Invalid allowedTools array" }, 400);
+        }
+      }
+
       // Resolve environment variables from envSlug
       let envVars: Record<string, string> | undefined = body.env;
       if (body.envSlug) {
+        if (typeof body.envSlug !== "string" || body.envSlug.length === 0) {
+          return c.json({ error: "Invalid envSlug parameter" }, 400);
+        }
         const companionEnv = envManager.getEnv(body.envSlug);
         if (companionEnv) {
           console.log(
@@ -48,7 +85,21 @@ export function createRoutes(
         }
       }
 
+      // Validate cwd and apply path traversal protection
       let cwd = body.cwd;
+      if (cwd !== undefined) {
+        if (typeof cwd !== "string" || cwd.length === 0) {
+          return c.json({ error: "Invalid cwd parameter" }, 400);
+        }
+        // Security: Ensure cwd is within home directory
+        const resolvedCwd = resolve(cwd);
+        const allowedBase = homedir();
+        if (!resolvedCwd.startsWith(allowedBase + sep) && resolvedCwd !== allowedBase) {
+          return c.json({ error: "cwd must be within home directory" }, 403);
+        }
+        cwd = resolvedCwd;
+      }
+
       let worktreeInfo:
         | {
             isWorktree: boolean;
@@ -61,6 +112,9 @@ export function createRoutes(
 
       // If worktree is requested, set up a worktree for the selected branch
       if (body.useWorktree && body.branch && cwd) {
+        if (typeof body.branch !== "string" || body.branch.length === 0 || body.branch.length > 200) {
+          return c.json({ error: "Invalid branch parameter" }, 400);
+        }
         const repoInfo = gitUtils.getRepoInfo(cwd);
         if (repoInfo) {
           const result = gitUtils.ensureWorktree(
@@ -115,7 +169,13 @@ export function createRoutes(
         env: envVars,
         backendType: backend,
         worktreeInfo,
+        resumeSessionId: body.resumeSessionId,
       });
+
+      // If resuming, initialize the WsBridge session with message history from the CLI's session file
+      if (body.resumeSessionId) {
+        wsBridge.initializeResumedSession(session.sessionId, body.resumeSessionId, cwd);
+      }
 
       // Track the worktree mapping
       if (worktreeInfo) {
@@ -155,6 +215,55 @@ export function createRoutes(
       };
     });
     return c.json(enriched);
+  });
+
+  api.post("/sessions/cleanup", (c) => {
+    launcher.cleanupOldSessions();
+    wsBridge.cleanupOldSessions();
+    return c.json({ success: true });
+  });
+
+  api.get("/sessions/resumable", async (c) => {
+    try {
+      const projectsDir = join(homedir(), ".claude", "projects");
+      const projEntries = await readdir(projectsDir, { withFileTypes: true }).catch(() => []);
+
+      const candidates: { sessionId: string; project: string; mtime: number; filePath: string }[] = [];
+
+      for (const entry of projEntries) {
+        if (!entry.isDirectory()) continue;
+        const projPath = join(projectsDir, entry.name);
+        const project = "/" + entry.name.replace(/^-/, "").replace(/-/g, "/");
+        const files = await readdir(projPath).catch(() => []);
+        for (const file of files) {
+          if (!file.endsWith(".jsonl")) continue;
+          const sessionId = file.replace(".jsonl", "");
+          const filePath = join(projPath, file);
+          try {
+            const s = await stat(filePath);
+            candidates.push({ sessionId, project, mtime: s.mtime.getTime(), filePath });
+          } catch { /* skip */ }
+        }
+      }
+
+      candidates.sort((a, b) => b.mtime - a.mtime);
+      const top = candidates.slice(0, 20);
+
+      const results = await Promise.all(top.map(async (item) => {
+        const title = await extractSessionTitle(item.filePath);
+        return {
+          sessionId: item.sessionId,
+          project: item.project,
+          lastModified: item.mtime,
+          title,
+        };
+      }));
+
+      return c.json(results);
+    } catch (e: unknown) {
+      console.error("[routes] Failed to list resumable sessions:", e);
+      return c.json([], 500);
+    }
   });
 
   api.get("/sessions/:id", (c) => {
@@ -224,6 +333,17 @@ export function createRoutes(
     return c.json({ ok: true });
   });
 
+  api.post("/sessions/:id/title", async (c) => {
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    if (!body.title || typeof body.title !== "string") {
+      return c.json({ error: "Missing or invalid title" }, 400);
+    }
+    launcher.setTitle(id, body.title);
+    wsBridge.setTitle(id, body.title);
+    return c.json({ ok: true });
+  });
+
   // ─── Available backends ─────────────────────────────────────
 
   api.get("/backends", (c) => {
@@ -287,31 +407,81 @@ export function createRoutes(
     return c.json({ error: "Use frontend defaults for this backend" }, 404);
   });
 
+  // ─── Serve local images for ResultScanner ─────────────────────
+
+  const IMAGE_EXTENSIONS = new Set([
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico",
+    ".heic", ".avif", ".tif", ".tiff",
+  ]);
+  const MIME_MAP: Record<string, string> = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+    ".bmp": "image/bmp", ".ico": "image/x-icon", ".heic": "image/heic",
+    ".avif": "image/avif", ".tif": "image/tiff", ".tiff": "image/tiff",
+  };
+
+  api.get("/fs/image", async (c) => {
+    const rawPath = c.req.query("path");
+    if (!rawPath) return c.json({ error: "path required" }, 400);
+
+    const resolved = resolve(rawPath.replace(/^~\//, homedir() + "/"));
+    const allowedBase = homedir();
+    if (!resolved.startsWith(allowedBase + sep) && resolved !== allowedBase) {
+      return c.json({ error: "Access denied" }, 403);
+    }
+
+    const ext = "." + resolved.split(".").pop()!.toLowerCase();
+    if (!IMAGE_EXTENSIONS.has(ext)) {
+      return c.json({ error: "Not an image file" }, 400);
+    }
+
+    try {
+      const data = await readFile(resolved);
+      return new Response(data, {
+        headers: {
+          "Content-Type": MIME_MAP[ext] || "application/octet-stream",
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
+    } catch {
+      return c.json({ error: "File not found" }, 404);
+    }
+  });
+
   // ─── Filesystem browsing ─────────────────────────────────────
 
   api.get("/fs/list", async (c) => {
     const rawPath = c.req.query("path") || homedir();
     const basePath = resolve(rawPath);
+
     try {
-      const entries = await readdir(basePath, { withFileTypes: true });
+      // Security: Validate the path is within safe boundaries
+      // Resolve to real path to prevent symlink attacks
+      const realPath = await realpath(basePath).catch(() => basePath);
+
+      // Only allow access to user's home directory and subdirectories
+      const allowedBase = homedir();
+      if (!realPath.startsWith(allowedBase + sep) && realPath !== allowedBase) {
+        return c.json({
+          error: "Access denied: Path must be within home directory",
+          path: basePath,
+          dirs: [],
+          home: homedir()
+        }, 403);
+      }
+
+      const entries = await readdir(realPath, { withFileTypes: true });
       const dirs: { name: string; path: string }[] = [];
       for (const entry of entries) {
         if (entry.isDirectory() && !entry.name.startsWith(".")) {
-          dirs.push({ name: entry.name, path: join(basePath, entry.name) });
+          dirs.push({ name: entry.name, path: join(realPath, entry.name) });
         }
       }
       dirs.sort((a, b) => a.name.localeCompare(b.name));
-      return c.json({ path: basePath, dirs, home: homedir() });
-    } catch {
-      return c.json(
-        {
-          error: "Cannot read directory",
-          path: basePath,
-          dirs: [],
-          home: homedir(),
-        },
-        400,
-      );
+      return c.json({ path: realPath, dirs, home: homedir() });
+    } catch (err) {
+      console.error("[routes] fs/list error:", err);
+      return c.json({ error: "Cannot read directory", path: basePath, dirs: [], home: homedir() }, 400);
     }
   });
 
@@ -325,6 +495,43 @@ export function createRoutes(
       cwd !== home &&
       (!packageRoot || !cwd.startsWith(packageRoot));
     return c.json({ home, cwd: isProjectDir ? cwd : home });
+  });
+
+  api.get("/fs/recent-projects", async (c) => {
+    try {
+      const claudeProjectsDir = join(homedir(), ".claude", "projects");
+      const entries = await readdir(claudeProjectsDir, { withFileTypes: true }).catch(() => []);
+
+      const projects: { path: string; lastUsed: number }[] = [];
+
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+
+        // Convert directory name to path: -Users-me-dev-apps -> /Users/me/dev/apps
+        const dirName = entry.name;
+        const path = dirName.replace(/^-/, "/").replace(/-/g, "/");
+
+        // Get directory mtime as a proxy for last used
+        try {
+          const stats = await stat(join(claudeProjectsDir, entry.name));
+          projects.push({ path, lastUsed: stats.mtime.getTime() });
+        } catch {
+          // Skip if we can't stat
+        }
+      }
+
+      // Sort by most recent first and take top 20
+      projects.sort((a, b) => b.lastUsed - a.lastUsed);
+      const recentProjects = projects.slice(0, 20).map(p => p.path);
+
+      // Filter out duplicates and the home directory
+      const uniquePaths = Array.from(new Set(recentProjects)).filter(p => p !== homedir());
+
+      return c.json({ projects: uniquePaths });
+    } catch (e: unknown) {
+      console.error("[routes] Failed to fetch recent projects:", e);
+      return c.json({ projects: [] });
+    }
   });
 
   // ─── Editor filesystem APIs ─────────────────────────────────────
@@ -602,6 +809,50 @@ export function createRoutes(
     return c.json(limits);
   });
 
+  // ─── Command Execution (for HTML fragments in YOLO mode) ─────────────
+
+  api.post("/exec", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const { command, cwd } = body;
+
+    if (!command || typeof command !== "string") {
+      return c.json({ error: "command required" }, 400);
+    }
+
+    // Security: Validate cwd if provided
+    let workingDir = homedir();
+    if (cwd) {
+      if (typeof cwd !== "string") {
+        return c.json({ error: "Invalid cwd" }, 400);
+      }
+      const resolvedCwd = resolve(cwd);
+      const allowedBase = homedir();
+      if (!resolvedCwd.startsWith(allowedBase + sep) && resolvedCwd !== allowedBase) {
+        return c.json({ error: "cwd must be within home directory" }, 403);
+      }
+      workingDir = resolvedCwd;
+    }
+
+    try {
+      const output = execSync(command, {
+        cwd: workingDir,
+        encoding: "utf-8",
+        timeout: 30000, // 30s timeout
+        maxBuffer: 1024 * 1024, // 1MB max output
+      });
+      return c.json({ success: true, output: output.trim() });
+    } catch (err: unknown) {
+      const error = err as { status?: number; stderr?: string; stdout?: string; message?: string };
+      return c.json({
+        success: false,
+        error: error.message || "Command failed",
+        exitCode: error.status,
+        stderr: error.stderr,
+        stdout: error.stdout,
+      }, 500);
+    }
+  });
+
   // ─── Helper ─────────────────────────────────────────────────────────
 
   function cleanupWorktree(
@@ -648,4 +899,44 @@ export function createRoutes(
   }
 
   return api;
+}
+
+/** Read first user message from a session JSONL as a title. */
+async function extractSessionTitle(filePath: string): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: createReadStream(filePath), crlfDelay: Infinity });
+    let found = false;
+    rl.on("line", (line) => {
+      if (found) return;
+      try {
+        const data = JSON.parse(line);
+        if (data.type === "summary") {
+          found = true;
+          rl.close();
+          resolve(data.summary?.slice(0, 120) || "");
+          return;
+        }
+        if (data.type !== "user") return;
+        const msg = data.message;
+        if (!msg) return;
+        const content = msg.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block?.type === "text" && block.text) {
+              found = true;
+              rl.close();
+              resolve(block.text.slice(0, 120));
+              return;
+            }
+          }
+        } else if (typeof content === "string") {
+          found = true;
+          rl.close();
+          resolve(content.slice(0, 120));
+        }
+      } catch { /* skip malformed lines */ }
+    });
+    rl.on("close", () => { if (!found) resolve(""); });
+    rl.on("error", () => resolve(""));
+  });
 }

@@ -1,7 +1,9 @@
 import type { ServerWebSocket } from "bun";
 import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process";
-import { resolve } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { homedir } from "node:os";
 import type {
   CLIMessage,
   CLISystemInitMessage,
@@ -21,6 +23,19 @@ import type {
 } from "./session-types.js";
 import type { SessionStore } from "./session-store.js";
 import type { CodexAdapter } from "./codex-adapter.js";
+
+/** Truncate a message to use as a session title (max ~50 chars at word boundary). */
+function truncateTitle(message: string): string {
+  const cleaned = message.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= 50) return cleaned;
+  const words = cleaned.split(" ");
+  let title = "";
+  for (const word of words) {
+    if ((title + " " + word).length > 47) break;
+    title += (title ? " " : "") + word;
+  }
+  return title + "...";
+}
 
 // ─── WebSocket data tags ──────────────────────────────────────────────────────
 
@@ -49,6 +64,12 @@ interface Session {
   messageHistory: BrowserIncomingMessage[];
   /** Messages queued while waiting for CLI to connect */
   pendingMessages: string[];
+  /** CLI's internal session ID (for resuming) */
+  cliSessionId?: string;
+  /** Auto-generated or user-set title */
+  title?: string;
+  /** Timestamp when session was created */
+  createdAt?: number;
 }
 
 function makeDefaultState(sessionId: string, backendType: BackendType = "claude"): SessionState {
@@ -133,6 +154,7 @@ export class WsBridge {
   private store: SessionStore | null = null;
   private onCLISessionId: ((sessionId: string, cliSessionId: string) => void) | null = null;
   private onCLIRelaunchNeeded: ((sessionId: string) => void) | null = null;
+  private onTitleGenerated: ((sessionId: string, title: string) => void) | null = null;
   private onFirstTurnCompleted: ((sessionId: string, firstUserMessage: string) => void) | null = null;
   private autoNamingAttempted = new Set<string>();
   private userMsgCounter = 0;
@@ -140,6 +162,11 @@ export class WsBridge {
   /** Register a callback for when we learn the CLI's internal session ID. */
   onCLISessionIdReceived(cb: (sessionId: string, cliSessionId: string) => void): void {
     this.onCLISessionId = cb;
+  }
+
+  /** Register a callback for when a title is auto-generated from the first user message. */
+  onTitleGeneratedCallback(cb: (sessionId: string, title: string) => void): void {
+    this.onTitleGenerated = cb;
   }
 
   /** Register a callback for when a browser connects but CLI is dead. */
@@ -174,6 +201,9 @@ export class WsBridge {
         pendingPermissions: new Map(p.pendingPermissions || []),
         messageHistory: p.messageHistory || [],
         pendingMessages: p.pendingMessages || [],
+        cliSessionId: p.cliSessionId,
+        title: p.title,
+        createdAt: p.createdAt,
       };
       session.state.backend_type = session.backendType;
       // Resolve git info for restored sessions (may have been persisted without it)
@@ -191,6 +221,26 @@ export class WsBridge {
     return count;
   }
 
+  /**
+   * Remove all disconnected sessions. Manually triggered, so cleans everything.
+   */
+  cleanupOldSessions(): void {
+    if (!this.store) return;
+
+    let removed = 0;
+    for (const session of this.sessions.values()) {
+      if (!session.cliSocket && session.browserSockets.size === 0) {
+        this.sessions.delete(session.id);
+        this.store.remove(session.id);
+        removed++;
+      }
+    }
+
+    if (removed > 0) {
+      console.log(`[ws-bridge] Cleaned up ${removed} disconnected session(s) (${this.sessions.size} remaining)`);
+    }
+  }
+
   /** Persist a session to disk (debounced). */
   private persistSession(session: Session): void {
     if (!this.store) return;
@@ -200,12 +250,93 @@ export class WsBridge {
       messageHistory: session.messageHistory,
       pendingMessages: session.pendingMessages,
       pendingPermissions: Array.from(session.pendingPermissions.entries()),
+      cliSessionId: session.cliSessionId,
+      title: session.title,
+      createdAt: session.createdAt,
     });
   }
 
   // ── Session management ──────────────────────────────────────────────────
 
-  getOrCreateSession(sessionId: string, backendType?: BackendType): Session {
+  /**
+   * Load message history from the CLI's session file.
+   * The CLI stores conversation history in ~/.claude/projects/<cwd-hash>/<session-id>.jsonl
+   */
+  private loadCLIHistory(cliSessionId: string, cwd?: string): BrowserIncomingMessage[] {
+    try {
+      // Compute the project directory name (same logic as CLI)
+      const projectDir = cwd ? cwd.replace(/\//g, "-") : "";
+      const projectPath = join(homedir(), ".claude", "projects", projectDir);
+      const sessionFile = join(projectPath, `${cliSessionId}.jsonl`);
+
+      if (!existsSync(sessionFile)) {
+        console.log(`[ws-bridge] CLI session file not found: ${sessionFile}`);
+        return [];
+      }
+
+      const content = readFileSync(sessionFile, "utf-8");
+      const lines = content.split("\n").filter(l => l.trim());
+      const messages: BrowserIncomingMessage[] = [];
+      const seenIds = new Set<string>();
+
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line);
+
+          if (entry.type === "user") {
+            // Extract text content from user message
+            let textContent = "";
+            if (typeof entry.message.content === "string") {
+              textContent = entry.message.content;
+            } else if (Array.isArray(entry.message.content)) {
+              // Extract text from text blocks in the content array
+              const textBlocks = entry.message.content.filter((block: any) => block?.type === "text");
+              textContent = textBlocks.map((block: any) => block.text || "").join("\n").trim();
+            }
+
+            // Skip empty user messages (e.g., messages with only tool_result blocks)
+            if (!textContent) {
+              continue;
+            }
+
+            messages.push({
+              type: "user_message",
+              content: textContent,
+              timestamp: new Date(entry.timestamp).getTime(),
+            });
+          } else if (entry.type === "assistant" && entry.message) {
+            const msg = entry.message;
+            const id = msg.id || `cli-${entry.uuid}`;
+            if (seenIds.has(id)) continue;
+            seenIds.add(id);
+            messages.push({
+              type: "assistant",
+              message: {
+                id,
+                type: "message",
+                role: "assistant",
+                content: msg.content || [],
+                model: msg.model,
+                stop_reason: msg.stop_reason,
+                usage: msg.usage,
+              },
+              parent_tool_use_id: null,
+            });
+          }
+        } catch (e) {
+          // Skip invalid lines
+          console.warn(`[ws-bridge] Failed to parse CLI history line:`, e);
+        }
+      }
+
+      return messages;
+    } catch (error) {
+      console.error(`[ws-bridge] Failed to load CLI history for session ${cliSessionId}:`, error);
+      return [];
+    }
+  }
+
+  getOrCreateSession(sessionId: string, backendType?: BackendType, opts?: { resumeCliSessionId?: string; cwd?: string }): Session {
     let session = this.sessions.get(sessionId);
     if (!session) {
       const type = backendType || "claude";
@@ -219,7 +350,18 @@ export class WsBridge {
         pendingPermissions: new Map(),
         messageHistory: [],
         pendingMessages: [],
+        createdAt: Date.now(),
       };
+
+      // If resuming, try to load message history from the CLI's session file
+      if (opts?.resumeCliSessionId) {
+        const cliHistory = this.loadCLIHistory(opts.resumeCliSessionId, opts.cwd);
+        if (cliHistory.length > 0) {
+          console.log(`[ws-bridge] Resuming session ${sessionId} from CLI session ${opts.resumeCliSessionId}, loading ${cliHistory.length} message(s) from CLI history`);
+          session.messageHistory = cliHistory;
+        }
+      }
+
       this.sessions.set(sessionId, session);
     } else if (backendType) {
       // Only overwrite backendType when explicitly provided (e.g. attachCodexAdapter)
@@ -252,10 +394,28 @@ export class WsBridge {
     return !!session.cliSocket;
   }
 
+  /** Set the title for a session, persist it, and notify browsers. */
+  setTitle(sessionId: string, title: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.title = title;
+      this.persistSession(session);
+      this.broadcastToBrowsers(session, { type: "title_updated", title });
+    }
+  }
+
   removeSession(sessionId: string) {
     this.sessions.delete(sessionId);
     this.autoNamingAttempted.delete(sessionId);
     this.store?.remove(sessionId);
+  }
+
+  /**
+   * Initialize a session that will resume from a CLI session.
+   * Loads message history from the CLI's session file.
+   */
+  initializeResumedSession(sessionId: string, resumeCliSessionId: string, cwd?: string): void {
+    this.getOrCreateSession(sessionId, "claude", { resumeCliSessionId, cwd });
   }
 
   /**
@@ -575,8 +735,11 @@ export class WsBridge {
       // from the launcher UUID, causing duplicate entries in the sidebar.
 
       // Store the CLI's internal session_id so we can --resume on relaunch
-      if (msg.session_id && this.onCLISessionId) {
-        this.onCLISessionId(session.id, msg.session_id);
+      if (msg.session_id) {
+        session.cliSessionId = msg.session_id;
+        if (this.onCLISessionId) {
+          this.onCLISessionId(session.id, msg.session_id);
+        }
       }
 
       session.state.model = msg.model;
@@ -619,12 +782,25 @@ export class WsBridge {
       parent_tool_use_id: msg.parent_tool_use_id,
       timestamp: Date.now(),
     };
+    // Deduplicate: skip if this message ID is already in history (e.g. from resume replay)
+    const msgId = msg.message?.id;
+    if (msgId && session.messageHistory.some(
+      m => m.type === "assistant" && (m as any).message?.id === msgId
+    )) {
+      return;
+    }
     session.messageHistory.push(browserMsg);
     this.broadcastToBrowsers(session, browserMsg);
     this.persistSession(session);
   }
 
   private handleResultMessage(session: Session, msg: CLIResultMessage) {
+    // Broadcast CLI result summary as subtitle (shown below the title in TopBar)
+    if (msg.result) {
+      const subtitle = truncateTitle(msg.result);
+      this.broadcastToBrowsers(session, { type: "subtitle_updated", subtitle });
+    }
+
     // Update session cost/turns
     session.state.total_cost_usd = msg.total_cost_usd;
     session.state.num_turns = msg.num_turns;
@@ -784,7 +960,7 @@ export class WsBridge {
     // Claude Code path (existing logic)
     switch (msg.type) {
       case "user_message":
-        this.handleUserMessage(session, msg);
+        void this.handleUserMessage(session, msg);
         break;
 
       case "permission_response":
@@ -805,10 +981,14 @@ export class WsBridge {
     }
   }
 
-  private handleUserMessage(
+  private async handleUserMessage(
     session: Session,
     msg: { type: "user_message"; content: string; session_id?: string; images?: { media_type: string; data: string }[] }
   ) {
+    // Count user messages in history to detect first message
+    const userMessageCount = session.messageHistory.filter(m => m.type === "user_message").length;
+    const isFirstMessage = userMessageCount === 0;
+
     // Store user message in history for replay with stable ID for dedup on reconnect
     const ts = Date.now();
     session.messageHistory.push({
@@ -817,6 +997,12 @@ export class WsBridge {
       timestamp: ts,
       id: `user-${ts}-${this.userMsgCounter++}`,
     });
+
+    // Use the user's first message directly as the initial title
+    if (isFirstMessage && this.onTitleGenerated && msg.content.trim()) {
+      const title = truncateTitle(msg.content);
+      this.onTitleGenerated(session.id, title);
+    }
 
     // Build content: if images are present, use content block array; otherwise plain string
     let content: string | unknown[];

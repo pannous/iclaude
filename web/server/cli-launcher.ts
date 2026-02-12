@@ -19,6 +19,7 @@ export interface SdkSessionInfo {
   /** The CLI's internal session ID (from system.init), used for --resume */
   cliSessionId?: string;
   archived?: boolean;
+  title?: string;
   /** Whether this session uses a git worktree */
   isWorktree?: boolean;
   /** The original repo root path */
@@ -55,6 +56,8 @@ export interface LaunchOptions {
   codexBinary?: string;
   allowedTools?: string[];
   env?: Record<string, string>;
+  /** CLI session ID to resume (from ~/.claude/projects/) */
+  resumeSessionId?: string;
   backendType?: BackendType;
   /** Codex sandbox mode. */
   codexSandbox?: "workspace-write" | "danger-full-access";
@@ -140,6 +143,27 @@ export class CliLauncher {
   }
 
   /**
+   * Remove all exited sessions. Manually triggered, so cleans everything.
+   */
+  cleanupOldSessions(): void {
+    if (!this.store) return;
+
+    let removed = 0;
+    for (const session of this.sessions.values()) {
+      if (session.state === "exited") {
+        this.sessions.delete(session.sessionId);
+        this.store.remove(session.sessionId);
+        removed++;
+      }
+    }
+
+    if (removed > 0) {
+      console.log(`[cli-launcher] Cleaned up ${removed} exited session(s) (${this.sessions.size} remaining)`);
+      this.persistState();
+    }
+  }
+
+  /**
    * Launch a new CLI session (Claude Code or Codex).
    */
   launch(options: LaunchOptions = {}): SdkSessionInfo {
@@ -156,6 +180,11 @@ export class CliLauncher {
       createdAt: Date.now(),
       backendType,
     };
+
+    // Pre-set cliSessionId so subsequent relaunches use --resume
+    if (options.resumeSessionId) {
+      info.cliSessionId = options.resumeSessionId;
+    }
 
     if (backendType === "codex") {
       info.codexInternetAccess = options.codexInternetAccess === true;
@@ -560,6 +589,17 @@ ${MARKER_END}`;
     const info = this.sessions.get(sessionId);
     if (info) {
       info.archived = archived;
+      this.persistState();
+    }
+  }
+
+  /**
+   * Set the title for a session.
+   */
+  setTitle(sessionId: string, title: string): void {
+    const info = this.sessions.get(sessionId);
+    if (info) {
+      info.title = title;
       this.persistState();
     }
   }

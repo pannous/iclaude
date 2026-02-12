@@ -72,7 +72,15 @@ export interface CreateSessionOpts {
   branch?: string;
   createBranch?: boolean;
   useWorktree?: boolean;
+  resumeSessionId?: string;
   backend?: "claude" | "codex";
+}
+
+export interface ResumableSession {
+  sessionId: string;
+  project: string;
+  lastModified: number;
+  title: string;
 }
 
 export interface BackendInfo {
@@ -165,6 +173,9 @@ export const api = {
 
   listSessions: () => get<SdkSessionInfo[]>("/sessions"),
 
+  cleanupSessions: () =>
+    post<{ success: boolean }>("/sessions/cleanup"),
+
   killSession: (sessionId: string) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/kill`),
 
@@ -180,6 +191,12 @@ export const api = {
   unarchiveSession: (sessionId: string) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/unarchive`),
 
+  setSessionTitle: (sessionId: string, title: string) =>
+    post(`/sessions/${encodeURIComponent(sessionId)}/title`, { title }),
+
+  listResumableSessions: () =>
+    get<ResumableSession[]>("/sessions/resumable"),
+
   renameSession: (sessionId: string, name: string) =>
     patch<{ ok: boolean; name: string }>(
       `/sessions/${encodeURIComponent(sessionId)}/name`,
@@ -192,6 +209,9 @@ export const api = {
     ),
 
   getHome: () => get<{ home: string; cwd: string }>("/fs/home"),
+
+  getRecentProjects: () =>
+    get<{ projects: string[] }>("/fs/recent-projects"),
 
   // Environments
   listEnvs: () => get<CompanionEnv[]>("/envs"),

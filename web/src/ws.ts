@@ -1,10 +1,14 @@
 import { useStore } from "./store.js";
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, SdkSessionInfo } from "./types.js";
+import { resultScanner, scanContent } from "./utils/result-scanner.js";
 import { generateUniqueSessionName } from "./utils/names.js";
 import { playNotificationSound } from "./utils/notification-sound.js";
 
 const sockets = new Map<string, WebSocket>();
 const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const reconnectAttempts = new Map<string, number>();
+const MAX_RECONNECT_DELAY = 30_000;
+const BASE_RECONNECT_DELAY = 2_000;
 const taskCounters = new Map<string, number>();
 /** Track processed tool_use IDs to prevent duplicate task creation */
 const processedToolUseIds = new Map<string, Set<string>>();
@@ -95,6 +99,31 @@ function nextId(): string {
   return `msg-${Date.now()}-${++idCounter}`;
 }
 
+function notifySessionDone(sessionId: string, isError: boolean) {
+  const store = useStore.getState();
+  // Only notify for background sessions (not the one the user is looking at)
+  if (store.currentSessionId === sessionId) return;
+  if (!("Notification" in window)) return;
+
+  const name = store.sessionNames.get(sessionId) || sessionId.slice(0, 8);
+  const title = isError ? `Session failed: ${name}` : `Session done: ${name}`;
+  const tasks = store.sessionTasks.get(sessionId) || [];
+  const completedCount = tasks.filter((t) => t.status === "completed").length;
+  const body = tasks.length > 0
+    ? `${completedCount}/${tasks.length} tasks completed`
+    : isError ? "Session ended with an error" : "Session finished successfully";
+
+  if (Notification.permission === "granted") {
+    new Notification(title, { body, tag: `session-done-${sessionId}` });
+  } else if (Notification.permission !== "denied") {
+    Notification.requestPermission().then((perm) => {
+      if (perm === "granted") {
+        new Notification(title, { body, tag: `session-done-${sessionId}` });
+      }
+    });
+  }
+}
+
 function getWsUrl(sessionId: string): string {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${location.host}/ws/browser/${sessionId}`;
@@ -111,6 +140,22 @@ function extractTextFromBlocks(blocks: ContentBlock[]): string {
     .join("\n");
 }
 
+function scanForImagesAndHtml(text: string): {
+  images?: { src: string; original: string }[];
+  html?: { html: string; original: string; preview: string }[];
+} {
+  const scanned = scanContent(text);
+  return {
+    images: scanned.images.length > 0
+      ? scanned.images.map((img) => ({
+          src: resultScanner.toDisplaySrc(img),
+          original: img.original,
+        }))
+      : undefined,
+    html: scanned.html.length > 0 ? scanned.html : undefined,
+  };
+}
+
 function handleMessage(sessionId: string, event: MessageEvent) {
   const store = useStore.getState();
   let data: BrowserIncomingMessage;
@@ -125,11 +170,6 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       store.addSession(data.session);
       store.setCliConnected(sessionId, true);
       store.setSessionStatus(sessionId, "idle");
-      if (!store.sessionNames.has(sessionId)) {
-        const existingNames = new Set(store.sessionNames.values());
-        const name = generateUniqueSessionName(existingNames);
-        store.setSessionName(sessionId, name);
-      }
       break;
     }
 
@@ -140,12 +180,23 @@ function handleMessage(sessionId: string, event: MessageEvent) {
 
     case "assistant": {
       const msg = data.message;
+
+      // Deduplicate: check if message with same ID already exists
+      const existingMessages = store.messages.get(sessionId) || [];
+      if (existingMessages.some((m) => m.id === msg.id)) {
+        console.debug(`[ws] Duplicate assistant message detected (id: ${msg.id}), skipping`);
+        break;
+      }
+
       const textContent = extractTextFromBlocks(msg.content);
+      const scanned = scanForImagesAndHtml(textContent);
       const chatMsg: ChatMessage = {
         id: msg.id,
         role: "assistant",
         content: textContent,
         contentBlocks: msg.content,
+        scannedImages: scanned.images,
+        scannedHtml: scanned.html,
         timestamp: data.timestamp || Date.now(),
         parentToolUseId: data.parent_tool_use_id,
         model: msg.model,
@@ -239,6 +290,8 @@ function handleMessage(sessionId: string, event: MessageEvent) {
           timestamp: Date.now(),
         });
       }
+      // Notify when a background session finishes
+      notifySessionDone(sessionId, r.is_error);
       break;
     }
 
@@ -316,6 +369,19 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       break;
     }
 
+    case "title_updated": {
+      const updated = store.sdkSessions.map((s) =>
+        s.sessionId === sessionId ? { ...s, title: data.title } : s
+      );
+      store.setSdkSessions(updated);
+      break;
+    }
+
+    case "subtitle_updated": {
+      store.setSessionSubtitle(sessionId, data.subtitle);
+      break;
+    }
+
     case "session_name_update": {
       // Only apply auto-name if user hasn't manually renamed (still has random Adj+Noun name)
       const currentName = store.sessionNames.get(sessionId);
@@ -329,6 +395,8 @@ function handleMessage(sessionId: string, event: MessageEvent) {
 
     case "message_history": {
       const chatMessages: ChatMessage[] = [];
+      const seenIds = new Set<string>();
+
       for (let i = 0; i < data.messages.length; i++) {
         const histMsg = data.messages[i];
         if (histMsg.type === "user_message") {
@@ -340,12 +408,23 @@ function handleMessage(sessionId: string, event: MessageEvent) {
           });
         } else if (histMsg.type === "assistant") {
           const msg = histMsg.message;
+
+          // Deduplicate by message ID
+          if (seenIds.has(msg.id)) {
+            console.debug(`[ws] Duplicate message in history (id: ${msg.id}), skipping`);
+            continue;
+          }
+          seenIds.add(msg.id);
+
           const textContent = extractTextFromBlocks(msg.content);
+          const scanned = scanForImagesAndHtml(textContent);
           chatMessages.push({
             id: msg.id,
             role: "assistant",
             content: textContent,
             contentBlocks: msg.content,
+            scannedImages: scanned.images,
+            scannedHtml: scanned.html,
             timestamp: histMsg.timestamp || Date.now(),
             parentToolUseId: histMsg.parent_tool_use_id,
             model: msg.model,
@@ -402,7 +481,7 @@ export function connectSession(sessionId: string) {
 
   ws.onopen = () => {
     useStore.getState().setConnectionStatus(sessionId, "connected");
-    // Clear any reconnect timer
+    reconnectAttempts.delete(sessionId);
     const timer = reconnectTimers.get(sessionId);
     if (timer) {
       clearTimeout(timer);
@@ -425,6 +504,9 @@ export function connectSession(sessionId: string) {
 
 function scheduleReconnect(sessionId: string) {
   if (reconnectTimers.has(sessionId)) return;
+  const attempts = reconnectAttempts.get(sessionId) || 0;
+  const delay = Math.min(BASE_RECONNECT_DELAY * 2 ** attempts, MAX_RECONNECT_DELAY);
+  reconnectAttempts.set(sessionId, attempts + 1);
   const timer = setTimeout(() => {
     reconnectTimers.delete(sessionId);
     const store = useStore.getState();
@@ -433,7 +515,7 @@ function scheduleReconnect(sessionId: string) {
     if (sdkSession && !sdkSession.archived) {
       connectSession(sessionId);
     }
-  }, 2000);
+  }, delay);
   reconnectTimers.set(sessionId, timer);
 }
 
@@ -443,6 +525,7 @@ export function disconnectSession(sessionId: string) {
     clearTimeout(timer);
     reconnectTimers.delete(sessionId);
   }
+  reconnectAttempts.delete(sessionId);
   const ws = sockets.get(sessionId);
   if (ws) {
     ws.close();

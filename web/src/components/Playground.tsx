@@ -298,12 +298,12 @@ export function Playground() {
             <p className="text-xs text-cc-muted mt-0.5">Visual catalog of all UI components</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => { window.location.hash = ""; }}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-cc-hover hover:bg-cc-active text-cc-fg border border-cc-border transition-colors cursor-pointer"
+            <a
+              href="/"
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-cc-hover hover:bg-cc-active text-cc-fg border border-cc-border transition-colors cursor-pointer inline-block"
             >
               Back to App
-            </button>
+            </a>
             <button
               onClick={() => setDarkMode(!darkMode)}
               className="px-3 py-1.5 text-xs font-medium rounded-lg bg-cc-primary/10 hover:bg-cc-primary/20 text-cc-primary border border-cc-primary/20 transition-colors cursor-pointer"

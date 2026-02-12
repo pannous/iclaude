@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem } from "./types.js";
+import { safeStorage } from "./utils/safe-storage.js";
 
 interface AppState {
   // Sessions
@@ -38,6 +39,7 @@ interface AppState {
 
   // Session display names
   sessionNames: Map<string, string>;
+  sessionSubtitles: Map<string, string>;
   // Track sessions that were just renamed (for animation)
   recentlyRenamed: Set<string>;
 
@@ -47,6 +49,7 @@ interface AppState {
   // UI
   darkMode: boolean;
   notificationSound: boolean;
+  yoloMode: boolean;
   sidebarOpen: boolean;
   taskPanelOpen: boolean;
   homeResetKey: number;
@@ -60,6 +63,8 @@ interface AppState {
   toggleDarkMode: () => void;
   setNotificationSound: (v: boolean) => void;
   toggleNotificationSound: () => void;
+  setYoloMode: (v: boolean) => void;
+  toggleYoloMode: () => void;
   setSidebarOpen: (v: boolean) => void;
   setTaskPanelOpen: (open: boolean) => void;
   newSession: () => void;
@@ -93,6 +98,7 @@ interface AppState {
 
   // Session name actions
   setSessionName: (sessionId: string, name: string) => void;
+  setSessionSubtitle: (sessionId: string, subtitle: string) => void;
   markRecentlyRenamed: (sessionId: string) => void;
   clearRecentlyRenamed: (sessionId: string) => void;
 
@@ -119,7 +125,7 @@ interface AppState {
 function getInitialSessionNames(): Map<string, string> {
   if (typeof window === "undefined") return new Map();
   try {
-    return new Map(JSON.parse(localStorage.getItem("cc-session-names") || "[]"));
+    return new Map(JSON.parse(safeStorage.getItem("cc-session-names") || "[]"));
   } catch {
     return new Map();
   }
@@ -127,12 +133,12 @@ function getInitialSessionNames(): Map<string, string> {
 
 function getInitialSessionId(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("cc-current-session") || null;
+  return safeStorage.getItem("cc-current-session") || null;
 }
 
 function getInitialDarkMode(): boolean {
   if (typeof window === "undefined") return false;
-  const stored = localStorage.getItem("cc-dark-mode");
+  const stored = safeStorage.getItem("cc-dark-mode");
   if (stored !== null) return stored === "true";
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
@@ -142,6 +148,12 @@ function getInitialNotificationSound(): boolean {
   const stored = localStorage.getItem("cc-notification-sound");
   if (stored !== null) return stored === "true";
   return true;
+}
+
+function getInitialYoloMode(): boolean {
+  if (typeof window === "undefined") return false;
+  const stored = safeStorage.getItem("cc-yolo-mode");
+  return stored === "true";
 }
 
 function getInitialCollapsedProjects(): Set<string> {
@@ -169,10 +181,12 @@ export const useStore = create<AppState>((set) => ({
   sessionTasks: new Map(),
   changedFiles: new Map(),
   sessionNames: getInitialSessionNames(),
+  sessionSubtitles: new Map(),
   recentlyRenamed: new Set(),
   collapsedProjects: getInitialCollapsedProjects(),
   darkMode: getInitialDarkMode(),
   notificationSound: getInitialNotificationSound(),
+  yoloMode: getInitialYoloMode(),
   sidebarOpen: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
   taskPanelOpen: typeof window !== "undefined" ? window.innerWidth >= 1024 : false,
   homeResetKey: 0,
@@ -182,13 +196,13 @@ export const useStore = create<AppState>((set) => ({
   editorLoading: new Map(),
 
   setDarkMode: (v) => {
-    localStorage.setItem("cc-dark-mode", String(v));
+    safeStorage.setItem("cc-dark-mode", String(v));
     set({ darkMode: v });
   },
   toggleDarkMode: () =>
     set((s) => {
       const next = !s.darkMode;
-      localStorage.setItem("cc-dark-mode", String(next));
+      safeStorage.setItem("cc-dark-mode", String(next));
       return { darkMode: next };
     }),
   setNotificationSound: (v) => {
@@ -201,18 +215,28 @@ export const useStore = create<AppState>((set) => ({
       localStorage.setItem("cc-notification-sound", String(next));
       return { notificationSound: next };
     }),
+  setYoloMode: (v) => {
+    safeStorage.setItem("cc-yolo-mode", String(v));
+    set({ yoloMode: v });
+  },
+  toggleYoloMode: () =>
+    set((s) => {
+      const next = !s.yoloMode;
+      safeStorage.setItem("cc-yolo-mode", String(next));
+      return { yoloMode: next };
+    }),
   setSidebarOpen: (v) => set({ sidebarOpen: v }),
   setTaskPanelOpen: (open) => set({ taskPanelOpen: open }),
   newSession: () => {
-    localStorage.removeItem("cc-current-session");
+    safeStorage.removeItem("cc-current-session");
     set((s) => ({ currentSessionId: null, homeResetKey: s.homeResetKey + 1 }));
   },
 
   setCurrentSession: (id) => {
     if (id) {
-      localStorage.setItem("cc-current-session", id);
+      safeStorage.setItem("cc-current-session", id);
     } else {
-      localStorage.removeItem("cc-current-session");
+      safeStorage.removeItem("cc-current-session");
     }
     set({ currentSessionId: id });
   },
@@ -270,9 +294,9 @@ export const useStore = create<AppState>((set) => ({
       editorUrl.delete(sessionId);
       const editorLoading = new Map(s.editorLoading);
       editorLoading.delete(sessionId);
-      localStorage.setItem("cc-session-names", JSON.stringify(Array.from(sessionNames.entries())));
+      safeStorage.setItem("cc-session-names", JSON.stringify(Array.from(sessionNames.entries())));
       if (s.currentSessionId === sessionId) {
-        localStorage.removeItem("cc-current-session");
+        safeStorage.removeItem("cc-current-session");
       }
       return {
         sessions,
@@ -426,8 +450,15 @@ export const useStore = create<AppState>((set) => ({
     set((s) => {
       const sessionNames = new Map(s.sessionNames);
       sessionNames.set(sessionId, name);
-      localStorage.setItem("cc-session-names", JSON.stringify(Array.from(sessionNames.entries())));
+      safeStorage.setItem("cc-session-names", JSON.stringify(Array.from(sessionNames.entries())));
       return { sessionNames };
+    }),
+
+  setSessionSubtitle: (sessionId, subtitle) =>
+    set((s) => {
+      const sessionSubtitles = new Map(s.sessionSubtitles);
+      sessionSubtitles.set(sessionId, subtitle);
+      return { sessionSubtitles };
     }),
 
   markRecentlyRenamed: (sessionId) =>
@@ -528,6 +559,7 @@ export const useStore = create<AppState>((set) => ({
       sessionTasks: new Map(),
       changedFiles: new Map(),
       sessionNames: new Map(),
+      sessionSubtitles: new Map(),
       recentlyRenamed: new Set(),
       activeTab: "chat" as const,
       editorOpenFile: new Map(),

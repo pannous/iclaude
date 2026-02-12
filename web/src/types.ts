@@ -15,6 +15,8 @@ export interface ChatMessage {
   content: string;
   contentBlocks?: ContentBlock[];
   images?: { media_type: string; data: string }[];
+  scannedImages?: { src: string; original: string }[];
+  scannedHtml?: { html: string; original: string; preview: string }[];
   timestamp: number;
   parentToolUseId?: string | null;
   isStreaming?: boolean;
@@ -42,6 +44,7 @@ export interface SdkSessionInfo {
   cwd: string;
   createdAt: number;
   archived?: boolean;
+  title?: string;
   isWorktree?: boolean;
   repoRoot?: string;
   branch?: string;

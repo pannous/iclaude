@@ -3,8 +3,8 @@ import { useStore } from "../store.js";
 import { api, type CompanionEnv, type GitRepoInfo, type GitBranchInfo, type BackendInfo } from "../api.js";
 import { connectSession, waitForConnection, sendToSession } from "../ws.js";
 import { disconnectSession } from "../ws.js";
-import { generateUniqueSessionName } from "../utils/names.js";
 import { getRecentDirs, addRecentDir } from "../utils/recent-dirs.js";
+import { safeStorage } from "../utils/safe-storage.js";
 import { getModelsForBackend, getModesForBackend, getDefaultModel, getDefaultMode, toModelOptions, type ModelOption } from "../utils/backends.js";
 import type { BackendType } from "../types.js";
 import { EnvManager } from "./EnvManager.js";
@@ -57,7 +57,7 @@ export function HomePage() {
 
   // Environment state
   const [envs, setEnvs] = useState<CompanionEnv[]>([]);
-  const [selectedEnv, setSelectedEnv] = useState(() => localStorage.getItem("cc-selected-env") || "");
+  const [selectedEnv, setSelectedEnv] = useState(() => safeStorage.getItem("cc-selected-env") || "");
   const [showEnvDropdown, setShowEnvDropdown] = useState(false);
   const [showEnvManager, setShowEnvManager] = useState(false);
 
@@ -293,11 +293,6 @@ export function HomePage() {
         codexInternetAccess: backend === "codex" ? codexInternetAccess : undefined,
       });
       const sessionId = result.sessionId;
-
-      // Assign a random session name
-      const existingNames = new Set(useStore.getState().sessionNames.values());
-      const sessionName = generateUniqueSessionName(existingNames);
-      useStore.getState().setSessionName(sessionId, sessionName);
 
       // Save cwd to recent dirs
       if (cwd) addRecentDir(cwd);
@@ -769,7 +764,7 @@ export function HomePage() {
                 <button
                   onClick={() => {
                     setSelectedEnv("");
-                    localStorage.setItem("cc-selected-env", "");
+                    safeStorage.setItem("cc-selected-env", "");
                     setShowEnvDropdown(false);
                   }}
                   className={`w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer ${
@@ -783,7 +778,7 @@ export function HomePage() {
                     key={env.slug}
                     onClick={() => {
                       setSelectedEnv(env.slug);
-                      localStorage.setItem("cc-selected-env", env.slug);
+                      safeStorage.setItem("cc-selected-env", env.slug);
                       setShowEnvDropdown(false);
                     }}
                     className={`w-full px-3 py-2 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-1 ${

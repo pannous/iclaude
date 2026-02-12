@@ -52,6 +52,7 @@ interface MockStoreState {
   sessionNames: Map<string, string>;
   recentlyRenamed: Set<string>;
   pendingPermissions: Map<string, Map<string, unknown>>;
+  sessionTasks: Map<string, unknown[]>;
   collapsedProjects: Set<string>;
   setCurrentSession: ReturnType<typeof vi.fn>;
   toggleDarkMode: ReturnType<typeof vi.fn>;
@@ -118,6 +119,7 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     sessionNames: new Map(),
     recentlyRenamed: new Set(),
     pendingPermissions: new Map(),
+    sessionTasks: new Map(),
     collapsedProjects: new Set(),
     setCurrentSession: vi.fn(),
     toggleDarkMode: vi.fn(),

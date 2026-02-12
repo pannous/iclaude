@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { useStore } from "./store.js";
 import { connectSession } from "./ws.js";
 import { disconnectSession } from "./ws.js";
@@ -8,15 +8,8 @@ import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
 import { HomePage } from "./components/HomePage.js";
 import { TaskPanel } from "./components/TaskPanel.js";
-import { EditorPanel } from "./components/EditorPanel.js";
-import { Playground } from "./components/Playground.js";
 
-function useHash() {
-  return useSyncExternalStore(
-    (cb) => { window.addEventListener("hashchange", cb); return () => window.removeEventListener("hashchange", cb); },
-    () => window.location.hash,
-  );
-}
+const EditorPanel = lazy(() => import("./components/EditorPanel.js").then(m => ({ default: m.EditorPanel })));
 
 export default function App() {
   const darkMode = useStore((s) => s.darkMode);
@@ -25,13 +18,13 @@ export default function App() {
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
   const homeResetKey = useStore((s) => s.homeResetKey);
   const activeTab = useStore((s) => s.activeTab);
-  const hash = useHash();
+  const [showArchiveAllConfirm, setShowArchiveAllConfirm] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
   }, [darkMode]);
 
-  // Auto-connect to restored session on mount
+  // Restore last session from localStorage on mount
   useEffect(() => {
     const restoredId = useStore.getState().currentSessionId;
     if (restoredId) {
@@ -178,10 +171,17 @@ export default function App() {
     }
 
     function handleMouseButton(e: MouseEvent) {
-      // Mouse button 1 = Middle (archive session)
+      // Mouse button 1 = Middle (archive session or archive all if Shift is pressed)
       if (e.button === 1) {
         e.preventDefault();
 
+        // Shift+Middle Click = Archive all sessions (with confirmation)
+        if (e.shiftKey) {
+          setShowArchiveAllConfirm(true);
+          return;
+        }
+
+        // Middle Click = Archive current session
         const store = useStore.getState();
         const currentId = store.currentSessionId;
 
@@ -223,12 +223,71 @@ export default function App() {
     };
   }, []);
 
-  if (hash === "#/playground") {
-    return <Playground />;
+  async function handleArchiveAll() {
+    const store = useStore.getState();
+    const sdkSessions = store.sdkSessions;
+    const activeSessions = sdkSessions.filter(s => !s.archived);
+
+    // Disconnect current session if any
+    if (store.currentSessionId) {
+      disconnectSession(store.currentSessionId);
+    }
+
+    // Archive all active sessions
+    for (const session of activeSessions) {
+      api.archiveSession(session.sessionId).catch(() => {
+        // best-effort
+      });
+    }
+
+    // Go back to home page
+    store.newSession();
+
+    // Refresh session list
+    api.listSessions().then((list) => {
+      store.setSdkSessions(list);
+    }).catch(() => {
+      // best-effort
+    });
+
+    setShowArchiveAllConfirm(false);
   }
 
   return (
     <div className="h-[100dvh] flex font-sans-ui bg-cc-bg text-cc-fg antialiased">
+      {/* Archive All Confirmation Modal */}
+      {showArchiveAllConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-cc-card border border-cc-border rounded-[14px] shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5 text-cc-warning shrink-0 mt-0.5">
+                <path fillRule="evenodd" d="M8.22 1.754a.25.25 0 00-.44 0L1.698 13.132a.25.25 0 00.22.368h12.164a.25.25 0 00.22-.368L8.22 1.754zm-1.763-.707c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0114.082 15H1.918a1.75 1.75 0 01-1.543-2.575L6.457 1.047zM9 11a1 1 0 11-2 0 1 1 0 012 0zm-.25-5.25a.75.75 0 00-1.5 0v2.5a.75.75 0 001.5 0v-2.5z" clipRule="evenodd" />
+              </svg>
+              <div className="flex-1">
+                <h3 className="text-base font-semibold text-cc-fg mb-1">Archive All Sessions?</h3>
+                <p className="text-sm text-cc-muted leading-relaxed">
+                  This will archive all active sessions. You can restore them later from the archived section.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowArchiveAllConfirm(false)}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-cc-hover text-cc-fg hover:bg-cc-border transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleArchiveAll}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-cc-warning hover:bg-amber-500 text-white transition-colors cursor-pointer"
+              >
+                Archive All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Mobile overlay backdrop */}
       {sidebarOpen && (
         <div
@@ -262,10 +321,16 @@ export default function App() {
             )}
           </div>
 
-          {/* Editor tab */}
+          {/* Editor tab — lazy-loaded to reduce initial bundle */}
           {currentSessionId && activeTab === "editor" && (
             <div className="absolute inset-0">
-              <EditorPanel sessionId={currentSessionId} />
+              <Suspense fallback={
+                <div className="h-full flex items-center justify-center">
+                  <div className="w-5 h-5 border-2 border-cc-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              }>
+                <EditorPanel sessionId={currentSessionId} />
+              </Suspense>
             </div>
           )}
         </div>

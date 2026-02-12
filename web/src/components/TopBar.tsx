@@ -1,5 +1,10 @@
+import { useCallback } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
+import { CopyButton } from "./CopyButton.js";
+import { conversationToText } from "../utils/message-text.js";
+
+const EMPTY_MESSAGES: import("../types.js").ChatMessage[] = [];
 
 export function TopBar() {
   const currentSessionId = useStore((s) => s.currentSessionId);
@@ -9,6 +14,8 @@ export function TopBar() {
   const setSidebarOpen = useStore((s) => s.setSidebarOpen);
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
   const setTaskPanelOpen = useStore((s) => s.setTaskPanelOpen);
+  const messages = useStore((s) => currentSessionId ? s.messages.get(currentSessionId) ?? EMPTY_MESSAGES : EMPTY_MESSAGES);
+  const getConversationText = useCallback(() => conversationToText(messages), [messages]);
   const activeTab = useStore((s) => s.activeTab);
   const setActiveTab = useStore((s) => s.setActiveTab);
 
@@ -17,6 +24,9 @@ export function TopBar() {
     const sdkTitle = s.sdkSessions.find((ss) => ss.sessionId === currentSessionId)?.title;
     return sdkTitle || s.sessionNames.get(currentSessionId);
   });
+  const sessionSubtitle = useStore((s) =>
+    currentSessionId ? s.sessionSubtitles.get(currentSessionId) : undefined
+  );
   const isConnected = currentSessionId ? (cliConnected.get(currentSessionId) ?? false) : false;
   const status = currentSessionId ? (sessionStatus.get(currentSessionId) ?? null) : null;
 
@@ -36,9 +46,14 @@ export function TopBar() {
         {/* Session name + connection status */}
         {currentSessionId && (
           <div className="flex items-center gap-2">
-            {sessionTitle && (
-              <span className="text-[13px] font-medium text-cc-fg truncate max-w-[200px] sm:max-w-[300px]">{sessionTitle}</span>
-            )}
+            <div className="flex flex-col min-w-0">
+              {sessionTitle && (
+                <span className="text-[13px] font-medium text-cc-fg truncate">{sessionTitle}</span>
+              )}
+              {sessionSubtitle && (
+                <span className="text-[11px] text-cc-muted truncate">{sessionSubtitle}</span>
+              )}
+            </div>
             <div className="flex items-center gap-1.5">
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
@@ -70,6 +85,10 @@ export function TopBar() {
               <span className="w-1.5 h-1.5 rounded-full bg-cc-primary animate-[pulse-dot_1s_ease-in-out_infinite]" />
               <span className="text-cc-primary font-medium">Thinking</span>
             </div>
+          )}
+
+          {messages.length > 0 && (
+            <CopyButton getText={getConversationText} size="md" title="Copy entire conversation" />
           )}
 
           {/* Chat / Editor tab toggle */}
