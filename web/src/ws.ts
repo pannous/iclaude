@@ -122,12 +122,21 @@ function notifySessionDone(sessionId: string, isError: boolean, resultText?: str
     ? `${completedCount}/${tasks.length} tasks completed`
     : isError ? "Session ended with an error" : "Session finished successfully";
 
+  const createNotification = () => {
+    const notification = new Notification(title, { body, tag: `session-done-${sessionId}` });
+    notification.onclick = () => {
+      window.focus();
+      useStore.getState().setCurrentSession(sessionId);
+      connectSession(sessionId);
+    };
+  };
+
   if (Notification.permission === "granted") {
-    new Notification(title, { body, tag: `session-done-${sessionId}` });
+    createNotification();
   } else if (Notification.permission !== "denied") {
     Notification.requestPermission().then((perm) => {
       if (perm === "granted") {
-        new Notification(title, { body, tag: `session-done-${sessionId}` });
+        createNotification();
       }
     });
   }

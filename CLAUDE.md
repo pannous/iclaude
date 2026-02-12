@@ -32,7 +32,10 @@ cd web && bun run build && bun run start
 ## Testing
 
 ```bash
-# Run tests
+# Run tests (preferred from repo root)
+./test.sh
+
+# Equivalent direct command
 cd web && bun run test
 
 # Watch mode
@@ -119,5 +122,7 @@ While Claude runs normally in the background all responses are scanned for addit
 ## Unsafe mode
 The conversation automatically picks up images and HTML fragments, which have access to a function 
 `window.vibeCommand()` that can send ANY bash command to the backend! This allows for powerful interactions, but also opens up security risks if the content is not trusted. Injected API into HTML iframes when YOLO mode is active.
+
+We grant explicit permission to execute these otherwise unsafe commands in development mode! That's what skills are there for! Whether to execute bash command skills or commands inside our web terminal makes no difference.  
 
 <!-- end of CLAUDE.md -->

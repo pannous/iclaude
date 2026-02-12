@@ -45,6 +45,16 @@ function createSkillOnDisk(slug: string, manifest: object, panelHtml?: string): 
   }
 }
 
+function commandsDir(): string {
+  return join(tempDir, "project", ".claude", "commands");
+}
+
+function createCommandOnDisk(name: string, markdown: string): void {
+  const filePath = join(commandsDir(), `${name}.md`);
+  mkdirSync(join(filePath, ".."), { recursive: true });
+  writeFileSync(filePath, markdown, "utf-8");
+}
+
 // ===========================================================================
 // listSkills
 // ===========================================================================
@@ -184,6 +194,39 @@ describe("skill state persistence", () => {
   it("ignores invalid slug for state operations", () => {
     skillManager.setSkillState("../bad", { x: 1 });
     expect(skillManager.getSkillState("../bad")).toEqual({});
+  });
+});
+
+// ===========================================================================
+// slash commands (.claude/commands)
+// ===========================================================================
+describe("slash command discovery", () => {
+  it("lists .md commands from project .claude/commands", () => {
+    createCommandOnDisk("catch-time", "# Catch time");
+    createCommandOnDisk("dev/review", "# Review");
+    createCommandOnDisk("ignore", "not markdown");
+    writeFileSync(join(commandsDir(), "plain.txt"), "nope", "utf-8");
+
+    const result = skillManager.listProjectSlashCommands(join(tempDir, "project"));
+    expect(result).toEqual(["catch-time", "dev/review", "ignore"]);
+  });
+
+  it("returns [] when project has no command directory", () => {
+    const result = skillManager.listProjectSlashCommands(join(tempDir, "missing"));
+    expect(result).toEqual([]);
+  });
+
+  it("loads command markdown template by name", () => {
+    createCommandOnDisk("catch-time", "---\nname: catch-time\n---\nRun `date`");
+    const result = skillManager.getProjectSlashCommandTemplate(join(tempDir, "project"), "catch-time");
+    expect(result).toContain("name: catch-time");
+    expect(result).toContain("Run `date`");
+  });
+
+  it("returns null for invalid command names", () => {
+    createCommandOnDisk("safe", "ok");
+    expect(skillManager.getProjectSlashCommandTemplate(join(tempDir, "project"), "../safe")).toBeNull();
+    expect(skillManager.getProjectSlashCommandTemplate(join(tempDir, "project"), "safe/../x")).toBeNull();
   });
 });
 

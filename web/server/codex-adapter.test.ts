@@ -2,6 +2,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CodexAdapter } from "./codex-adapter.js";
 import type { BrowserIncomingMessage, BrowserOutgoingMessage } from "./session-types.js";
 
+const mockListProjectSlashCommands = vi.hoisted(() => vi.fn(() => []));
+const mockGetProjectSlashCommandTemplate = vi.hoisted(() => vi.fn(() => null));
+const mockListSkills = vi.hoisted(() => vi.fn(() => []));
+
+vi.mock("./skill-manager.js", () => ({
+  listProjectSlashCommands: mockListProjectSlashCommands,
+  getProjectSlashCommandTemplate: mockGetProjectSlashCommandTemplate,
+  listSkills: mockListSkills,
+}));
+
 // ─── Mock Subprocess ──────────────────────────────────────────────────────────
 
 class MockWritableStream {
@@ -72,6 +82,12 @@ describe("CodexAdapter", () => {
     proc = mock.proc;
     stdin = mock.stdin;
     stdout = mock.stdout;
+    mockListProjectSlashCommands.mockReset();
+    mockGetProjectSlashCommandTemplate.mockReset();
+    mockListSkills.mockReset();
+    mockListProjectSlashCommands.mockReturnValue([]);
+    mockGetProjectSlashCommandTemplate.mockReturnValue(null);
+    mockListSkills.mockReturnValue([]);
   });
 
   it("sends initialize request on construction", async () => {
@@ -346,6 +362,31 @@ describe("CodexAdapter", () => {
     expect(allWritten).toContain('"method":"turn/start"');
     expect(allWritten).toContain("Fix the bug");
     expect(allWritten).toContain("thr_123");
+  });
+
+  it("expands slash command messages using .claude/commands templates", async () => {
+    mockGetProjectSlashCommandTemplate.mockReturnValue(
+      "---\nname: catch-time\ndescription: demo\n---\nReturn ONLY: the current time for $ARGUMENTS" as any,
+    );
+    const adapter = new CodexAdapter(proc as never, "test-session", { model: "o4-mini", cwd: "/project" });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    stdout.push(JSON.stringify({ id: 1, result: { userAgent: "codex" } }) + "\n");
+    await new Promise((r) => setTimeout(r, 20));
+    stdout.push(JSON.stringify({ id: 2, result: { thread: { id: "thr_123" } } }) + "\n");
+    await new Promise((r) => setTimeout(r, 50));
+
+    stdin.chunks = [];
+    adapter.sendBrowserMessage({ type: "user_message", content: "/catch-time now" });
+    await new Promise((r) => setTimeout(r, 50));
+
+    const allWritten = stdin.chunks.join("");
+    expect(allWritten).toContain('"method":"turn/start"');
+    expect(allWritten).toContain("Return ONLY: the current time for now");
+    expect(allWritten).not.toContain("name: catch-time");
+    expect(allWritten).not.toContain("Slash command invoked:");
+    expect(mockGetProjectSlashCommandTemplate).toHaveBeenCalledWith("/project", "catch-time");
   });
 
   it("sends approval response when receiving permission_response", async () => {
@@ -759,6 +800,28 @@ describe("CodexAdapter", () => {
     expect(session.model).toBe("gpt-5.3-codex");
     expect(session.cwd).toBe("/my/project");
     expect(session.session_id).toBe("test-session");
+  });
+
+  it("includes project slash commands and html skills in session_init", async () => {
+    mockListProjectSlashCommands.mockReturnValue(["catch-time", "review/pr"] as any);
+    mockListSkills.mockReturnValue([{ slug: "htop" }, { slug: "logs" }] as any);
+
+    const messages: BrowserIncomingMessage[] = [];
+    const adapter = new CodexAdapter(proc as never, "test-session", {
+      model: "gpt-5.3-codex",
+      cwd: "/my/project",
+    });
+    adapter.onBrowserMessage((msg) => messages.push(msg));
+
+    await new Promise((r) => setTimeout(r, 50));
+    stdout.push(JSON.stringify({ id: 1, result: { userAgent: "codex" } }) + "\n");
+    await new Promise((r) => setTimeout(r, 20));
+    stdout.push(JSON.stringify({ id: 2, result: { thread: { id: "thr_789" } } }) + "\n");
+    await new Promise((r) => setTimeout(r, 100));
+
+    const initMsg = messages.find((m) => m.type === "session_init") as { session: { slash_commands: string[]; skills: string[] } } | undefined;
+    expect(initMsg?.session.slash_commands).toEqual(["catch-time", "review/pr"]);
+    expect(initMsg?.session.skills).toEqual(["htop", "logs"]);
   });
 
   it("passes model and cwd in thread/start request", async () => {

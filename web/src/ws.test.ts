@@ -327,13 +327,18 @@ describe("handleMessage: result", () => {
 // ===========================================================================
 describe("notifySessionDone", () => {
   let notificationSpy: ReturnType<typeof vi.fn>;
+  let focusSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    notificationSpy = vi.fn();
+    notificationSpy = vi.fn(function (this: { onclick: (() => void) | null }) {
+      (this as { onclick: (() => void) | null }).onclick = null;
+    });
     vi.stubGlobal("Notification", Object.assign(notificationSpy, { permission: "granted" }));
+    focusSpy = vi.spyOn(window, "focus").mockImplementation(() => {});
   });
 
   afterEach(() => {
+    focusSpy.mockRestore();
     vi.unstubAllGlobals();
     vi.stubGlobal("WebSocket", MockWebSocket);
     vi.stubGlobal("location", { protocol: "http:", host: "localhost:3456" });
@@ -444,6 +449,22 @@ describe("notifySessionDone", () => {
       "Report",
       expect.objectContaining({ body: "A".repeat(197) + "..." }),
     );
+  });
+
+  it("opens the finished session when notification is clicked", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+    useStore.getState().setCurrentSession("other");
+    useStore.getState().setSessionName("s1", "Build");
+
+    fireResult("s1");
+
+    const notificationInstance = notificationSpy.mock.instances.at(-1) as { onclick?: (() => void) | null };
+    expect(notificationInstance.onclick).toBeTypeOf("function");
+    notificationInstance.onclick?.();
+
+    expect(focusSpy).toHaveBeenCalled();
+    expect(useStore.getState().currentSessionId).toBe("s1");
   });
 });
 

@@ -178,17 +178,17 @@ export default function App() {
     }
 
     function handleMouseButton(e: MouseEvent) {
-      // Mouse button 1 = Middle (archive session or archive all if Shift is pressed)
-      if (e.button === 1) {
+      // Ctrl+Mouse button 1 = Middle (archive session or archive all if Shift is pressed)
+      if (e.button === 1 && e.ctrlKey && !e.altKey && !e.metaKey) {
         e.preventDefault();
 
-        // Shift+Middle Click = Archive all sessions (with confirmation)
+        // Ctrl+Shift+Middle Click = Archive all sessions (with confirmation)
         if (e.shiftKey) {
           setShowArchiveAllConfirm(true);
           return;
         }
 
-        // Middle Click = Archive current session
+        // Ctrl+Middle Click = Archive current session
         const store = useStore.getState();
         const currentId = store.currentSessionId;
 

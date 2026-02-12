@@ -18,6 +18,7 @@ import type {
   PermissionRequest,
   CLIResultMessage,
 } from "./session-types.js";
+import { getProjectSlashCommandTemplate, listProjectSlashCommands, listSkills } from "./skill-manager.js";
 
 // ─── Codex JSON-RPC Types ─────────────────────────────────────────────────────
 
@@ -458,8 +459,8 @@ export class CodexAdapter {
         claude_code_version: "",
         mcp_servers: [],
         agents: [],
-        slash_commands: [],
-        skills: [],
+        slash_commands: listProjectSlashCommands(this.options.cwd),
+        skills: listSkills().map((s) => s.slug),
         total_cost_usd: 0,
         num_turns: 0,
         context_used_percent: 0,
@@ -571,8 +572,8 @@ export class CodexAdapter {
       }
     }
 
-    // Add text
-    input.push({ type: "text", text: msg.content });
+    // Add text (slash commands from .claude/commands are expanded for Codex)
+    input.push({ type: "text", text: this.expandSlashCommandPrompt(msg.content) });
 
     try {
       const result = await this.transport.call("turn/start", {
@@ -647,6 +648,31 @@ export class CodexAdapter {
     } catch (err) {
       console.warn("[codex-adapter] Interrupt failed:", err);
     }
+  }
+
+  private expandSlashCommandPrompt(content: string): string {
+    const match = content.match(/^\/([A-Za-z0-9._/-]+)(?:\s+([\s\S]*))?$/);
+    if (!match) return content;
+
+    const command = match[1];
+    const template = getProjectSlashCommandTemplate(this.options.cwd, command);
+    if (!template) return content;
+
+    const args = (match[2] || "").trim();
+    // Strip optional YAML frontmatter so only executable prompt content is sent.
+    const body = template.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
+
+    if (args.length > 0) {
+      if (body.includes("$ARGUMENTS")) {
+        return body.replaceAll("$ARGUMENTS", args);
+      }
+      if (body.includes("{{args}}")) {
+        return body.replaceAll("{{args}}", args);
+      }
+      return `${body}\n\nArguments: ${args}`;
+    }
+
+    return body;
   }
 
   // ── Incoming notification handlers ──────────────────────────────────────
