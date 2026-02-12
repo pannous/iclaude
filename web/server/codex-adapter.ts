@@ -261,6 +261,10 @@ class JsonRpcTransport {
 // ─── Codex Adapter ────────────────────────────────────────────────────────────
 
 export class CodexAdapter {
+  private static readonly CODEX_MODEL_FALLBACKS: Record<string, string> = {
+    "gpt-5.3-codex": "gpt-5.2",
+  };
+
   private transport: JsonRpcTransport;
   private proc: Subprocess;
   private sessionId: string;
@@ -434,26 +438,7 @@ export class CodexAdapter {
       this.initialized = true;
 
       // Step 3: Start or resume a thread
-      if (this.options.threadId) {
-        // Resume an existing thread
-        const resumeResult = await this.transport.call("thread/resume", {
-          threadId: this.options.threadId,
-          model: this.options.model,
-          cwd: this.options.cwd,
-          approvalPolicy: this.mapApprovalPolicy(this.options.approvalMode),
-          sandbox: this.options.sandbox || this.mapSandboxPolicy(this.options.approvalMode),
-        }) as { thread: { id: string } };
-        this.threadId = resumeResult.thread.id;
-      } else {
-        // Start a new thread
-        const threadResult = await this.transport.call("thread/start", {
-          model: this.options.model,
-          cwd: this.options.cwd,
-          approvalPolicy: this.mapApprovalPolicy(this.options.approvalMode),
-          sandbox: this.options.sandbox || this.mapSandboxPolicy(this.options.approvalMode),
-        }) as { thread: { id: string } };
-        this.threadId = threadResult.thread.id;
-      }
+      this.threadId = await this.startOrResumeThreadWithFallback();
 
       // Notify session metadata
       this.sessionMetaCb?.({
@@ -510,6 +495,58 @@ export class CodexAdapter {
       this.connected = false;
       this.initErrorCb?.(errorMsg);
     }
+  }
+
+  private async startOrResumeThreadWithFallback(): Promise<string> {
+    try {
+      const result = await this.startOrResumeThread(this.options.model);
+      return result.thread.id;
+    } catch (err) {
+      const fallbackModel = this.getFallbackModel(this.options.model);
+      if (!fallbackModel || !this.isMissingModelOrAccessError(err)) {
+        throw err;
+      }
+
+      console.warn(
+        `[codex-adapter] Model ${this.options.model} unavailable; retrying with fallback ${fallbackModel}`,
+      );
+      this.options.model = fallbackModel;
+      const fallbackResult = await this.startOrResumeThread(fallbackModel);
+      return fallbackResult.thread.id;
+    }
+  }
+
+  private async startOrResumeThread(model?: string): Promise<{ thread: { id: string } }> {
+    const payload = {
+      model,
+      cwd: this.options.cwd,
+      approvalPolicy: this.mapApprovalPolicy(this.options.approvalMode),
+      sandbox: this.options.sandbox || this.mapSandboxPolicy(this.options.approvalMode),
+    };
+
+    if (this.options.threadId) {
+      return await this.transport.call("thread/resume", {
+        threadId: this.options.threadId,
+        ...payload,
+      }) as { thread: { id: string } };
+    }
+
+    return await this.transport.call("thread/start", payload) as { thread: { id: string } };
+  }
+
+  private getFallbackModel(model?: string): string | undefined {
+    if (!model) return undefined;
+    return CodexAdapter.CODEX_MODEL_FALLBACKS[model];
+  }
+
+  private isMissingModelOrAccessError(err: unknown): boolean {
+    const msg = String(err).toLowerCase();
+    return (
+      msg.includes("does not exist")
+      || msg.includes("do not have access")
+      || msg.includes("don't have access")
+      || msg.includes("no access")
+    );
   }
 
   // ── Outgoing message handlers ───────────────────────────────────────────

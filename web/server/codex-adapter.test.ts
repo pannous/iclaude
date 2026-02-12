@@ -779,6 +779,48 @@ describe("CodexAdapter", () => {
 
   // ── Init error handling ────────────────────────────────────────────────────
 
+  it("falls back from gpt-5.3-codex to gpt-5.2 when model is unavailable", async () => {
+    const errors: string[] = [];
+    const metaCalls: Array<{ cliSessionId?: string; model?: string }> = [];
+    const messages: BrowserIncomingMessage[] = [];
+    const adapter = new CodexAdapter(proc as never, "test-session", {
+      model: "gpt-5.3-codex",
+      cwd: "/project",
+    });
+    adapter.onInitError((err) => errors.push(err));
+    adapter.onSessionMeta((meta) => metaCalls.push(meta));
+    adapter.onBrowserMessage((msg) => messages.push(msg));
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    // initialize() succeeds
+    stdout.push(JSON.stringify({ id: 1, result: { userAgent: "codex" } }) + "\n");
+    await new Promise((r) => setTimeout(r, 20));
+
+    // First thread/start fails due to unavailable model
+    stdout.push(JSON.stringify({
+      id: 2,
+      error: { code: -32602, message: "The model `gpt-5.3-codex` does not exist or you do not have access to it." },
+    }) + "\n");
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Retry with fallback model succeeds
+    stdout.push(JSON.stringify({ id: 3, result: { thread: { id: "thr_fallback" } } }) + "\n");
+    await new Promise((r) => setTimeout(r, 80));
+
+    expect(errors).toEqual([]);
+    expect(metaCalls.length).toBe(1);
+    expect(metaCalls[0].cliSessionId).toBe("thr_fallback");
+    expect(metaCalls[0].model).toBe("gpt-5.2");
+
+    const initMsg = messages.find((m) => m.type === "session_init") as { session: { model: string } } | undefined;
+    expect(initMsg?.session.model).toBe("gpt-5.2");
+
+    const allWritten = stdin.chunks.join("");
+    expect(allWritten).toContain('"model":"gpt-5.3-codex"');
+    expect(allWritten).toContain('"model":"gpt-5.2"');
+  });
+
   it("calls onInitError when initialization fails", async () => {
     const errors: string[] = [];
     const adapter = new CodexAdapter(proc as never, "test-session", { model: "o4-mini" });
