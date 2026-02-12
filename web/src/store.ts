@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem } from "./types.js";
+import type { UpdateInfo } from "./api.js";
 import { safeStorage } from "./utils/safe-storage.js";
 
 interface AppState {
@@ -46,6 +47,13 @@ interface AppState {
   // Sidebar project grouping
   collapsedProjects: Set<string>;
 
+  // Diff panel
+  diffPanelSelectedFile: Map<string, string>;
+
+  // Update banner
+  updateInfo: UpdateInfo | null;
+  updateDismissedVersion: string | null;
+
   // UI
   darkMode: boolean;
   notificationSound: boolean;
@@ -53,7 +61,7 @@ interface AppState {
   sidebarOpen: boolean;
   taskPanelOpen: boolean;
   homeResetKey: number;
-  activeTab: string; // "chat" | "editor" | "skill:<slug>"
+  activeTab: string; // "chat" | "diff" | "skill:<slug>"
   openSkills: string[];
   editorOpenFile: Map<string, string>;
   editorUrl: Map<string, string>;
@@ -113,6 +121,13 @@ interface AppState {
   setConnectionStatus: (sessionId: string, status: "connecting" | "connected" | "disconnected") => void;
   setCliConnected: (sessionId: string, connected: boolean) => void;
   setSessionStatus: (sessionId: string, status: "idle" | "running" | "compacting" | null) => void;
+
+  // Diff panel actions
+  setDiffPanelSelectedFile: (sessionId: string, filePath: string) => void;
+
+  // Update banner actions
+  setUpdateInfo: (info: UpdateInfo | null) => void;
+  dismissUpdate: (version: string) => void;
 
   // Editor / Skill actions
   setActiveTab: (tab: string) => void;
@@ -183,6 +198,9 @@ export const useStore = create<AppState>((set) => ({
   previousPermissionMode: new Map(),
   sessionTasks: new Map(),
   changedFiles: new Map(),
+  diffPanelSelectedFile: new Map(),
+  updateInfo: null,
+  updateDismissedVersion: null,
   sessionNames: getInitialSessionNames(),
   sessionSubtitles: new Map(),
   recentlyRenamed: new Set(),
@@ -288,6 +306,8 @@ export const useStore = create<AppState>((set) => ({
       sessionTasks.delete(sessionId);
       const changedFiles = new Map(s.changedFiles);
       changedFiles.delete(sessionId);
+      const diffPanelSelectedFile = new Map(s.diffPanelSelectedFile);
+      diffPanelSelectedFile.delete(sessionId);
       const sessionNames = new Map(s.sessionNames);
       sessionNames.delete(sessionId);
       const recentlyRenamed = new Set(s.recentlyRenamed);
@@ -315,6 +335,7 @@ export const useStore = create<AppState>((set) => ({
         pendingPermissions,
         sessionTasks,
         changedFiles,
+        diffPanelSelectedFile,
         sessionNames,
         recentlyRenamed,
         editorOpenFile,
@@ -519,6 +540,17 @@ export const useStore = create<AppState>((set) => ({
       return { sessionStatus };
     }),
 
+  setDiffPanelSelectedFile: (sessionId, filePath) =>
+    set((s) => {
+      const diffPanelSelectedFile = new Map(s.diffPanelSelectedFile);
+      diffPanelSelectedFile.set(sessionId, filePath);
+      return { diffPanelSelectedFile };
+    }),
+
+  setUpdateInfo: (info) => set({ updateInfo: info }),
+
+  dismissUpdate: (version) => set({ updateDismissedVersion: version }),
+
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   openSkill: (slug) =>
@@ -575,6 +607,9 @@ export const useStore = create<AppState>((set) => ({
       previousPermissionMode: new Map(),
       sessionTasks: new Map(),
       changedFiles: new Map(),
+      diffPanelSelectedFile: new Map(),
+      updateInfo: null,
+      updateDismissedVersion: null,
       sessionNames: new Map(),
       sessionSubtitles: new Map(),
       recentlyRenamed: new Set(),
