@@ -372,7 +372,7 @@ describe("notifySessionDone", () => {
     fireResult("s1");
 
     expect(notificationSpy).toHaveBeenCalledWith(
-      "Session done: Fix Auth Bug",
+      "Fix Auth Bug",
       expect.objectContaining({ tag: "session-done-s1" }),
     );
   });
@@ -386,12 +386,12 @@ describe("notifySessionDone", () => {
     fireResult("s1");
 
     expect(notificationSpy).toHaveBeenCalledWith(
-      "Session done: My Session",
+      "My Session",
       expect.objectContaining({ tag: "session-done-s1" }),
     );
   });
 
-  it("shows 'Session failed' for error results", () => {
+  it("shows session title for error results too", () => {
     wsModule.connectSession("s1");
     fireMessage({ type: "session_init", session: makeSession("s1") });
     useStore.getState().setCurrentSession("other");
@@ -402,7 +402,7 @@ describe("notifySessionDone", () => {
     fireResult("s1", true);
 
     expect(notificationSpy).toHaveBeenCalledWith(
-      "Session failed: Deploy API",
+      "Deploy API",
       expect.objectContaining({ tag: "session-done-s1" }),
     );
   });
@@ -426,7 +426,7 @@ describe("notifySessionDone", () => {
     fireResult("s1", false, "All 42 tests passed.\n\nSee details in the test report.");
 
     expect(notificationSpy).toHaveBeenCalledWith(
-      "Session done: Build",
+      "Build",
       expect.objectContaining({ body: "All 42 tests passed." }),
     );
   });
@@ -441,7 +441,7 @@ describe("notifySessionDone", () => {
     fireResult("s1", false, longText);
 
     expect(notificationSpy).toHaveBeenCalledWith(
-      "Session done: Report",
+      "Report",
       expect.objectContaining({ body: "A".repeat(197) + "..." }),
     );
   });
