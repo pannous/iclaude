@@ -10,6 +10,7 @@ import { HomePage } from "./components/HomePage.js";
 import { TaskPanel } from "./components/TaskPanel.js";
 
 const EditorPanel = lazy(() => import("./components/EditorPanel.js").then(m => ({ default: m.EditorPanel })));
+const SkillPanel = lazy(() => import("./components/SkillPanel.js").then(m => ({ default: m.SkillPanel })));
 
 export default function App() {
   const darkMode = useStore((s) => s.darkMode);
@@ -30,6 +31,17 @@ export default function App() {
     if (restoredId) {
       connectSession(restoredId);
     }
+  }, []);
+
+  // Listen for postMessage from skill iframes (vibe.notify)
+  useEffect(() => {
+    function handleMessage(e: MessageEvent) {
+      if (e.data?.type === "vibe:notify" && Notification.permission === "granted") {
+        new Notification(e.data.title, { body: e.data.body });
+      }
+    }
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
   }, []);
 
   // Global keyboard shortcuts for starting a new session and navigating between sessions
@@ -316,8 +328,8 @@ export default function App() {
             )}
           </div>
 
-          {/* Editor tab — lazy-loaded to reduce initial bundle */}
-          {currentSessionId && activeTab === "editor" && (
+          {/* Diffs tab — lazy-loaded to reduce initial bundle */}
+          {currentSessionId && (activeTab === "diff" || activeTab === "editor") && (
             <div className="absolute inset-0">
               <Suspense fallback={
                 <div className="h-full flex items-center justify-center">
@@ -325,6 +337,19 @@ export default function App() {
                 </div>
               }>
                 <EditorPanel sessionId={currentSessionId} />
+              </Suspense>
+            </div>
+          )}
+
+          {/* Skill panels — lazy-loaded, one per open skill */}
+          {activeTab.startsWith("skill:") && (
+            <div className="absolute inset-0">
+              <Suspense fallback={
+                <div className="h-full flex items-center justify-center">
+                  <div className="w-5 h-5 border-2 border-cc-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              }>
+                <SkillPanel slug={activeTab.slice(6)} />
               </Suspense>
             </div>
           )}

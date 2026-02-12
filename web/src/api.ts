@@ -154,6 +154,14 @@ export interface TreeNode {
   children?: TreeNode[];
 }
 
+export interface SkillInfo {
+  slug: string;
+  name: string;
+  description: string;
+  icon: string;
+  refreshInterval: number | null;
+}
+
 export interface UpdateInfo {
   currentVersion: string;
   latestVersion: string | null;
@@ -302,6 +310,10 @@ export const api = {
   getUsageLimits: () => get<UsageLimits>("/usage-limits"),
   getSessionUsageLimits: (sessionId: string) =>
     get<UsageLimits>(`/sessions/${encodeURIComponent(sessionId)}/usage-limits`),
+
+  // HTML Skills
+  listSkills: () => get<SkillInfo[]>("/skills"),
+  getSkillPanelUrl: (slug: string) => `/api/skills/${encodeURIComponent(slug)}/panel`,
 
   // Update checking
   checkForUpdate: () => get<UpdateInfo>("/update-check"),

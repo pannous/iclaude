@@ -53,7 +53,8 @@ interface AppState {
   sidebarOpen: boolean;
   taskPanelOpen: boolean;
   homeResetKey: number;
-  activeTab: "chat" | "editor";
+  activeTab: string; // "chat" | "editor" | "skill:<slug>"
+  openSkills: string[];
   editorOpenFile: Map<string, string>;
   editorUrl: Map<string, string>;
   editorLoading: Map<string, boolean>;
@@ -113,8 +114,10 @@ interface AppState {
   setCliConnected: (sessionId: string, connected: boolean) => void;
   setSessionStatus: (sessionId: string, status: "idle" | "running" | "compacting" | null) => void;
 
-  // Editor actions
-  setActiveTab: (tab: "chat" | "editor") => void;
+  // Editor / Skill actions
+  setActiveTab: (tab: string) => void;
+  openSkill: (slug: string) => void;
+  closeSkill: (slug: string) => void;
   setEditorOpenFile: (sessionId: string, filePath: string | null) => void;
   setEditorUrl: (sessionId: string, url: string) => void;
   setEditorLoading: (sessionId: string, loading: boolean) => void;
@@ -191,6 +194,7 @@ export const useStore = create<AppState>((set) => ({
   taskPanelOpen: typeof window !== "undefined" ? window.innerWidth >= 1024 : false,
   homeResetKey: 0,
   activeTab: "chat",
+  openSkills: [],
   editorOpenFile: new Map(),
   editorUrl: new Map(),
   editorLoading: new Map(),
@@ -516,6 +520,19 @@ export const useStore = create<AppState>((set) => ({
     }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
+
+  openSkill: (slug) =>
+    set((s) => {
+      const skills = s.openSkills.includes(slug) ? s.openSkills : [...s.openSkills, slug];
+      return { openSkills: skills, activeTab: `skill:${slug}` };
+    }),
+
+  closeSkill: (slug) =>
+    set((s) => {
+      const skills = s.openSkills.filter((s) => s !== slug);
+      const activeTab = s.activeTab === `skill:${slug}` ? "chat" : s.activeTab;
+      return { openSkills: skills, activeTab };
+    }),
 
   setEditorOpenFile: (sessionId, filePath) =>
     set((s) => {

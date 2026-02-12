@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { CopyButton } from "./CopyButton.js";
+import { SkillPicker } from "./SkillPicker.js";
 import { conversationToText } from "../utils/message-text.js";
 
 const EMPTY_MESSAGES: import("../types.js").ChatMessage[] = [];
@@ -18,6 +19,8 @@ export function TopBar() {
   const getConversationText = useCallback(() => conversationToText(messages), [messages]);
   const activeTab = useStore((s) => s.activeTab);
   const setActiveTab = useStore((s) => s.setActiveTab);
+  const openSkills = useStore((s) => s.openSkills);
+  const closeSkill = useStore((s) => s.closeSkill);
   const changedFilesCount = useStore((s) => currentSessionId ? (s.changedFiles.get(currentSessionId)?.size ?? 0) : 0);
 
   const sessionTitle = useStore((s) => {
@@ -92,33 +95,20 @@ export function TopBar() {
             <CopyButton getText={getConversationText} size="md" title="Copy entire conversation" />
           )}
 
-          {/* Chat / Editor tab toggle */}
+          {/* Tab toggle: Chat / Diffs / Skills */}
           <div className="flex items-center bg-cc-hover rounded-lg p-0.5">
-            <button
-              onClick={() => setActiveTab("chat")}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
-                activeTab === "chat"
-                  ? "bg-cc-card text-cc-fg shadow-sm"
-                  : "text-cc-muted hover:text-cc-fg"
-              }`}
-            >
-              Chat
-            </button>
-            <button
-              onClick={() => setActiveTab("diff")}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 ${
-                activeTab === "diff"
-                  ? "bg-cc-card text-cc-fg shadow-sm"
-                  : "text-cc-muted hover:text-cc-fg"
-              }`}
-            >
-              Diffs
-              {changedFilesCount > 0 && (
-                <span className="text-[9px] bg-cc-warning text-white rounded-full w-4 h-4 flex items-center justify-center font-semibold leading-none">
-                  {changedFilesCount}
-                </span>
-              )}
-            </button>
+            <TabBtn label="Chat" active={activeTab === "chat"} onClick={() => setActiveTab("chat")} />
+            <TabBtn label="Diffs" active={activeTab === "diff"} onClick={() => setActiveTab("diff")} badge={changedFilesCount || undefined} />
+            {openSkills.map((slug) => (
+              <TabBtn
+                key={slug}
+                label={slug}
+                active={activeTab === `skill:${slug}`}
+                onClick={() => setActiveTab(`skill:${slug}`)}
+                onClose={() => closeSkill(slug)}
+              />
+            ))}
+            <SkillPicker />
           </div>
 
           <button
@@ -137,5 +127,34 @@ export function TopBar() {
         </div>
       )}
     </header>
+  );
+}
+
+function TabBtn({ label, active, onClick, onClose, badge }: {
+  label: string; active: boolean; onClick: () => void;
+  onClose?: () => void; badge?: number;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1 ${
+        active ? "bg-cc-card text-cc-fg shadow-sm" : "text-cc-muted hover:text-cc-fg"
+      }`}
+    >
+      {label}
+      {badge !== undefined && badge > 0 && (
+        <span className="text-[9px] bg-cc-warning text-white rounded-full w-4 h-4 flex items-center justify-center font-semibold leading-none">
+          {badge}
+        </span>
+      )}
+      {onClose && (
+        <span
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+          className="ml-0.5 text-cc-muted hover:text-cc-fg"
+        >
+          &times;
+        </span>
+      )}
+    </button>
   );
 }
