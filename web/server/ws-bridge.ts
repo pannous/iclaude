@@ -189,8 +189,15 @@ export class WsBridge {
     if (!this.store) return 0;
     const persisted = this.store.loadAll();
     let count = 0;
+    let skipped = 0;
     for (const p of persisted) {
       if (this.sessions.has(p.id)) continue; // don't overwrite live sessions
+      // Skip ghost sessions: no cwd and no message history means never initialized
+      if (!p.state.cwd && (!p.messageHistory || p.messageHistory.length === 0)) {
+        this.store.remove(p.id);
+        skipped++;
+        continue;
+      }
       const session: Session = {
         id: p.id,
         backendType: p.state.backend_type || "claude",
@@ -215,8 +222,8 @@ export class WsBridge {
       }
       count++;
     }
-    if (count > 0) {
-      console.log(`[ws-bridge] Restored ${count} session(s) from disk`);
+    if (count > 0 || skipped > 0) {
+      console.log(`[ws-bridge] Restored ${count} session(s) from disk${skipped > 0 ? `, purged ${skipped} ghost session(s)` : ""}`);
     }
     return count;
   }

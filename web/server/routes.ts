@@ -227,8 +227,14 @@ export function createRoutes(
   });
 
   api.post("/sessions/cleanup", (c) => {
+    // Snapshot session IDs before cleanup to find which ones get removed
+    const before = new Set(launcher.listSessions().map(s => s.sessionId));
     launcher.cleanupOldSessions();
     wsBridge.cleanupOldSessions();
+    const after = new Set(launcher.listSessions().map(s => s.sessionId));
+    for (const id of before) {
+      if (!after.has(id)) sessionNames.removeName(id);
+    }
     return c.json({ success: true });
   });
 
@@ -319,6 +325,7 @@ export function createRoutes(
 
     launcher.removeSession(id);
     wsBridge.closeSession(id);
+    sessionNames.removeName(id);
     return c.json({ ok: true, worktree: worktreeResult });
   });
 

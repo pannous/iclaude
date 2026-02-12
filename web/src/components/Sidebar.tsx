@@ -278,8 +278,10 @@ export function Sidebar() {
     };
   }).sort((a, b) => b.createdAt - a.createdAt);
 
-  const activeSessions = allSessionList.filter((s) => !s.archived);
-  const archivedSessions = allSessionList.filter((s) => s.archived);
+  // Filter out ghost sessions: no cwd, no title, no messages — never properly initialized
+  const validSessions = allSessionList.filter((s) => s.cwd || s.title);
+  const activeSessions = validSessions.filter((s) => !s.archived);
+  const archivedSessions = validSessions.filter((s) => s.archived);
   const currentSession = currentSessionId ? allSessionList.find((s) => s.id === currentSessionId) : null;
   const logoSrc = currentSession?.backendType === "codex" ? "/logo-codex.svg" : "/logo.svg";
 

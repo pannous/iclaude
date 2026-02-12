@@ -1097,6 +1097,45 @@ describe("Persistence", () => {
     expect(session.state.model).toBe("live-model");
   });
 
+  it("restoreFromDisk: purges ghost sessions with no cwd and no messages", () => {
+    // Ghost session: no cwd, no message history
+    store.saveSync({
+      id: "ghost-1",
+      state: {
+        session_id: "ghost-1",
+        model: "",
+        cwd: "",
+        tools: [],
+        permissionMode: "default",
+        claude_code_version: "",
+        mcp_servers: [],
+        agents: [],
+        slash_commands: [],
+        skills: [],
+        total_cost_usd: 0,
+        num_turns: 0,
+        context_used_percent: 0,
+        is_compacting: false,
+        git_branch: "",
+        is_worktree: false,
+        repo_root: "",
+        git_ahead: 0,
+        git_behind: 0,
+        total_lines_added: 0,
+        total_lines_removed: 0,
+      },
+      messageHistory: [],
+      pendingMessages: [],
+      pendingPermissions: [],
+    });
+
+    const count = bridge.restoreFromDisk();
+    expect(count).toBe(0);
+    expect(bridge.getSession("ghost-1")).toBeUndefined();
+    // File should be removed from disk
+    expect(store.load("ghost-1")).toBeNull();
+  });
+
   it("persistSession: called after state changes (via store.save)", () => {
     mockExecSync.mockImplementation(() => {
       throw new Error("not a git repo");

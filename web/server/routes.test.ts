@@ -522,6 +522,7 @@ describe("DELETE /api/sessions/:id", () => {
     expect(launcher.kill).toHaveBeenCalledWith("s1");
     expect(launcher.removeSession).toHaveBeenCalledWith("s1");
     expect(bridge.closeSession).toHaveBeenCalledWith("s1");
+    expect(sessionNames.removeName).toHaveBeenCalledWith("s1");
     expect(tracker.removeBySession).toHaveBeenCalledWith("s1");
     // No branchToDelete when actualBranch is not set
     expect(gitUtils.removeWorktree).toHaveBeenCalledWith("/repo", "/wt/feat", {
