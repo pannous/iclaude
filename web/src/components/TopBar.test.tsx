@@ -16,11 +16,16 @@ interface MockStoreState {
   setSidebarOpen: ReturnType<typeof vi.fn>;
   taskPanelOpen: boolean;
   setTaskPanelOpen: ReturnType<typeof vi.fn>;
+  messages: Map<string, unknown[]>;
   activeTab: "chat" | "diff";
   setActiveTab: ReturnType<typeof vi.fn>;
+  openSkills: string[];
+  closeSkill: ReturnType<typeof vi.fn>;
   sessions: Map<string, { cwd?: string }>;
-  sdkSessions: { sessionId: string; cwd?: string }[];
+  sdkSessions: { sessionId: string; cwd?: string; title?: string }[];
   changedFiles: Map<string, Set<string>>;
+  sessionNames: Map<string, string>;
+  sessionSubtitles: Map<string, string>;
 }
 
 let storeState: MockStoreState;
@@ -34,11 +39,16 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     setSidebarOpen: vi.fn(),
     taskPanelOpen: false,
     setTaskPanelOpen: vi.fn(),
+    messages: new Map(),
     activeTab: "chat",
     setActiveTab: vi.fn(),
+    openSkills: [],
+    closeSkill: vi.fn(),
     sessions: new Map([["s1", { cwd: "/repo" }]]),
     sdkSessions: [],
     changedFiles: new Map(),
+    sessionNames: new Map(),
+    sessionSubtitles: new Map(),
     ...overrides,
   };
 }
