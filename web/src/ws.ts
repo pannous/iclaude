@@ -99,7 +99,15 @@ function nextId(): string {
   return `msg-${Date.now()}-${++idCounter}`;
 }
 
-function notifySessionDone(sessionId: string, isError: boolean) {
+function firstParagraph(text: string): string {
+  const trimmed = text.trim();
+  const end = trimmed.indexOf("\n\n");
+  const paragraph = end > 0 ? trimmed.slice(0, end) : trimmed;
+  // Notifications have limited space — cap at 200 chars
+  return paragraph.length > 200 ? paragraph.slice(0, 197) + "..." : paragraph;
+}
+
+function notifySessionDone(sessionId: string, isError: boolean, resultText?: string) {
   const store = useStore.getState();
   // Only notify for background sessions (not the one the user is looking at)
   if (store.currentSessionId === sessionId) return;
@@ -110,7 +118,8 @@ function notifySessionDone(sessionId: string, isError: boolean) {
   const title = isError ? `Session failed: ${name}` : `Session done: ${name}`;
   const tasks = store.sessionTasks.get(sessionId) || [];
   const completedCount = tasks.filter((t) => t.status === "completed").length;
-  const body = tasks.length > 0
+  const body = resultText ? firstParagraph(resultText)
+    : tasks.length > 0
     ? `${completedCount}/${tasks.length} tasks completed`
     : isError ? "Session ended with an error" : "Session finished successfully";
 
@@ -292,7 +301,7 @@ function handleMessage(sessionId: string, event: MessageEvent) {
         });
       }
       // Notify when a background session finishes
-      notifySessionDone(sessionId, r.is_error);
+      notifySessionDone(sessionId, r.is_error, r.result);
       break;
     }
 

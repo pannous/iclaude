@@ -339,13 +339,14 @@ describe("notifySessionDone", () => {
     vi.stubGlobal("location", { protocol: "http:", host: "localhost:3456" });
   });
 
-  function fireResult(sessionId: string, isError = false) {
+  function fireResult(sessionId: string, isError = false, result?: string) {
     fireMessage({
       type: "result",
       data: {
         type: "result",
         subtype: isError ? "error_during_execution" : "success",
         is_error: isError,
+        ...(result !== undefined ? { result } : {}),
         duration_ms: 100,
         duration_api_ms: 50,
         num_turns: 1,
@@ -414,6 +415,35 @@ describe("notifySessionDone", () => {
     fireResult("s1");
 
     expect(notificationSpy).not.toHaveBeenCalled();
+  });
+
+  it("shows first paragraph of result text in notification body", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+    useStore.getState().setCurrentSession("other");
+    useStore.getState().setSessionName("s1", "Build");
+
+    fireResult("s1", false, "All 42 tests passed.\n\nSee details in the test report.");
+
+    expect(notificationSpy).toHaveBeenCalledWith(
+      "Session done: Build",
+      expect.objectContaining({ body: "All 42 tests passed." }),
+    );
+  });
+
+  it("truncates long result paragraphs to 200 chars", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+    useStore.getState().setCurrentSession("other");
+    useStore.getState().setSessionName("s1", "Report");
+
+    const longText = "A".repeat(250);
+    fireResult("s1", false, longText);
+
+    expect(notificationSpy).toHaveBeenCalledWith(
+      "Session done: Report",
+      expect.objectContaining({ body: "A".repeat(197) + "..." }),
+    );
   });
 });
 
