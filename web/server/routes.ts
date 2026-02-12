@@ -289,6 +289,47 @@ export function createRoutes(
     return c.json(session);
   });
 
+  api.post("/sessions/:id/message", async (c) => {
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const { message, timeout = 120000 } = body;
+
+    if (!message || typeof message !== "string") {
+      return c.json({ error: "message is required" }, 400);
+    }
+
+    const session = launcher.getSession(id);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    try {
+      // Send the user message
+      const sent = wsBridge.sendUserMessage(id, message);
+      if (!sent) {
+        return c.json({ error: "Failed to send message to session" }, 500);
+      }
+
+      // Wait for assistant response
+      const response = await waitForAssistantResponse(id, wsBridge, timeout);
+
+      return c.json({
+        success: true,
+        response,
+        sessionId: id,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[routes] Message failed for session ${id}:`, msg);
+
+      if (msg.includes("Timeout")) {
+        return c.json({ error: "Timeout waiting for response" }, 408);
+      }
+
+      return c.json({ error: msg }, 500);
+    }
+  });
+
   api.patch("/sessions/:id/name", async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json().catch(() => ({}));
