@@ -428,7 +428,16 @@ function HtmlPreview({ html, preview }: { html: string; preview: string }) {
       window.vibe = {
         command: window.vibeCommand,
         playSound: (sound = 'Ping') => window.vibeCommand(\`afplay /System/Library/Sounds/\${sound}.aiff\`),
-        notify: (title, message) => window.vibeCommand(\`osascript -e 'display notification "\${message}" with title "\${title}"'\`)
+        notify: (title, body) => {
+          if (!('Notification' in window.parent)) return;
+          if (window.parent.Notification.permission === 'granted') {
+            new window.parent.Notification(title, { body });
+          } else if (window.parent.Notification.permission !== 'denied') {
+            window.parent.Notification.requestPermission().then(p => {
+              if (p === 'granted') new window.parent.Notification(title, { body });
+            });
+          }
+        }
       };
 
       console.log('🎯 Vibe Companion API injected! Try: await vibe.playSound() or vibe.command("ls -la")');
