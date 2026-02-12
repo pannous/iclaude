@@ -145,7 +145,7 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
       <div className="flex-1 min-w-0 space-y-3">
         {grouped.map((group, i) => {
           if (group.kind === "content") {
-            return <ContentBlockRenderer key={i} block={group.block} />;
+            return <ContentBlockRenderer key={i} block={group.block} scannedHtml={message.scannedHtml} />;
           }
           if (group.items.length === 1) {
             const item = group.items[0];
@@ -295,9 +295,10 @@ function MarkdownContent({ text }: { text: string }) {
   );
 }
 
-function ContentBlockRenderer({ block }: { block: ContentBlock }) {
+function ContentBlockRenderer({ block, scannedHtml }: { block: ContentBlock; scannedHtml?: { original: string }[] }) {
   if (block.type === "text") {
-    return <MarkdownContent text={block.text} />;
+    const cleaned = stripScannedHtml(block.text, scannedHtml);
+    return cleaned ? <MarkdownContent text={cleaned} /> : null;
   }
 
   if (block.type === "thinking") {
