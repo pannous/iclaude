@@ -276,6 +276,76 @@ export function createRoutes(
     return c.json(session);
   });
 
+  api.post("/sessions/:id/message", async (c) => {
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const { message, timeout = 120000 } = body;
+
+    if (!message || typeof message !== "string") {
+      return c.json({ error: "message is required" }, 400);
+    }
+
+    const session = launcher.getSession(id);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+
+    try {
+      // Send message via WebSocket bridge by simulating browser message
+      const wsSession = wsBridge.getSession(id);
+      if (!wsSession) {
+        return c.json({ error: "WebSocket session not initialized" }, 500);
+      }
+
+      // Track message count before sending
+      const messageCountBefore = wsSession.messageHistory.length;
+      const startTime = Date.now();
+
+      // Send user message (this will trigger the CLI to respond)
+      wsBridge.sendUserMessage(id, message);
+
+      // Poll for assistant response
+      const pollInterval = 500; // Check every 500ms
+      const maxAttempts = Math.floor(timeout / pollInterval);
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+
+        const currentSession = wsBridge.getSession(id);
+        if (!currentSession) continue;
+
+        // Look for new assistant messages after our message
+        const newMessages = currentSession.messageHistory.slice(messageCountBefore);
+        const assistantMessage = newMessages.find(m => m.type === "assistant");
+
+        if (assistantMessage && assistantMessage.type === "assistant") {
+          // Extract text content from assistant message
+          let responseText = "";
+          const content = assistantMessage.message?.content;
+
+          if (typeof content === "string") {
+            responseText = content;
+          } else if (Array.isArray(content)) {
+            responseText = content
+              .filter((block: any) => block.type === "text")
+              .map((block: any) => block.text)
+              .join("\n");
+          }
+
+          return c.json({
+            success: true,
+            response: responseText,
+            sessionId: id,
+          });
+        }
+      }
+
+      return c.json({ error: "Response timeout" }, 408);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[routes] Failed to send message:", msg);
+      return c.json({ error: msg }, 500);
+    }
+  });
+
   api.patch("/sessions/:id/name", async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json().catch(() => ({}));

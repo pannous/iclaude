@@ -1213,6 +1213,20 @@ export class WsBridge {
     this.broadcastToBrowsers(session, { type: "session_name_update", name });
   }
 
+  /** Send a user message programmatically (for API use) */
+  sendUserMessage(sessionId: string, content: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+
+    const msg: BrowserOutgoingMessage = {
+      type: "user_message",
+      content,
+    };
+
+    this.routeBrowserMessage(session, msg);
+    return true;
+  }
+
   private broadcastToBrowsers(session: Session, msg: BrowserIncomingMessage) {
     // Debug: warn when assistant messages are broadcast to 0 browsers (they may be lost)
     if (session.browserSockets.size === 0 && (msg.type === "assistant" || msg.type === "stream_event" || msg.type === "result")) {
