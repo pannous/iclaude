@@ -193,13 +193,18 @@ export function Sidebar() {
   }, [sdkSessions, sessions]);
 
   const doArchive = useCallback(async (sessionId: string, force?: boolean) => {
-    // Mark archived in store BEFORE disconnect so scheduleReconnect skips it
     const store = useStore.getState();
+    // Mark archived in sdkSessions BEFORE disconnect so scheduleReconnect skips it
     store.setSdkSessions(
       store.sdkSessions.map((s) =>
         s.sessionId === sessionId ? { ...s, archived: true } : s
       )
     );
+    // Remove from WsBridge sessions map so bridge-only sessions (no sdkInfo) disappear
+    const bridgeSessions = new Map(store.sessions);
+    if (bridgeSessions.delete(sessionId)) {
+      useStore.setState({ sessions: bridgeSessions });
+    }
     disconnectSession(sessionId);
     if (store.currentSessionId === sessionId) {
       store.newSession();
