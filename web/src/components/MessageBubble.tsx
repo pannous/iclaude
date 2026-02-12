@@ -88,19 +88,29 @@ function groupContentBlocks(blocks: ContentBlock[]): GroupedBlock[] {
   return groups;
 }
 
+function stripScannedHtml(text: string, scannedHtml?: { original: string }[]): string {
+  if (!scannedHtml || scannedHtml.length === 0) return text;
+  let result = text;
+  for (const frag of scannedHtml) {
+    result = result.replace(frag.original, "");
+  }
+  return result.trim();
+}
+
 function AssistantMessage({ message }: { message: ChatMessage }) {
   const blocks = message.contentBlocks || [];
   const grouped = useMemo(() => groupContentBlocks(blocks), [blocks]);
   const getText = useCallback(() => messageToText(message), [message]);
 
   const hasText = message.content || blocks.some(b => b.type === "text" || b.type === "thinking");
+  const cleanContent = useMemo(() => stripScannedHtml(message.content, message.scannedHtml), [message.content, message.scannedHtml]);
 
   if (blocks.length === 0 && message.content) {
     return (
       <div className="group/msg flex items-start gap-3">
         <AssistantAvatar />
         <div className="flex-1 min-w-0">
-          <MarkdownContent text={message.content} />
+          {cleanContent && <MarkdownContent text={cleanContent} />}
           {message.scannedImages && message.scannedImages.length > 0 && (
             <div className="flex gap-2 flex-wrap mt-3">
               {message.scannedImages.map((img, i) => (
@@ -389,105 +399,82 @@ function ThinkingBlock({ text }: { text: string }) {
 
 function HtmlPreview({ html, preview }: { html: string; preview: string }) {
   const [open, setOpen] = useState(true);
+  const [showSource, setShowSource] = useState(false);
   const yoloMode = useStore((s) => s.yoloMode);
   const iframeRef = useState<HTMLIFrameElement | null>(null)[0];
 
-  // Inject vibeCommand API when iframe loads in YOLO mode
   const handleIframeLoad = (iframe: HTMLIFrameElement) => {
     if (!yoloMode || !iframe.contentWindow) return;
-
-    // Inject the vibeCommand API
     (iframe.contentWindow as any).eval(`
       window.vibeCommand = async function(command, options = {}) {
         try {
           const response = await fetch('/api/exec', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              command: command,
-              cwd: options.cwd
-            })
+            body: JSON.stringify({ command: command, cwd: options && options.cwd })
           });
           const result = await response.json();
-          if (result.success) {
-            return { success: true, output: result.output };
-          } else {
-            return {
-              success: false,
-              error: result.error,
-              exitCode: result.exitCode,
-              stderr: result.stderr,
-              stdout: result.stdout
-            };
-          }
-        } catch (err) {
-          return { success: false, error: err.message };
-        }
+          return result.success
+            ? { success: true, output: result.output }
+            : { success: false, error: result.error, exitCode: result.exitCode, stderr: result.stderr, stdout: result.stdout };
+        } catch (err) { return { success: false, error: err.message }; }
       };
-
       window.vibe = {
         command: window.vibeCommand,
-        playSound: (sound = 'Ping') => window.vibeCommand(\`afplay /System/Library/Sounds/\${sound}.aiff\`),
+        playSound: (sound = 'Ping') => window.vibeCommand('afplay /System/Library/Sounds/' + (sound || 'Ping') + '.aiff'),
         notify: (title, body) => {
-          if (!('Notification' in window.parent)) return;
-          if (window.parent.Notification.permission === 'granted') {
-            new window.parent.Notification(title, { body });
-          } else if (window.parent.Notification.permission !== 'denied') {
-            window.parent.Notification.requestPermission().then(p => {
-              if (p === 'granted') new window.parent.Notification(title, { body });
-            });
-          }
+          window.parent.postMessage({ type: 'vibe:notify', title: title, body: body }, '*');
         }
       };
-
-      console.log('🎯 Vibe Companion API injected! Try: await vibe.playSound() or vibe.command("ls -la")');
     `);
   };
 
-  // Prepare enhanced HTML with YOLO mode
-  const enhancedHtml = yoloMode ? html : html;
-
   return (
     <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-cc-hover transition-colors cursor-pointer"
-      >
-        <svg
-          viewBox="0 0 16 16"
-          fill="currentColor"
-          className={`w-3 h-3 text-cc-muted transition-transform shrink-0 ${open ? "rotate-90" : ""}`}
+      <div className="flex items-center gap-2 px-3 py-2 text-xs">
+        <button
+          onClick={() => setOpen(!open)}
+          className="flex items-center gap-2 flex-1 min-w-0 hover:bg-cc-hover rounded transition-colors cursor-pointer"
         >
-          <path d="M6 4l4 4-4 4" />
-        </svg>
-        <svg
-          viewBox="0 0 16 16"
-          fill="currentColor"
-          className="w-3.5 h-3.5 text-cc-primary shrink-0"
-        >
-          <path d="M2 3h12v2H2V3zm0 4h12v2H2V7zm0 4h8v2H2v-2z" />
-        </svg>
-        <span className="font-medium text-cc-fg">HTML Fragment</span>
-        <span className="text-cc-muted/70 truncate flex-1 text-left">{preview}</span>
+          <svg viewBox="0 0 16 16" fill="currentColor"
+            className={`w-3 h-3 text-cc-muted transition-transform shrink-0 ${open ? "rotate-90" : ""}`}>
+            <path d="M6 4l4 4-4 4" />
+          </svg>
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-cc-primary shrink-0">
+            <path d="M2 3h12v2H2V3zm0 4h12v2H2V7zm0 4h8v2H2v-2z" />
+          </svg>
+          <span className="font-medium text-cc-fg">HTML Fragment</span>
+          <span className="text-cc-muted/70 truncate flex-1 text-left">{preview}</span>
+        </button>
         {yoloMode && (
-          <span className="text-[10px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded font-mono">
+          <span className="text-[10px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded font-mono shrink-0">
             YOLO
           </span>
         )}
-      </button>
+        <button
+          onClick={() => setShowSource(!showSource)}
+          className={`text-[10px] px-1.5 py-0.5 rounded font-mono shrink-0 cursor-pointer transition-colors ${
+            showSource ? "bg-cc-primary/10 text-cc-primary" : "text-cc-muted hover:text-cc-fg"
+          }`}
+        >
+          Source
+        </button>
+      </div>
       {open && (
         <div className="border-t border-cc-border">
-          <iframe
-            ref={(el) => {
-              if (el && el !== iframeRef) {
-                handleIframeLoad(el);
-              }
-            }}
-            srcDoc={enhancedHtml}
-            className="w-full h-[400px] bg-white"
-            sandbox={yoloMode ? undefined : "allow-scripts"}
-            title="HTML preview"
-          />
+          {showSource ? (
+            <pre className="px-3 py-2 text-[11px] font-mono-code text-cc-muted bg-cc-code-bg max-h-[400px] overflow-auto whitespace-pre-wrap">
+              {html}
+            </pre>
+          ) : (
+            <iframe
+              ref={(el) => { if (el && el !== iframeRef) handleIframeLoad(el); }}
+              srcDoc={html}
+              className="w-full h-[400px] bg-white"
+              sandbox={yoloMode ? undefined : "allow-scripts"}
+              title="HTML preview"
+            />
+          )}
         </div>
       )}
     </div>
