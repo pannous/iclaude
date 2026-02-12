@@ -809,6 +809,100 @@ export function createRoutes(
     return c.json(limits);
   });
 
+  // ─── OpenAI-compatible Chat Completions ─────────────────────────────
+
+  api.post("/v1/chat/completions", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const { messages, model, stream = false } = body;
+
+    if (!messages || !Array.isArray(messages)) {
+      return c.json({ error: "messages array is required" }, 400);
+    }
+
+    if (stream) {
+      return c.json({ error: "Streaming not yet implemented" }, 501);
+    }
+
+    let sessionId: string | null = null;
+
+    try {
+      // Create a temporary session
+      const session = launcher.launch({
+        model: model || "claude-sonnet-4-5-20250929",
+        permissionMode: "bypass",
+        backendType: "claude",
+      });
+      sessionId = session.sessionId;
+
+      // Extract user message (take the last user message from the array)
+      const userMessages = messages.filter((msg: { role: string }) => msg.role === "user");
+      if (userMessages.length === 0) {
+        return c.json({ error: "No user message found" }, 400);
+      }
+      const lastUserMessage = userMessages[userMessages.length - 1];
+      const userContent = lastUserMessage.content;
+
+      // Wait for CLI to connect (with timeout)
+      const cliConnected = await waitForCondition(
+        () => {
+          const wsSession = wsBridge.getSession(sessionId!);
+          return wsSession?.cliSocket !== null;
+        },
+        10000,
+        100
+      );
+
+      if (!cliConnected) {
+        throw new Error("CLI failed to connect within timeout");
+      }
+
+      // Send the user message
+      const sent = wsBridge.sendUserMessage(sessionId, userContent);
+      if (!sent) {
+        throw new Error("Failed to send message to session");
+      }
+
+      // Wait for assistant response
+      const response = await waitForAssistantResponse(sessionId, wsBridge, 60000);
+
+      // Clean up session
+      setTimeout(() => launcher.kill(sessionId!), 1000);
+
+      // Return OpenAI-compatible response
+      return c.json({
+        id: sessionId,
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
+        model: model || "claude-sonnet-4-5-20250929",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: response,
+            },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        },
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[routes] Chat completion failed:", msg);
+
+      // Clean up session on error
+      if (sessionId) {
+        setTimeout(() => launcher.kill(sessionId!), 100);
+      }
+
+      return c.json({ error: msg }, 500);
+    }
+  });
+
   // ─── Command Execution (for HTML fragments in YOLO mode) ─────────────
 
   api.post("/exec", async (c) => {
@@ -899,6 +993,78 @@ export function createRoutes(
   }
 
   return api;
+}
+
+// ─── Helper functions for chat completions ─────────────────────────────
+
+/** Wait for a condition to become true with timeout */
+async function waitForCondition(
+  condition: () => boolean,
+  timeoutMs: number,
+  pollIntervalMs = 100
+): Promise<boolean> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    if (condition()) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+  return false;
+}
+
+/** Wait for assistant response in session message history */
+async function waitForAssistantResponse(
+  sessionId: string,
+  wsBridge: WsBridge,
+  timeoutMs: number
+): Promise<string> {
+  const startTime = Date.now();
+  let lastMessageCount = 0;
+
+  while (Date.now() - startTime < timeoutMs) {
+    const session = wsBridge.getSession(sessionId);
+    if (!session) {
+      throw new Error("Session not found");
+    }
+
+    const messageHistory = session.messageHistory;
+
+    // Look for new assistant messages
+    const assistantMessages = messageHistory.filter((msg) => msg.type === "assistant");
+
+    if (assistantMessages.length > 0) {
+      const lastAssistant = assistantMessages[assistantMessages.length - 1];
+      if (lastAssistant.type === "assistant") {
+        // Extract text content from the message
+        const content = lastAssistant.message.content;
+        if (Array.isArray(content)) {
+          const textBlocks = content
+            .filter((block) => block.type === "text")
+            .map((block) => (block.type === "text" ? block.text : ""));
+          if (textBlocks.length > 0) {
+            return textBlocks.join("\n");
+          }
+        } else if (typeof content === "string") {
+          return content;
+        }
+      }
+    }
+
+    // Check if there are any error messages
+    const errorMessages = messageHistory.filter((msg) => msg.type === "error");
+    if (errorMessages.length > 0 && errorMessages.length > lastMessageCount) {
+      const lastError = errorMessages[errorMessages.length - 1];
+      if (lastError.type === "error") {
+        throw new Error(lastError.message || "Unknown error");
+      }
+    }
+
+    lastMessageCount = messageHistory.length;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  throw new Error("Timeout waiting for assistant response");
 }
 
 /** Read first user message from a session JSONL as a title. */
