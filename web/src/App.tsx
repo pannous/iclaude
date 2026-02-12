@@ -9,7 +9,7 @@ import { TopBar } from "./components/TopBar.js";
 import { HomePage } from "./components/HomePage.js";
 import { TaskPanel } from "./components/TaskPanel.js";
 
-const EditorPanel = lazy(() => import("./components/EditorPanel.js").then(m => ({ default: m.EditorPanel })));
+const DiffPanel = lazy(() => import("./components/DiffPanel.js").then(m => ({ default: m.DiffPanel })));
 const SkillPanel = lazy(() => import("./components/SkillPanel.js").then(m => ({ default: m.SkillPanel })));
 
 export default function App() {
@@ -336,7 +336,7 @@ export default function App() {
                   <div className="w-5 h-5 border-2 border-cc-primary border-t-transparent rounded-full animate-spin" />
                 </div>
               }>
-                <EditorPanel sessionId={currentSessionId} />
+                <DiffPanel sessionId={currentSessionId} />
               </Suspense>
             </div>
           )}
