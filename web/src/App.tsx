@@ -223,39 +223,37 @@ export default function App() {
     };
   }, []);
 
-  async function handleArchiveSessions(inactiveOnly: boolean) {
+  async function archiveInactive() {
     const store = useStore.getState();
-    const sdkSessions = store.sdkSessions;
-    const activeSessions = sdkSessions.filter(s => !s.archived);
-
-    const toArchive = inactiveOnly
-      ? activeSessions.filter(s => {
-          const status = store.sessionStatus.get(s.sessionId);
-          return !status || status === "idle";
-        })
-      : activeSessions;
-
+    const toArchive = store.sdkSessions.filter(
+      s => !s.archived && s.state === "exited"
+    );
     if (toArchive.length === 0) {
       setShowArchiveAllConfirm(false);
       return;
     }
+    for (const s of toArchive) api.archiveSession(s.sessionId).catch(() => {});
+    api.listSessions().then(list => store.setSdkSessions(list)).catch(() => {});
+    setShowArchiveAllConfirm(false);
+  }
 
-    const currentId = store.currentSessionId;
-    const archivingCurrent = currentId && toArchive.some(s => s.sessionId === currentId);
-
-    if (archivingCurrent) {
-      disconnectSession(currentId);
+  async function archiveAll() {
+    const store = useStore.getState();
+    const toArchive = store.sdkSessions.filter(s => !s.archived);
+    if (store.currentSessionId) {
+      disconnectSession(store.currentSessionId);
       store.newSession();
     }
+    for (const s of toArchive) api.archiveSession(s.sessionId).catch(() => {});
+    api.listSessions().then(list => store.setSdkSessions(list)).catch(() => {});
+    setShowArchiveAllConfirm(false);
+  }
 
-    for (const session of toArchive) {
-      api.archiveSession(session.sessionId).catch(() => {});
-    }
-
-    api.listSessions().then((list) => {
-      store.setSdkSessions(list);
-    }).catch(() => {});
-
+  async function deleteArchived() {
+    const store = useStore.getState();
+    const toDelete = store.sdkSessions.filter(s => s.archived);
+    for (const s of toDelete) api.deleteSession(s.sessionId).catch(() => {});
+    api.listSessions().then(list => store.setSdkSessions(list)).catch(() => {});
     setShowArchiveAllConfirm(false);
   }
 
@@ -270,13 +268,13 @@ export default function App() {
                 <path fillRule="evenodd" d="M8.22 1.754a.25.25 0 00-.44 0L1.698 13.132a.25.25 0 00.22.368h12.164a.25.25 0 00.22-.368L8.22 1.754zm-1.763-.707c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0114.082 15H1.918a1.75 1.75 0 01-1.543-2.575L6.457 1.047zM9 11a1 1 0 11-2 0 1 1 0 012 0zm-.25-5.25a.75.75 0 00-1.5 0v2.5a.75.75 0 001.5 0v-2.5z" clipRule="evenodd" />
               </svg>
               <div className="flex-1">
-                <h3 className="text-base font-semibold text-cc-fg mb-1">Archive Sessions</h3>
+                <h3 className="text-base font-semibold text-cc-fg mb-1">Clean Up Sessions</h3>
                 <p className="text-sm text-cc-muted leading-relaxed">
-                  Archive sessions to clean up your sidebar. You can restore them later from the archived section.
+                  Archive exited sessions or permanently remove already-archived ones.
                 </p>
               </div>
             </div>
-            <div className="flex gap-3 justify-end">
+            <div className="flex flex-wrap gap-2 justify-end">
               <button
                 onClick={() => setShowArchiveAllConfirm(false)}
                 className="px-4 py-2 text-sm font-medium rounded-lg bg-cc-hover text-cc-fg hover:bg-cc-border transition-colors cursor-pointer"
@@ -284,16 +282,22 @@ export default function App() {
                 Cancel
               </button>
               <button
-                onClick={() => handleArchiveSessions(true)}
+                onClick={archiveInactive}
                 className="px-4 py-2 text-sm font-medium rounded-lg bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors cursor-pointer"
               >
-                Inactive Only
+                Archive Inactive
               </button>
               <button
-                onClick={() => handleArchiveSessions(false)}
+                onClick={archiveAll}
                 className="px-4 py-2 text-sm font-medium rounded-lg bg-cc-warning hover:bg-amber-500 text-white transition-colors cursor-pointer"
               >
                 Archive All
+              </button>
+              <button
+                onClick={deleteArchived}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-cc-error hover:bg-red-600 text-white transition-colors cursor-pointer"
+              >
+                Delete Archived
               </button>
             </div>
           </div>
