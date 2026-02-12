@@ -193,14 +193,21 @@ export function Sidebar() {
   }, [sdkSessions, sessions]);
 
   const doArchive = useCallback(async (sessionId: string, force?: boolean) => {
+    // Mark archived in store BEFORE disconnect so scheduleReconnect skips it
+    const store = useStore.getState();
+    store.setSdkSessions(
+      store.sdkSessions.map((s) =>
+        s.sessionId === sessionId ? { ...s, archived: true } : s
+      )
+    );
+    disconnectSession(sessionId);
+    if (store.currentSessionId === sessionId) {
+      store.newSession();
+    }
     try {
-      disconnectSession(sessionId);
       await api.archiveSession(sessionId, force ? { force: true } : undefined);
     } catch {
       // best-effort
-    }
-    if (useStore.getState().currentSessionId === sessionId) {
-      useStore.getState().newSession();
     }
     try {
       const list = await api.listSessions();
