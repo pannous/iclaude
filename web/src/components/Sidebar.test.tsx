@@ -160,9 +160,10 @@ beforeEach(() => {
 });
 
 describe("Sidebar", () => {
-  it("renders 'New Session' button", () => {
+  it("renders 'New' and 'Resume' buttons", () => {
     render(<Sidebar />);
-    expect(screen.getByText("New Session")).toBeInTheDocument();
+    expect(screen.getByText("New")).toBeInTheDocument();
+    expect(screen.getByText("Resume")).toBeInTheDocument();
   });
 
   it("renders 'No sessions yet.' when no sessions exist", () => {
@@ -313,7 +314,7 @@ describe("Sidebar", () => {
 
   it("New Session button calls newSession", () => {
     render(<Sidebar />);
-    fireEvent.click(screen.getByText("New Session"));
+    fireEvent.click(screen.getByText("New"));
 
     expect(mockState.newSession).toHaveBeenCalled();
   });

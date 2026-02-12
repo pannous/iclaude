@@ -1,17 +1,32 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useStore } from "../store.js";
-import { api } from "../api.js";
-import { connectSession, connectAllSessions, disconnectSession } from "../ws.js";
+import { api, type ResumableSession } from "../api.js";
+import { connectSession, connectAllSessions, disconnectSession, waitForConnection } from "../ws.js";
 import { EnvManager } from "./EnvManager.js";
 import { ProjectGroup } from "./ProjectGroup.js";
 import { SessionItem } from "./SessionItem.js";
 import { groupSessionsByProject, type SessionItem as SessionItemType } from "../utils/project-grouping.js";
+
+function formatTimeAgo(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
 
 export function Sidebar() {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [showEnvManager, setShowEnvManager] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [showResumePicker, setShowResumePicker] = useState(false);
+  const [resumableSessions, setResumableSessions] = useState<ResumableSession[]>([]);
+  const [resumeLoading, setResumeLoading] = useState(false);
+  const [resumingId, setResumingId] = useState<string | null>(null);
   const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const sessions = useStore((s) => s.sessions);
@@ -84,6 +99,46 @@ export function Sidebar() {
     if (window.innerWidth < 768) {
       useStore.getState().setSidebarOpen(false);
     }
+  }
+
+  async function handleShowResumePicker() {
+    if (showResumePicker) {
+      setShowResumePicker(false);
+      return;
+    }
+    setResumeLoading(true);
+    setShowResumePicker(true);
+    try {
+      const list = await api.listResumableSessions();
+      setResumableSessions(list);
+    } catch {
+      setResumableSessions([]);
+    }
+    setResumeLoading(false);
+  }
+
+  async function handleResumeSession(rs: ResumableSession) {
+    setResumingId(rs.sessionId);
+    try {
+      if (currentSessionId) disconnectSession(currentSessionId);
+      const result = await api.createSession({
+        cwd: rs.project,
+        resumeSessionId: rs.sessionId,
+      });
+      const sessionId = result.sessionId;
+      const name = rs.title.slice(0, 40) || rs.sessionId.slice(0, 8);
+      useStore.getState().setSessionName(sessionId, name);
+      setCurrentSession(sessionId);
+      connectSession(sessionId);
+      await waitForConnection(sessionId);
+      setShowResumePicker(false);
+      if (window.innerWidth < 768) {
+        useStore.getState().setSidebarOpen(false);
+      }
+    } catch (err) {
+      console.error("Failed to resume session:", err);
+    }
+    setResumingId(null);
   }
 
   // Focus edit input when entering edit mode
@@ -246,15 +301,71 @@ export function Sidebar() {
           <span className="text-sm font-semibold text-cc-fg tracking-tight">Vibe Companion</span>
         </a>
 
-        <button
-          onClick={handleNewSession}
-          className="w-full py-2 px-3 text-sm font-medium rounded-[10px] bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors duration-150 flex items-center justify-center gap-1.5 cursor-pointer"
-        >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-            <path d="M8 3v10M3 8h10" />
-          </svg>
-          New Session
-        </button>
+        <div className="flex gap-1.5">
+          <button
+            onClick={handleNewSession}
+            className="flex-1 py-2 px-3 text-sm font-medium rounded-[10px] bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors duration-150 flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+              <path d="M8 3v10M3 8h10" />
+            </svg>
+            New
+          </button>
+          <button
+            onClick={handleShowResumePicker}
+            className={`flex-1 py-2 px-3 text-sm font-medium rounded-[10px] transition-colors duration-150 flex items-center justify-center gap-1.5 cursor-pointer ${
+              showResumePicker
+                ? "bg-cc-active text-cc-fg"
+                : "bg-cc-hover text-cc-muted hover:text-cc-fg"
+            }`}
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+              <path d="M3 8a5 5 0 119.546 2.046" strokeLinecap="round" />
+              <path d="M14 8A6 6 0 102 8a6 6 0 0012 0z" strokeOpacity="0.3" />
+              <path d="M10 12l2.5-2-2.5-2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Resume
+          </button>
+        </div>
+
+        {showResumePicker && (
+          <div className="mt-1.5 rounded-[10px] border border-cc-border bg-cc-sidebar overflow-hidden">
+            {resumeLoading ? (
+              <div className="px-3 py-4 text-xs text-cc-muted text-center">Loading sessions...</div>
+            ) : resumableSessions.length === 0 ? (
+              <div className="px-3 py-4 text-xs text-cc-muted text-center">No resumable sessions found</div>
+            ) : (
+              <div className="max-h-[280px] overflow-y-auto">
+                {resumableSessions.map((rs) => {
+                  const projectName = rs.project.split("/").pop() || rs.project;
+                  const ago = formatTimeAgo(rs.lastModified);
+                  const isResuming = resumingId === rs.sessionId;
+                  return (
+                    <button
+                      key={rs.sessionId}
+                      onClick={() => handleResumeSession(rs)}
+                      disabled={!!resumingId}
+                      className="w-full px-3 py-2 text-left hover:bg-cc-hover transition-colors border-b border-cc-border last:border-b-0 cursor-pointer disabled:opacity-50"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="shrink-0 mt-1 w-1.5 h-1.5 rounded-full bg-cc-muted opacity-40" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12px] text-cc-fg truncate leading-snug">
+                            {isResuming ? "Resuming..." : (rs.title || rs.sessionId.slice(0, 12))}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-cc-muted truncate">{projectName}</span>
+                            <span className="text-[10px] text-cc-muted opacity-50">{ago}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Worktree archive confirmation */}
