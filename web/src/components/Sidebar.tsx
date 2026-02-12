@@ -331,34 +331,7 @@ export function Sidebar() {
       <div className="p-4 pb-3">
         <a href="https://github.com/pannous/companion" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity">
           <img src={logoSrc} alt="" className="w-7 h-7" />
-          <span className="text-sm font-semibold text-cc-fg tracking-tight">Vibe Companion</span>
-        </a>
-
-        <div className="flex gap-1.5">
-          <button
-            onClick={handleNewSession}
-            className="flex-1 py-2 px-3 text-sm font-medium rounded-[10px] bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors duration-150 flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-              <path d="M8 3v10M3 8h10" />
-            </svg>
-            New
-          </button>
-          <button
-            onClick={handleShowResumePicker}
-            className={`flex-1 py-2 px-3 text-sm font-medium rounded-[10px] transition-colors duration-150 flex items-center justify-center gap-1.5 cursor-pointer ${
-              showResumePicker
-                ? "bg-cc-active text-cc-fg"
-                : "bg-cc-hover text-cc-muted hover:text-cc-fg"
-            }`}
-          >
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
-              <path d="M3 8a5 5 0 119.546 2.046" strokeLinecap="round" />
-              <path d="M14 8A6 6 0 102 8a6 6 0 0012 0z" strokeOpacity="0.3" />
-              <path d="M10 12l2.5-2-2.5-2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Resume
-          </button>
+          <span className="text-sm font-semibold text-cc-fg tracking-tight">The Companion</span>
         </div>
 
         {showResumePicker && (

@@ -315,10 +315,9 @@ describe("ToolBlock", () => {
 
     fireEvent.click(screen.getByRole("button"));
 
-    // DiffViewer splits path: directory in muted span, filename in bold span
-    expect(screen.getByText("/home/user/src/")).toBeTruthy();
+    // DiffViewer renders file header with basename
     expect(screen.getByText("app.ts")).toBeTruthy();
-    // DiffViewer renders del/add lines with CSS classes
+    // DiffViewer renders del/add lines
     expect(container.querySelector(".diff-line-del")).toBeTruthy();
     expect(container.querySelector(".diff-line-add")).toBeTruthy();
   });

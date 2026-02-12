@@ -16,6 +16,22 @@ import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
 import { getUsageLimits } from "./usage-limits.js";
 
+function execCaptureStdout(
+  command: string,
+  options: { cwd: string; encoding: "utf-8"; timeout: number },
+): string {
+  try {
+    return execSync(command, options);
+  } catch (err: unknown) {
+    const maybe = err as { stdout?: Buffer | string };
+    if (typeof maybe.stdout === "string") return maybe.stdout;
+    if (maybe.stdout && Buffer.isBuffer(maybe.stdout)) {
+      return maybe.stdout.toString("utf-8");
+    }
+    throw err;
+  }
+}
+
 export function createRoutes(
   launcher: CliLauncher,
   wsBridge: WsBridge,
@@ -544,7 +560,7 @@ export function createRoutes(
     const cwd = process.cwd();
     // Only report cwd if the user launched companion from a real project directory
     // (not from the package root or the home directory itself)
-    const packageRoot = process.env.__VIBE_PACKAGE_ROOT;
+    const packageRoot = process.env.__COMPANION_PACKAGE_ROOT;
     const isProjectDir =
       cwd !== home &&
       (!packageRoot || !cwd.startsWith(packageRoot));
@@ -683,11 +699,38 @@ export function createRoutes(
     if (!filePath) return c.json({ error: "path required" }, 400);
     const absPath = resolve(filePath);
     try {
-      const diff = execSync(`git diff HEAD -- "${absPath}"`, {
+      const repoRoot = execSync("git rev-parse --show-toplevel", {
         cwd: dirname(absPath),
         encoding: "utf-8",
         timeout: 5000,
+      }).trim();
+      const relPath = execSync(`git -C "${repoRoot}" ls-files --full-name -- "${absPath}"`, {
+        encoding: "utf-8",
+        timeout: 5000,
+      }).trim() || absPath;
+
+      let diff = execCaptureStdout(`git diff HEAD -- "${relPath}"`, {
+        cwd: repoRoot,
+        encoding: "utf-8",
+        timeout: 5000,
       });
+
+      // For untracked files, HEAD diff is empty. Show full file as added.
+      if (!diff.trim()) {
+        const untracked = execSync(`git ls-files --others --exclude-standard -- "${relPath}"`, {
+          cwd: repoRoot,
+          encoding: "utf-8",
+          timeout: 5000,
+        }).trim();
+        if (untracked) {
+          diff = execCaptureStdout(`git diff --no-index -- /dev/null "${absPath}"`, {
+            cwd: repoRoot,
+            encoding: "utf-8",
+            timeout: 5000,
+          });
+        }
+      }
+
       return c.json({ path: absPath, diff });
     } catch {
       return c.json({ path: absPath, diff: "" });
@@ -868,6 +911,22 @@ export function createRoutes(
     return c.json({ ...result, git_ahead, git_behind });
   });
 
+  // ─── GitHub PR Status ────────────────────────────────────────────────
+
+  api.get("/git/pr-status", async (c) => {
+    const cwd = c.req.query("cwd");
+    const branch = c.req.query("branch");
+    if (!cwd || !branch) return c.json({ error: "cwd and branch required" }, 400);
+
+    const { isGhAvailable, fetchPRInfo } = await import("./github-pr.js");
+    if (!isGhAvailable()) {
+      return c.json({ available: false, pr: null });
+    }
+
+    const pr = await fetchPRInfo(cwd, branch);
+    return c.json({ available: true, pr });
+  });
+
   // ─── Usage Limits ─────────────────────────────────────────────────────
 
   api.get("/usage-limits", async (c) => {
@@ -916,21 +975,34 @@ export function createRoutes(
       return c.json({ error: "Streaming not yet implemented" }, 501);
     }
 
-    let sessionId: string | null = null;
-
-    try {
-      // Create a temporary session
-      const session = launcher.launch({
-        model: model || "claude-sonnet-4-5-20250929",
-        permissionMode: "bypass",
-        backendType: "claude",
-      });
-      sessionId = session.sessionId;
-
-      // Extract user message (take the last user message from the array)
-      const userMessages = messages.filter((msg: { role: string }) => msg.role === "user");
-      if (userMessages.length === 0) {
-        return c.json({ error: "No user message found" }, 400);
+    // Respond immediately, then perform update async
+    setTimeout(async () => {
+      try {
+        console.log(
+          `[update] Updating the-companion to ${state.latestVersion}...`,
+        );
+        const proc = Bun.spawn(
+          ["bun", "install", "-g", `the-companion@${state.latestVersion}`],
+          { stdout: "pipe", stderr: "pipe" },
+        );
+        const exitCode = await proc.exited;
+        if (exitCode !== 0) {
+          const stderr = await new Response(proc.stderr).text();
+          console.error(
+            `[update] bun install failed (code ${exitCode}):`,
+            stderr,
+          );
+          setUpdateInProgress(false);
+          return;
+        }
+        console.log(
+          "[update] Update successful, exiting for launchd restart...",
+        );
+        // Exit with non-zero code so launchd restarts us
+        process.exit(42);
+      } catch (err) {
+        console.error("[update] Update failed:", err);
+        setUpdateInProgress(false);
       }
       const lastUserMessage = userMessages[userMessages.length - 1];
       const userContent = lastUserMessage.content;
