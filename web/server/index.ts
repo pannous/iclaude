@@ -12,13 +12,18 @@ import { SessionStore } from "./session-store.js";
 import { WorktreeTracker } from "./worktree-tracker.js";
 import { generateSessionTitle } from "./auto-namer.js";
 import * as sessionNames from "./session-names.js";
+import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
+import { isRunningAsService } from "./service.js";
 import type { SocketData } from "./ws-bridge.js";
 import type { ServerWebSocket } from "bun";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const packageRoot = process.env.__VIBE_PACKAGE_ROOT || resolve(__dirname, "..");
 
-const port = Number(process.env.PORT) || 3456;
+import { DEFAULT_PORT_DEV, DEFAULT_PORT_PROD } from "./constants.js";
+
+const defaultPort = process.env.NODE_ENV === "production" ? DEFAULT_PORT_PROD : DEFAULT_PORT_DEV;
+const port = Number(process.env.PORT) || defaultPort;
 const sessionStore = new SessionStore();
 const wsBridge = new WsBridge();
 const launcher = new CliLauncher(port);
@@ -174,6 +179,13 @@ console.log(`  Browser WebSocket: ws://localhost:${server.port}/ws/browser/:sess
 
 if (process.env.NODE_ENV !== "production") {
   console.log("Dev mode: frontend at http://localhost:2345");
+}
+
+// ── Update checker ──────────────────────────────────────────────────────────
+startPeriodicCheck();
+if (isRunningAsService()) {
+  setServiceMode(true);
+  console.log("[server] Running as launchd service (auto-update available)");
 }
 
 // ── Reconnection watchdog ────────────────────────────────────────────────────

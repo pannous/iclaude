@@ -1,0 +1,27 @@
+#!/bin/sh
+
+echo "🔍 Running pre-push checks (typecheck + tests)..."
+
+cd web || exit 1
+
+# Ensure dependencies are installed
+if [ ! -d "node_modules" ]; then
+  echo "📦 Installing dependencies..."
+  bun install || exit 1
+fi
+
+# Run typecheck
+echo "🔎 Type checking..."
+bun run typecheck || {
+  echo "❌ Typecheck failed. Push aborted."
+  exit 1
+}
+
+# Run tests
+echo "🧪 Running tests..."
+bun run test || {
+  echo "❌ Tests failed. Push aborted."
+  exit 1
+}
+
+echo "✅ All checks passed! Pushing..."

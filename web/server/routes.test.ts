@@ -9,6 +9,15 @@ vi.mock("./env-manager.js", () => ({
   deleteEnv: vi.fn(),
 }));
 
+vi.mock("./skill-manager.js", () => ({
+  listSkills: vi.fn(() => []),
+  getSkill: vi.fn(() => null),
+  getSkillPanel: vi.fn(() => null),
+  getSkillState: vi.fn(() => ({})),
+  setSkillState: vi.fn(),
+  wrapWithVibeApi: vi.fn((html: string) => `<script>vibe</script>\n${html}`),
+}));
+
 vi.mock("node:child_process", () => ({
   execSync: vi.fn(() => ""),
 }));
@@ -43,16 +52,32 @@ vi.mock("./usage-limits.js", () => ({
   getUsageLimits: mockGetUsageLimits,
 }));
 
+vi.mock("./update-checker.js", () => ({
+  getUpdateState: vi.fn(() => ({
+    currentVersion: "0.22.1",
+    latestVersion: null,
+    lastChecked: 0,
+    isServiceMode: false,
+    checking: false,
+    updateInProgress: false,
+  })),
+  checkForUpdate: vi.fn(async () => {}),
+  isUpdateAvailable: vi.fn(() => false),
+  setUpdateInProgress: vi.fn(),
+}));
+
 import { Hono } from "hono";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createRoutes } from "./routes.js";
 import * as envManager from "./env-manager.js";
+import * as skillManager from "./skill-manager.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
 
 const mockedEnvManager = vi.mocked(envManager);
+const mockedSkillManager = vi.mocked(skillManager);
 const mockedGitUtils = vi.mocked(gitUtils);
 const mockedSessionNames = vi.mocked(sessionNames);
 const mockedExecSync = vi.mocked(execSync);
@@ -662,6 +687,98 @@ describe("DELETE /api/envs/:slug", () => {
     expect(res.status).toBe(404);
     const json = await res.json();
     expect(json).toEqual({ error: "Environment not found" });
+  });
+});
+
+// ─── HTML Skills ────────────────────────────────────────────────────────────
+
+describe("GET /api/skills", () => {
+  it("returns the list of skills", async () => {
+    const skills = [{ slug: "htop", name: "Process Monitor", description: "View procs", icon: "cpu", refreshInterval: 2000 }];
+    mockedSkillManager.listSkills.mockReturnValue(skills);
+
+    const res = await app.request("/api/skills", { method: "GET" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(skills);
+  });
+});
+
+describe("GET /api/skills/:slug", () => {
+  it("returns skill info when found", async () => {
+    const skill = { slug: "htop", name: "Process Monitor", description: "", icon: "cpu", refreshInterval: null };
+    mockedSkillManager.getSkill.mockReturnValue(skill);
+
+    const res = await app.request("/api/skills/htop", { method: "GET" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(skill);
+  });
+
+  it("returns 404 when skill not found", async () => {
+    mockedSkillManager.getSkill.mockReturnValue(null);
+    const res = await app.request("/api/skills/nope", { method: "GET" });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /api/skills/:slug/panel", () => {
+  it("returns wrapped HTML when skill and panel exist", async () => {
+    mockedSkillManager.getSkill.mockReturnValue({ slug: "htop", name: "htop", description: "", icon: "cpu", refreshInterval: null });
+    mockedSkillManager.getSkillPanel.mockReturnValue("<html><body>Hello</body></html>");
+    mockedSkillManager.wrapWithVibeApi.mockReturnValue("<script>vibe</script>\n<html><body>Hello</body></html>");
+
+    const res = await app.request("/api/skills/htop/panel", { method: "GET" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const text = await res.text();
+    expect(text).toContain("vibe");
+    expect(skillManager.wrapWithVibeApi).toHaveBeenCalledWith("<html><body>Hello</body></html>", "htop");
+  });
+
+  it("returns 404 when skill not found", async () => {
+    mockedSkillManager.getSkill.mockReturnValue(null);
+    const res = await app.request("/api/skills/nope/panel", { method: "GET" });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 when panel.html is missing", async () => {
+    mockedSkillManager.getSkill.mockReturnValue({ slug: "x", name: "x", description: "", icon: "terminal", refreshInterval: null });
+    mockedSkillManager.getSkillPanel.mockReturnValue(null);
+    const res = await app.request("/api/skills/x/panel", { method: "GET" });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /api/skills/:slug/state", () => {
+  it("returns skill state", async () => {
+    mockedSkillManager.getSkillState.mockReturnValue({ sortBy: "cpu" });
+    const res = await app.request("/api/skills/htop/state", { method: "GET" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ sortBy: "cpu" });
+  });
+});
+
+describe("PUT /api/skills/:slug/state", () => {
+  it("saves skill state", async () => {
+    mockedSkillManager.getSkill.mockReturnValue({ slug: "htop", name: "htop", description: "", icon: "cpu", refreshInterval: null });
+
+    const res = await app.request("/api/skills/htop/state", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sortBy: "mem" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(skillManager.setSkillState).toHaveBeenCalledWith("htop", { sortBy: "mem" });
+  });
+
+  it("returns 404 when skill not found", async () => {
+    mockedSkillManager.getSkill.mockReturnValue(null);
+    const res = await app.request("/api/skills/nope/state", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(404);
   });
 });
 
