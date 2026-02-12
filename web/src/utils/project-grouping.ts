@@ -2,6 +2,7 @@ import type { SdkSessionInfo } from "../types.js";
 
 export interface SessionItem {
   id: string;
+  title: string | undefined;
   model: string;
   cwd: string;
   gitBranch: string;
