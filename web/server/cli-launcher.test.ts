@@ -715,7 +715,7 @@ describe("persistence", () => {
       expect(newLauncher.restoreFromDisk()).toBe(0);
     });
 
-    it("preserves already-exited sessions from disk", () => {
+    it("preserves exited sessions that have a cliSessionId (resumable)", () => {
       const savedSessions = [
         {
           sessionId: "already-exited",
@@ -724,6 +724,7 @@ describe("persistence", () => {
           exitCode: 0,
           cwd: "/tmp/project",
           createdAt: Date.now(),
+          cliSessionId: "cli-123",
         },
       ];
       store.saveLauncher(savedSessions);
@@ -732,11 +733,30 @@ describe("persistence", () => {
       newLauncher.setStore(store);
       const recovered = newLauncher.restoreFromDisk();
 
-      // Already-exited sessions are loaded but not "recovered"
       expect(recovered).toBe(0);
       const session = newLauncher.getSession("already-exited");
       expect(session).toBeDefined();
       expect(session?.state).toBe("exited");
+    });
+
+    it("prunes ghost sessions (exited, no cliSessionId, no title, not archived)", () => {
+      const savedSessions = [
+        {
+          sessionId: "ghost-session",
+          pid: 33333,
+          state: "exited" as const,
+          exitCode: 1,
+          cwd: "/tmp/project",
+          createdAt: Date.now(),
+        },
+      ];
+      store.saveLauncher(savedSessions);
+
+      const newLauncher = new CliLauncher(3456);
+      newLauncher.setStore(store);
+      newLauncher.restoreFromDisk();
+
+      expect(newLauncher.getSession("ghost-session")).toBeUndefined();
     });
   });
 });

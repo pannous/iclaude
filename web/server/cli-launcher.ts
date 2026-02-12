@@ -119,6 +119,7 @@ export class CliLauncher {
     if (!data || !Array.isArray(data)) return 0;
 
     let recovered = 0;
+    let pruned = 0;
     for (const info of data) {
       if (this.sessions.has(info.sessionId)) continue;
 
@@ -135,10 +136,17 @@ export class CliLauncher {
           info.exitCode = -1;
           this.sessions.set(info.sessionId, info);
         }
-      } else {
-        // Already exited or no PID
+      } else if (info.cliSessionId || info.title || info.archived) {
+        // Only restore exited sessions that are resumable, named, or archived
         this.sessions.set(info.sessionId, info);
+      } else {
+        // Drop ghost sessions (exited, no cliSessionId, no title, not archived)
+        pruned++;
       }
+    }
+    if (pruned > 0) {
+      console.log(`[cli-launcher] Pruned ${pruned} ghost session(s) from launcher.json`);
+      this.persistState();
     }
     if (recovered > 0) {
       console.log(`[cli-launcher] Recovered ${recovered} live session(s) from disk`);
