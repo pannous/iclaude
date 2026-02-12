@@ -223,32 +223,38 @@ export default function App() {
     };
   }, []);
 
-  async function handleArchiveAll() {
+  async function handleArchiveSessions(inactiveOnly: boolean) {
     const store = useStore.getState();
     const sdkSessions = store.sdkSessions;
     const activeSessions = sdkSessions.filter(s => !s.archived);
 
-    // Disconnect current session if any
-    if (store.currentSessionId) {
-      disconnectSession(store.currentSessionId);
+    const toArchive = inactiveOnly
+      ? activeSessions.filter(s => {
+          const status = store.sessionStatus.get(s.sessionId);
+          return !status || status === "idle";
+        })
+      : activeSessions;
+
+    if (toArchive.length === 0) {
+      setShowArchiveAllConfirm(false);
+      return;
     }
 
-    // Archive all active sessions
-    for (const session of activeSessions) {
-      api.archiveSession(session.sessionId).catch(() => {
-        // best-effort
-      });
+    const currentId = store.currentSessionId;
+    const archivingCurrent = currentId && toArchive.some(s => s.sessionId === currentId);
+
+    if (archivingCurrent) {
+      disconnectSession(currentId);
+      store.newSession();
     }
 
-    // Go back to home page
-    store.newSession();
+    for (const session of toArchive) {
+      api.archiveSession(session.sessionId).catch(() => {});
+    }
 
-    // Refresh session list
     api.listSessions().then((list) => {
       store.setSdkSessions(list);
-    }).catch(() => {
-      // best-effort
-    });
+    }).catch(() => {});
 
     setShowArchiveAllConfirm(false);
   }
@@ -264,9 +270,9 @@ export default function App() {
                 <path fillRule="evenodd" d="M8.22 1.754a.25.25 0 00-.44 0L1.698 13.132a.25.25 0 00.22.368h12.164a.25.25 0 00.22-.368L8.22 1.754zm-1.763-.707c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0114.082 15H1.918a1.75 1.75 0 01-1.543-2.575L6.457 1.047zM9 11a1 1 0 11-2 0 1 1 0 012 0zm-.25-5.25a.75.75 0 00-1.5 0v2.5a.75.75 0 001.5 0v-2.5z" clipRule="evenodd" />
               </svg>
               <div className="flex-1">
-                <h3 className="text-base font-semibold text-cc-fg mb-1">Archive All Sessions?</h3>
+                <h3 className="text-base font-semibold text-cc-fg mb-1">Archive Sessions</h3>
                 <p className="text-sm text-cc-muted leading-relaxed">
-                  This will archive all active sessions. You can restore them later from the archived section.
+                  Archive sessions to clean up your sidebar. You can restore them later from the archived section.
                 </p>
               </div>
             </div>
@@ -278,7 +284,13 @@ export default function App() {
                 Cancel
               </button>
               <button
-                onClick={handleArchiveAll}
+                onClick={() => handleArchiveSessions(true)}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors cursor-pointer"
+              >
+                Inactive Only
+              </button>
+              <button
+                onClick={() => handleArchiveSessions(false)}
                 className="px-4 py-2 text-sm font-medium rounded-lg bg-cc-warning hover:bg-amber-500 text-white transition-colors cursor-pointer"
               >
                 Archive All
