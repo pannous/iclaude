@@ -329,7 +329,7 @@ export class CliLauncher {
 
     const env: Record<string, string | undefined> = {
       ...process.env,
-      CLAUDECODE: "1",
+      CLAUDECODE: undefined,
       ...options.env,
     };
 
@@ -392,6 +392,7 @@ export class CliLauncher {
 
     const env: Record<string, string | undefined> = {
       ...process.env,
+      CLAUDECODE: undefined,
       ...options.env,
     };
 
