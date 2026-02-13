@@ -630,35 +630,41 @@ export function createRoutes(
 
   api.get("/fs/recent-projects", async (c) => {
     try {
-      const claudeProjectsDir = join(homedir(), ".claude", "projects");
-      const entries = await readdir(claudeProjectsDir, { withFileTypes: true }).catch(() => []);
+      const home = homedir();
+      const projects = new Map<string, number>(); // path → lastUsed timestamp
 
-      const projects: { path: string; lastUsed: number }[] = [];
-
-      for (const entry of entries) {
+      // Source 1: ~/.claude/projects/ directory names (mtime-based)
+      const claudeProjectsDir = join(home, ".claude", "projects");
+      const dirEntries = await readdir(claudeProjectsDir, { withFileTypes: true }).catch(() => []);
+      for (const entry of dirEntries) {
         if (!entry.isDirectory()) continue;
-
-        // Convert directory name to path: -Users-me-dev-apps -> /Users/me/dev/apps
-        const dirName = entry.name;
-        const path = dirName.replace(/^-/, "/").replace(/-/g, "/");
-
-        // Get directory mtime as a proxy for last used
+        const path = entry.name.replace(/^-/, "/").replace(/-/g, "/");
         try {
           const stats = await stat(join(claudeProjectsDir, entry.name));
-          projects.push({ path, lastUsed: stats.mtime.getTime() });
-        } catch {
-          // Skip if we can't stat
-        }
+          projects.set(path, stats.mtime.getTime());
+        } catch { /* skip */ }
       }
 
-      // Sort by most recent first and take top 20
-      projects.sort((a, b) => b.lastUsed - a.lastUsed);
-      const recentProjects = projects.slice(0, 20).map(p => p.path);
+      // Source 2: ~/.claude/.claude.json projects keys
+      try {
+        const configPath = join(home, ".claude", ".claude.json");
+        const configText = await readFile(configPath, "utf-8");
+        const config = JSON.parse(configText);
+        if (config.projects && typeof config.projects === "object") {
+          for (const path of Object.keys(config.projects)) {
+            if (!projects.has(path)) projects.set(path, 0);
+          }
+        }
+      } catch { /* .claude.json not readable, skip */ }
 
-      // Filter out duplicates and the home directory
-      const uniquePaths = Array.from(new Set(recentProjects)).filter(p => p !== homedir());
+      // Sort by most recent first, take top 30
+      const sorted = [...projects.entries()]
+        .filter(([p]) => p !== home)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 30)
+        .map(([p]) => p);
 
-      return c.json({ projects: uniquePaths });
+      return c.json({ projects: sorted });
     } catch (e: unknown) {
       console.error("[routes] Failed to fetch recent projects:", e);
       return c.json({ projects: [] });

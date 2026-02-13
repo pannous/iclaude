@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { api, type DirEntry } from "../api.js";
 import { useStore } from "../store.js";
@@ -19,6 +19,18 @@ export function FolderPicker({ initialPath, onSelect, onClose }: FolderPickerPro
   const [recentDirs] = useState<string[]>(() => getRecentDirs());
   const sdkSessions = useStore((s) => s.sdkSessions);
 
+  // Autocomplete state
+  const [claudeProjects, setClaudeProjects] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [selectedIdx, setSelectedIdx] = useState(-1);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Fetch .claude project folders once on mount
+  useEffect(() => {
+    api.getRecentProjects().then((r) => setClaudeProjects(r.projects)).catch(() => {});
+  }, []);
+
   const sessionDirs = useMemo(() => {
     const recentSet = new Set(recentDirs);
     const seen = new Set<string>();
@@ -27,6 +39,12 @@ export function FolderPicker({ initialPath, onSelect, onClose }: FolderPickerPro
       .sort((a, b) => b.createdAt - a.createdAt)
       .map((s) => s.cwd);
   }, [sdkSessions, recentDirs]);
+
+  // Claude projects not already shown in recent/sessions
+  const filteredClaudeProjects = useMemo(() => {
+    const shown = new Set([...recentDirs, ...sessionDirs]);
+    return claudeProjects.filter((p) => !shown.has(p));
+  }, [claudeProjects, recentDirs, sessionDirs]);
 
   const loadDirs = useCallback(async (path?: string) => {
     setBrowseLoading(true);
@@ -54,11 +72,103 @@ export function FolderPicker({ initialPath, onSelect, onClose }: FolderPickerPro
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose, showDirInput]);
 
+  // Compute autocomplete suggestions when dirInput changes
+  useEffect(() => {
+    if (!showDirInput || !dirInput.trim()) {
+      setSuggestions([]);
+      setSelectedIdx(-1);
+      return;
+    }
+
+    const query = dirInput.trim().toLowerCase();
+
+    // Match against claude projects (fuzzy: match on folder name or full path)
+    const projectMatches = claudeProjects.filter((p) => {
+      const name = p.split("/").pop()?.toLowerCase() || "";
+      return p.toLowerCase().includes(query) || name.includes(query);
+    });
+
+    // Also fetch filesystem completions for typed path (debounced)
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      const all = new Set(projectMatches);
+
+      if (dirInput.startsWith("/")) {
+        try {
+          const parentDir = dirInput.includes("/")
+            ? dirInput.replace(/\/[^/]*$/, "") || "/"
+            : "/";
+          const result = await api.listDirs(parentDir);
+          const typed = dirInput.toLowerCase();
+          for (const d of result.dirs) {
+            if (d.path.toLowerCase().startsWith(typed)) all.add(d.path);
+          }
+        } catch { /* ignore */ }
+      }
+
+      const merged = [...all].slice(0, 10);
+      setSuggestions(merged);
+      setSelectedIdx(-1);
+    }, 150);
+
+    // Show project matches immediately (no debounce)
+    setSuggestions(projectMatches.slice(0, 10));
+    setSelectedIdx(-1);
+
+    return () => clearTimeout(debounceRef.current);
+  }, [dirInput, showDirInput, claudeProjects]);
+
   function selectDir(path: string) {
     addRecentDir(path);
     onSelect(path);
     onClose();
   }
+
+  function handleInputKeyDown(e: React.KeyboardEvent) {
+    if (suggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIdx((i) => Math.min(i + 1, suggestions.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIdx((i) => Math.max(i - 1, -1));
+        return;
+      }
+      if (e.key === "Tab" && suggestions.length > 0) {
+        e.preventDefault();
+        const pick = selectedIdx >= 0 ? suggestions[selectedIdx] : suggestions[0];
+        setDirInput(pick);
+        setSuggestions([]);
+        return;
+      }
+    }
+    if (e.key === "Enter" && dirInput.trim()) {
+      if (selectedIdx >= 0 && suggestions[selectedIdx]) {
+        selectDir(suggestions[selectedIdx]);
+      } else {
+        selectDir(dirInput.trim());
+      }
+    }
+    if (e.key === "Escape") {
+      if (suggestions.length > 0) {
+        e.stopPropagation();
+        setSuggestions([]);
+      } else {
+        e.stopPropagation();
+        setShowDirInput(false);
+      }
+    }
+  }
+
+  // Scroll selected suggestion into view
+  useEffect(() => {
+    if (selectedIdx >= 0 && suggestionsRef.current) {
+      const el = suggestionsRef.current.children[selectedIdx] as HTMLElement;
+      el?.scrollIntoView({ block: "nearest" });
+    }
+  }, [selectedIdx]);
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50" onClick={onClose}>
@@ -79,8 +189,8 @@ export function FolderPicker({ initialPath, onSelect, onClose }: FolderPickerPro
           </button>
         </div>
 
-        {/* Recent directories + session folders */}
-        {(recentDirs.length > 0 || sessionDirs.length > 0) && (
+        {/* Recent directories + session folders + Claude projects */}
+        {(recentDirs.length > 0 || sessionDirs.length > 0 || filteredClaudeProjects.length > 0) && (
           <div className="border-b border-cc-border shrink-0 max-h-[200px] overflow-y-auto">
             {recentDirs.length > 0 && (
               <>
@@ -119,29 +229,66 @@ export function FolderPicker({ initialPath, onSelect, onClose }: FolderPickerPro
                 ))}
               </>
             )}
+            {filteredClaudeProjects.length > 0 && (
+              <>
+                <div className="px-4 pt-2.5 pb-1 text-[10px] text-cc-muted uppercase tracking-wider">Projects</div>
+                {filteredClaudeProjects.slice(0, 10).map((dir) => (
+                  <button
+                    key={dir}
+                    onClick={() => selectDir(dir)}
+                    className="w-full px-4 py-2 sm:py-1.5 text-xs text-left hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2 text-cc-fg"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-30 shrink-0">
+                      <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 010-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9z" />
+                    </svg>
+                    <span className="font-medium truncate">{dir.split("/").pop() || dir}</span>
+                    <span className="text-cc-muted font-mono-code text-[10px] truncate ml-auto">{dir}</span>
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         )}
 
-        {/* Path bar */}
-        <div className="px-4 py-2.5 border-b border-cc-border flex items-center gap-2 shrink-0">
+        {/* Path bar with autocomplete */}
+        <div className="relative px-4 py-2.5 border-b border-cc-border flex items-center gap-2 shrink-0">
           {showDirInput ? (
-            <input
-              type="text"
-              value={dirInput}
-              onChange={(e) => setDirInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && dirInput.trim()) {
-                  selectDir(dirInput.trim());
-                }
-                if (e.key === "Escape") {
-                  e.stopPropagation();
-                  setShowDirInput(false);
-                }
-              }}
-              placeholder="/path/to/project"
-              className="flex-1 px-2 py-1 text-base sm:text-xs bg-cc-input-bg border border-cc-border rounded-md text-cc-fg font-mono-code placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
-              autoFocus
-            />
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={dirInput}
+                onChange={(e) => setDirInput(e.target.value)}
+                onKeyDown={handleInputKeyDown}
+                onBlur={() => {
+                  // Delay to allow click on suggestion
+                  setTimeout(() => setSuggestions([]), 200);
+                }}
+                placeholder="/path/to/project"
+                className="w-full px-2 py-1 text-base sm:text-xs bg-cc-input-bg border border-cc-border rounded-md text-cc-fg font-mono-code placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
+                autoFocus
+              />
+              {suggestions.length > 0 && (
+                <div
+                  ref={suggestionsRef}
+                  className="absolute left-0 right-0 top-full mt-1 z-50 max-h-[200px] overflow-y-auto bg-cc-bg border border-cc-border rounded-md shadow-lg"
+                >
+                  {suggestions.map((s, i) => (
+                    <button
+                      key={s}
+                      onMouseDown={(e) => { e.preventDefault(); selectDir(s); }}
+                      className={`w-full px-3 py-1.5 text-xs text-left cursor-pointer flex items-center gap-2 font-mono-code transition-colors ${
+                        i === selectedIdx ? "bg-cc-primary/15 text-cc-primary" : "text-cc-fg hover:bg-cc-hover"
+                      }`}
+                    >
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-40 shrink-0">
+                        <path d="M1 3.5A1.5 1.5 0 012.5 2h3.379a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.353.146H13.5A1.5 1.5 0 0115 4.707V12.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z" />
+                      </svg>
+                      <span className="truncate">{s}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <>
               {/* Go up button */}
