@@ -1,18 +1,15 @@
 import { Hono } from "hono";
 import { execSync } from "node:child_process";
-import { readdir, stat, realpath, readFile, writeFile } from "node:fs/promises";
-import { createReadStream } from "node:fs";
-import { createInterface } from "node:readline";
-import { resolve, join, sep, dirname } from "node:path";
+import { readdir, readFile, writeFile, stat } from "node:fs/promises";
+import { resolve, join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { existsSync, readFileSync } from "node:fs";
 import type { CliLauncher } from "./cli-launcher.js";
-import { WsBridge } from "./ws-bridge.js";
+import type { WsBridge } from "./ws-bridge.js";
 import type { SessionStore } from "./session-store.js";
 import type { WorktreeTracker } from "./worktree-tracker.js";
 import type { TerminalManager } from "./terminal-manager.js";
 import * as envManager from "./env-manager.js";
-import * as skillManager from "./skill-manager.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
 import { containerManager, type ContainerConfig, type ContainerInfo } from "./container-manager.js";
@@ -63,44 +60,9 @@ export function createRoutes(
         return c.json({ error: `Invalid backend: ${String(backend)}` }, 400);
       }
 
-      // Validate model (if provided)
-      if (body.model !== undefined) {
-        if (typeof body.model !== "string" || body.model.length === 0 || body.model.length > 100) {
-          return c.json({ error: "Invalid model parameter" }, 400);
-        }
-      }
-
-      // Validate permissionMode (if provided)
-      if (body.permissionMode !== undefined) {
-        const validModes = ["bypass", "bypassPermissions", "acceptEdits", "delegate", "dontAsk", "default", "plan"];
-        if (typeof body.permissionMode !== "string" || !validModes.includes(body.permissionMode)) {
-          return c.json({ error: "Invalid permissionMode parameter" }, 400);
-        }
-      }
-
-      // Validate claudeBinary (if provided)
-      if (body.claudeBinary !== undefined) {
-        if (typeof body.claudeBinary !== "string" || !/^[a-zA-Z0-9_\-\/\.]+$/.test(body.claudeBinary)) {
-          return c.json({ error: "Invalid claudeBinary parameter" }, 400);
-        }
-      }
-
-      // Validate allowedTools (if provided)
-      if (body.allowedTools !== undefined) {
-        if (!Array.isArray(body.allowedTools)) {
-          return c.json({ error: "allowedTools must be an array" }, 400);
-        }
-        if (!body.allowedTools.every((t: unknown) => typeof t === "string" && t.length > 0 && t.length < 100)) {
-          return c.json({ error: "Invalid allowedTools array" }, 400);
-        }
-      }
-
       // Resolve environment variables from envSlug
       let envVars: Record<string, string> | undefined = body.env;
       if (body.envSlug) {
-        if (typeof body.envSlug !== "string" || body.envSlug.length === 0) {
-          return c.json({ error: "Invalid envSlug parameter" }, 400);
-        }
         const companionEnv = envManager.getEnv(body.envSlug);
         if (companionEnv) {
           console.log(
@@ -115,16 +77,7 @@ export function createRoutes(
         }
       }
 
-      // Validate cwd and apply path traversal protection
       let cwd = body.cwd;
-      if (cwd !== undefined) {
-        if (typeof cwd !== "string" || cwd.length === 0) {
-          return c.json({ error: "Invalid cwd parameter" }, 400);
-        }
-        // Resolve to absolute path for security (prevents relative path attacks)
-        cwd = resolve(cwd);
-      }
-
       let worktreeInfo:
         | {
             isWorktree: boolean;
@@ -137,9 +90,6 @@ export function createRoutes(
 
       // If worktree is requested, set up a worktree for the selected branch
       if (body.useWorktree && body.branch && cwd) {
-        if (typeof body.branch !== "string" || body.branch.length === 0 || body.branch.length > 200) {
-          return c.json({ error: "Invalid branch parameter" }, 400);
-        }
         const repoInfo = gitUtils.getRepoInfo(cwd);
         if (repoInfo) {
           const result = gitUtils.ensureWorktree(
@@ -175,7 +125,8 @@ export function createRoutes(
 
           const pullResult = gitUtils.gitPull(repoInfo.repoRoot);
           if (!pullResult.success) {
-            throw new Error(`git pull failed before session create: ${pullResult.output}`);
+            // Don't fail session creation if pull fails (e.g. no upstream tracking)
+            console.warn(`[routes] git pull warning (non-fatal): ${pullResult.output}`);
           }
         }
       }
@@ -210,14 +161,7 @@ export function createRoutes(
         env: envVars,
         backendType: backend,
         worktreeInfo,
-        resumeSessionId: body.resumeSessionId,
-        prewarm: body.prewarm === true,
       });
-
-      // If resuming, initialize the WsBridge session with message history from the CLI's session file
-      if (body.resumeSessionId) {
-        wsBridge.initializeResumedSession(session.sessionId, body.resumeSessionId, cwd);
-      }
 
       // Re-track container with real session ID
       if (containerInfo) {
@@ -245,15 +189,8 @@ export function createRoutes(
     }
   });
 
-  api.post("/sessions/:id/adopt", (c) => {
-    const id = c.req.param("id");
-    const adopted = launcher.adoptPrewarm(id);
-    if (!adopted) return c.json({ error: "Session not found or not a prewarm session" }, 404);
-    return c.json({ ok: true });
-  });
-
   api.get("/sessions", (c) => {
-    const sessions = launcher.listSessions().filter(s => !s.prewarm);
+    const sessions = launcher.listSessions();
     const names = sessionNames.getAllNames();
     const bridgeStates = wsBridge.getAllSessions();
     const bridgeMap = new Map(bridgeStates.map((s) => [s.session_id, s]));
@@ -261,7 +198,6 @@ export function createRoutes(
       const bridge = bridgeMap.get(s.sessionId);
       return {
         ...s,
-        title: s.title || wsBridge.getSessionTitle(s.sessionId),
         name: names[s.sessionId] ?? s.name,
         gitBranch: bridge?.git_branch || "",
         gitAhead: bridge?.git_ahead || 0,
@@ -273,108 +209,11 @@ export function createRoutes(
     return c.json(enriched);
   });
 
-  api.post("/sessions/cleanup", (c) => {
-    // Snapshot session IDs before cleanup to find which ones get removed
-    const before = new Set(launcher.listSessions().map(s => s.sessionId));
-    launcher.cleanupOldSessions();
-    wsBridge.cleanupOldSessions();
-    sessionStore.purgeGhosts();
-    const after = new Set(launcher.listSessions().map(s => s.sessionId));
-    for (const id of before) {
-      if (!after.has(id)) sessionNames.removeName(id);
-    }
-    return c.json({ success: true });
-  });
-
-  api.get("/sessions/resumable", async (c) => {
-    try {
-      const projectsDir = join(homedir(), ".claude", "projects");
-      const projEntries = await readdir(projectsDir, { withFileTypes: true }).catch(() => []);
-
-      const candidates: { sessionId: string; project: string; mtime: number; filePath: string }[] = [];
-
-      for (const entry of projEntries) {
-        if (!entry.isDirectory()) continue;
-        const projPath = join(projectsDir, entry.name);
-        const project = "/" + entry.name.replace(/^-/, "").replace(/-/g, "/");
-        const files = await readdir(projPath).catch(() => []);
-        for (const file of files) {
-          if (!file.endsWith(".jsonl")) continue;
-          const sessionId = file.replace(".jsonl", "");
-          const filePath = join(projPath, file);
-          try {
-            const s = await stat(filePath);
-            candidates.push({ sessionId, project, mtime: s.mtime.getTime(), filePath });
-          } catch { /* skip */ }
-        }
-      }
-
-      candidates.sort((a, b) => b.mtime - a.mtime);
-      const top = candidates.slice(0, 20);
-
-      const results = await Promise.all(top.map(async (item) => {
-        const title = await extractSessionTitle(item.filePath);
-        return {
-          sessionId: item.sessionId,
-          project: item.project,
-          lastModified: item.mtime,
-          title,
-        };
-      }));
-
-      return c.json(results);
-    } catch (e: unknown) {
-      console.error("[routes] Failed to list resumable sessions:", e);
-      return c.json([], 500);
-    }
-  });
-
   api.get("/sessions/:id", (c) => {
     const id = c.req.param("id");
     const session = launcher.getSession(id);
     if (!session) return c.json({ error: "Session not found" }, 404);
     return c.json(session);
-  });
-
-  api.post("/sessions/:id/message", async (c) => {
-    const id = c.req.param("id");
-    const body = await c.req.json().catch(() => ({}));
-    const { message, timeout = 120000 } = body;
-
-    if (!message || typeof message !== "string") {
-      return c.json({ error: "message is required" }, 400);
-    }
-
-    const session = launcher.getSession(id);
-    if (!session) {
-      return c.json({ error: "Session not found" }, 404);
-    }
-
-    try {
-      // Send the user message
-      const sent = wsBridge.sendUserMessage(id, message);
-      if (!sent) {
-        return c.json({ error: "Failed to send message to session" }, 500);
-      }
-
-      // Wait for assistant response
-      const response = await waitForAssistantResponse(id, wsBridge, timeout);
-
-      return c.json({
-        success: true,
-        response,
-        sessionId: id,
-      });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[routes] Message failed for session ${id}:`, msg);
-
-      if (msg.includes("Timeout")) {
-        return c.json({ error: "Timeout waiting for response" }, 408);
-      }
-
-      return c.json({ error: msg }, 500);
-    }
   });
 
   api.patch("/sessions/:id/name", async (c) => {
@@ -421,7 +260,6 @@ export function createRoutes(
     prPoller?.unwatch(id);
     launcher.removeSession(id);
     wsBridge.closeSession(id);
-    sessionNames.removeName(id);
     return c.json({ ok: true, worktree: worktreeResult });
   });
 
@@ -448,17 +286,6 @@ export function createRoutes(
     const id = c.req.param("id");
     launcher.setArchived(id, false);
     sessionStore.setArchived(id, false);
-    return c.json({ ok: true });
-  });
-
-  api.post("/sessions/:id/title", async (c) => {
-    const id = c.req.param("id");
-    const body = await c.req.json().catch(() => ({}));
-    if (!body.title || typeof body.title !== "string") {
-      return c.json({ error: "Missing or invalid title" }, 400);
-    }
-    launcher.setTitle(id, body.title);
-    wsBridge.setTitle(id, body.title);
     return c.json({ ok: true });
   });
 
@@ -525,47 +352,6 @@ export function createRoutes(
     return c.json({ error: "Use frontend defaults for this backend" }, 404);
   });
 
-  // ─── Serve local images for ResultScanner ─────────────────────
-
-  const IMAGE_EXTENSIONS = new Set([
-    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico",
-    ".heic", ".avif", ".tif", ".tiff",
-  ]);
-  const MIME_MAP: Record<string, string> = {
-    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-    ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
-    ".bmp": "image/bmp", ".ico": "image/x-icon", ".heic": "image/heic",
-    ".avif": "image/avif", ".tif": "image/tiff", ".tiff": "image/tiff",
-  };
-
-  api.get("/fs/image", async (c) => {
-    const rawPath = c.req.query("path");
-    if (!rawPath) return c.json({ error: "path required" }, 400);
-
-    const resolved = resolve(rawPath.replace(/^~\//, homedir() + "/"));
-    const allowedBase = homedir();
-    if (!resolved.startsWith(allowedBase + sep) && resolved !== allowedBase) {
-      return c.json({ error: "Access denied" }, 403);
-    }
-
-    const ext = "." + resolved.split(".").pop()!.toLowerCase();
-    if (!IMAGE_EXTENSIONS.has(ext)) {
-      return c.json({ error: "Not an image file" }, 400);
-    }
-
-    try {
-      const data = await readFile(resolved);
-      return new Response(data, {
-        headers: {
-          "Content-Type": MIME_MAP[ext] || "application/octet-stream",
-          "Cache-Control": "public, max-age=3600",
-        },
-      });
-    } catch {
-      return c.json({ error: "File not found" }, 404);
-    }
-  });
-
   // ─── Containers ─────────────────────────────────────────────────
 
   api.get("/containers/status", (c) => {
@@ -584,35 +370,26 @@ export function createRoutes(
   api.get("/fs/list", async (c) => {
     const rawPath = c.req.query("path") || homedir();
     const basePath = resolve(rawPath);
-
     try {
-      // Security: Validate the path is within safe boundaries
-      // Resolve to real path to prevent symlink attacks
-      const realPath = await realpath(basePath).catch(() => basePath);
-
-      // Only allow access to user's home directory and subdirectories
-      const allowedBase = homedir();
-      if (!realPath.startsWith(allowedBase + sep) && realPath !== allowedBase) {
-        return c.json({
-          error: "Access denied: Path must be within home directory",
-          path: basePath,
-          dirs: [],
-          home: homedir()
-        }, 403);
-      }
-
-      const entries = await readdir(realPath, { withFileTypes: true });
+      const entries = await readdir(basePath, { withFileTypes: true });
       const dirs: { name: string; path: string }[] = [];
       for (const entry of entries) {
         if (entry.isDirectory() && !entry.name.startsWith(".")) {
-          dirs.push({ name: entry.name, path: join(realPath, entry.name) });
+          dirs.push({ name: entry.name, path: join(basePath, entry.name) });
         }
       }
       dirs.sort((a, b) => a.name.localeCompare(b.name));
-      return c.json({ path: realPath, dirs, home: homedir() });
-    } catch (err) {
-      console.error("[routes] fs/list error:", err);
-      return c.json({ error: "Cannot read directory", path: basePath, dirs: [], home: homedir() }, 400);
+      return c.json({ path: basePath, dirs, home: homedir() });
+    } catch {
+      return c.json(
+        {
+          error: "Cannot read directory",
+          path: basePath,
+          dirs: [],
+          home: homedir(),
+        },
+        400,
+      );
     }
   });
 
@@ -626,49 +403,6 @@ export function createRoutes(
       cwd !== home &&
       (!packageRoot || !cwd.startsWith(packageRoot));
     return c.json({ home, cwd: isProjectDir ? cwd : home });
-  });
-
-  api.get("/fs/recent-projects", async (c) => {
-    try {
-      const home = homedir();
-      const projects = new Map<string, number>(); // path → lastUsed timestamp
-
-      // Source 1: ~/.claude/projects/ directory names (mtime-based)
-      const claudeProjectsDir = join(home, ".claude", "projects");
-      const dirEntries = await readdir(claudeProjectsDir, { withFileTypes: true }).catch(() => []);
-      for (const entry of dirEntries) {
-        if (!entry.isDirectory()) continue;
-        const path = entry.name.replace(/^-/, "/").replace(/-/g, "/");
-        try {
-          const stats = await stat(join(claudeProjectsDir, entry.name));
-          projects.set(path, stats.mtime.getTime());
-        } catch { /* skip */ }
-      }
-
-      // Source 2: ~/.claude/.claude.json projects keys
-      try {
-        const configPath = join(home, ".claude", ".claude.json");
-        const configText = await readFile(configPath, "utf-8");
-        const config = JSON.parse(configText);
-        if (config.projects && typeof config.projects === "object") {
-          for (const path of Object.keys(config.projects)) {
-            if (!projects.has(path)) projects.set(path, 0);
-          }
-        }
-      } catch { /* .claude.json not readable, skip */ }
-
-      // Sort by most recent first, take top 30
-      const sorted = [...projects.entries()]
-        .filter(([p]) => p !== home)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 30)
-        .map(([p]) => p);
-
-      return c.json({ projects: sorted });
-    } catch (e: unknown) {
-      console.error("[routes] Failed to fetch recent projects:", e);
-      return c.json({ projects: [] });
-    }
   });
 
   // ─── Editor filesystem APIs ─────────────────────────────────────
@@ -905,45 +639,6 @@ export function createRoutes(
   api.delete("/envs/:slug", (c) => {
     const deleted = envManager.deleteEnv(c.req.param("slug"));
     if (!deleted) return c.json({ error: "Environment not found" }, 404);
-    return c.json({ ok: true });
-  });
-
-  // ─── HTML Skills (~/.companion/skills/) ──────────────────────────────
-
-  api.get("/skills", (c) => {
-    try {
-      return c.json(skillManager.listSkills());
-    } catch (e: unknown) {
-      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
-    }
-  });
-
-  api.get("/skills/:slug", (c) => {
-    const skill = skillManager.getSkill(c.req.param("slug"));
-    if (!skill) return c.json({ error: "Skill not found" }, 404);
-    return c.json(skill);
-  });
-
-  api.get("/skills/:slug/panel", (c) => {
-    const slug = c.req.param("slug");
-    const skill = skillManager.getSkill(slug);
-    if (!skill) return c.json({ error: "Skill not found" }, 404);
-    const rawHtml = skillManager.getSkillPanel(slug);
-    if (!rawHtml) return c.json({ error: "Panel HTML not found" }, 404);
-    return new Response(skillManager.wrapWithVibeApi(rawHtml, slug), {
-      headers: { "Content-Type": "text/html; charset=utf-8" },
-    });
-  });
-
-  api.get("/skills/:slug/state", (c) => {
-    return c.json(skillManager.getSkillState(c.req.param("slug")));
-  });
-
-  api.put("/skills/:slug/state", async (c) => {
-    const slug = c.req.param("slug");
-    if (!skillManager.getSkill(slug)) return c.json({ error: "Skill not found" }, 404);
-    const body = await c.req.json().catch(() => ({}));
-    skillManager.setSkillState(slug, body);
     return c.json({ ok: true });
   });
 
@@ -1219,46 +914,6 @@ export function createRoutes(
     });
   });
 
-  // ─── Command Execution (for HTML fragments in YOLO mode) ─────────────
-
-  api.post("/exec", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
-    const { command, cwd } = body;
-
-    if (!command || typeof command !== "string") {
-      return c.json({ error: "command required" }, 400);
-    }
-
-    // Security: Validate cwd if provided
-    let workingDir = homedir();
-    if (cwd) {
-      if (typeof cwd !== "string") {
-        return c.json({ error: "Invalid cwd" }, 400);
-      }
-      // Resolve to absolute path for security (prevents relative path attacks)
-      workingDir = resolve(cwd);
-    }
-
-    try {
-      const output = execSync(command, {
-        cwd: workingDir,
-        encoding: "utf-8",
-        timeout: 30000, // 30s timeout
-        maxBuffer: 1024 * 1024, // 1MB max output
-      });
-      return c.json({ success: true, output: output.trim() });
-    } catch (err: unknown) {
-      const error = err as { status?: number; stderr?: string; stdout?: string; message?: string };
-      return c.json({
-        success: false,
-        error: error.message || "Command failed",
-        exitCode: error.status,
-        stderr: error.stderr,
-        stdout: error.stdout,
-      }, 500);
-    }
-  });
-
   // ─── Helper ─────────────────────────────────────────────────────────
 
   function cleanupWorktree(
@@ -1325,116 +980,4 @@ export function createRoutes(
   });
 
   return api;
-}
-
-// ─── Helper functions for chat completions ─────────────────────────────
-
-/** Wait for a condition to become true with timeout */
-async function waitForCondition(
-  condition: () => boolean,
-  timeoutMs: number,
-  pollIntervalMs = 100
-): Promise<boolean> {
-  const startTime = Date.now();
-  while (Date.now() - startTime < timeoutMs) {
-    if (condition()) {
-      return true;
-    }
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-  }
-  return false;
-}
-
-/** Wait for assistant response in session message history */
-async function waitForAssistantResponse(
-  sessionId: string,
-  wsBridge: WsBridge,
-  timeoutMs: number
-): Promise<string> {
-  const startTime = Date.now();
-  let lastMessageCount = 0;
-
-  while (Date.now() - startTime < timeoutMs) {
-    const session = wsBridge.getSession(sessionId);
-    if (!session) {
-      throw new Error("Session not found");
-    }
-
-    const messageHistory = session.messageHistory;
-
-    // Look for new assistant messages
-    const assistantMessages = messageHistory.filter((msg) => msg.type === "assistant");
-
-    if (assistantMessages.length > 0) {
-      const lastAssistant = assistantMessages[assistantMessages.length - 1];
-      if (lastAssistant.type === "assistant") {
-        // Extract text content from the message
-        const content = lastAssistant.message.content;
-        if (Array.isArray(content)) {
-          const textBlocks = content
-            .filter((block) => block.type === "text")
-            .map((block) => (block.type === "text" ? block.text : ""));
-          if (textBlocks.length > 0) {
-            return textBlocks.join("\n");
-          }
-        } else if (typeof content === "string") {
-          return content;
-        }
-      }
-    }
-
-    // Check if there are any error messages
-    const errorMessages = messageHistory.filter((msg) => msg.type === "error");
-    if (errorMessages.length > 0 && errorMessages.length > lastMessageCount) {
-      const lastError = errorMessages[errorMessages.length - 1];
-      if (lastError.type === "error") {
-        throw new Error(lastError.message || "Unknown error");
-      }
-    }
-
-    lastMessageCount = messageHistory.length;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  throw new Error("Timeout waiting for assistant response");
-}
-
-/** Read first user message from a session JSONL as a title. */
-async function extractSessionTitle(filePath: string): Promise<string> {
-  return new Promise((resolve) => {
-    const rl = createInterface({ input: createReadStream(filePath), crlfDelay: Infinity });
-    let found = false;
-    rl.on("line", (line) => {
-      if (found) return;
-      try {
-        const data = JSON.parse(line);
-        if (data.type === "summary") {
-          found = true;
-          rl.close();
-          resolve(data.summary?.slice(0, 120) || "");
-          return;
-        }
-        if (data.type !== "user") return;
-        const msg = data.message;
-        if (!msg) return;
-        const content = msg.content;
-        if (Array.isArray(content)) {
-          for (const block of content) {
-            if (block?.type === "text" && block.text) {
-              found = true;
-              rl.close();
-              resolve(block.text.slice(0, 120));
-              return;
-            }
-          }
-        } else if (typeof content === "string") {
-          found = true;
-          rl.close();
-          resolve(content.slice(0, 120));
-        }
-      } catch { /* skip malformed lines */ }
-    });
-    rl.on("close", () => { if (!found) resolve(""); });
-    rl.on("error", () => resolve(""));
-  });
 }

@@ -1,18 +1,17 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code & Codex when working with code in this repository.
 
 ## What This Is
 
-The Companion — a web UI for Claude Code. It reverse-engineers the undocumented `--sdk-url` WebSocket protocol in the Claude Code CLI to provide a browser-based interface for running multiple Claude Code sessions with streaming, tool call visibility, and permission control.
+The Companion — a web UI for Claude Code & Codex.
+It reverse-engineers the undocumented `--sdk-url` WebSocket protocol in the Claude Code CLI to provide a browser-based interface for running multiple Claude Code sessions with streaming, tool call visibility, and permission control.
 
 ## Development Commands
 
 ```bash
-# Dev server (Hono backend on :3456 + Vite HMR on :2345)
+# Dev server (Hono backend on :3456 + Vite HMR on :5174)
 cd web && bun install && bun run dev
-# Usually the server is already running so don't kill it just use it it will automatically update!
-
 
 # Or from repo root
 make dev
@@ -22,20 +21,12 @@ cd web && bun run typecheck
 
 # Production build + serve
 cd web && bun run build && bun run start
-
-# Landing page (thecompanion.sh) — idempotent: starts if down, no-op if up
-# IMPORTANT: Always use this script to run the landing page. Never cd into landing/ and run bun/vite manually.
-./scripts/landing-start.sh          # start
-./scripts/landing-start.sh --stop   # stop
 ```
 
 ## Testing
 
 ```bash
-# Run tests (preferred from repo root)
-./test.sh
-
-# Equivalent direct command
+# Run tests
 cd web && bun run test
 
 # Watch mode
@@ -45,8 +36,8 @@ cd web && bun run test:watch
 - All new backend (`web/server/`) and frontend (`web/src/`) code **must** include tests when possible.
 - Tests use Vitest. Server tests live alongside source files (e.g. `routes.test.ts` next to `routes.ts`).
 - A husky pre-commit hook runs typecheck and tests automatically before each commit.
-- A husky pre-push hook runs typecheck and tests before pushing, preventing CI failures on GitHub Actions.
 - **Never remove or delete existing tests.** If a test is failing, fix the code or the test. If you believe a test should be removed, you must first explain to the user why and get explicit approval before removing it.
+- When creating test, make sure to document what the test is validating, and any important context or edge cases in comments within the test code.
 
 ## Component Playground
 
@@ -58,7 +49,7 @@ All UI components used in the message/chat flow **must** be represented in the P
 
 ```
 Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket (NDJSON) ←→ Claude Code CLI
-     :2345              /ws/browser/:id        :3456        /ws/cli/:id         (--sdk-url)
+     :5174              /ws/browser/:id        :3456        /ws/cli/:id         (--sdk-url)
 ```
 
 1. Browser sends a "create session" REST call to the server
@@ -98,31 +89,68 @@ Full protocol documentation is in `WEBSOCKET_PROTOCOL_REVERSED.md`.
 
 Sessions persist to disk (`$TMPDIR/vibe-sessions/`) and survive server restarts. On restart, live CLI processes are detected by PID and given a grace period to reconnect their WebSocket. If they don't, they're killed and relaunched with `--resume` using the CLI's internal session ID.
 
-## Browser Exploration
-
-Always use `agent-browser` CLI command to explore the browser. Never use playwright or other browser automation libraries.
-
 ## Pull Requests
 
 When submitting a pull request:
 - use commitzen to format the commit message and the PR title
 - Add a screenshot of the changes in the PR description if its a visual change
 - Explain simply what the PR does and why it's needed
-- Tell me if the code was reviewed by a human or simply generated directly by an AI. 
+- Tell me if the code was reviewed by a human or simply generated directly by an AI.
 
+### How To Open A PR With GitHub CLI
 
-## Duplicated commits?
-When pulling/merging from upstream check if they duplicate a functionality which we already have. 
-Make sure to not lose our own commits! 
+Use this flow from the repository root:
 
-## Additions
-While Claude runs normally in the background all responses are scanned for additional features especially any HTML fragments will be rendered on-screen. So you Claude now have the ability to send me images!
+```bash
+# 1) Create a branch
+git checkout -b fix/short-description (commitzen)
 
+# 2) Commit using commitzen format
+git add <files>
+git commit -m "fix(scope): short summary" (commitzen)
 
-## Unsafe mode
-The conversation automatically picks up images and HTML fragments, which have access to a function 
-`window.vibeCommand()` that can send ANY bash command to the backend! This allows for powerful interactions, but also opens up security risks if the content is not trusted. Injected API into HTML iframes when YOLO mode is active.
+# 3) Push and set upstream
+git push -u origin fix/short-description
 
-We grant explicit permission to execute these otherwise unsafe commands in development mode! That's what skills are there for! Whether to execute bash command skills or commands inside our web terminal makes no difference.  
+# 4) Create PR (title should follow commitzen style)
+gh pr create --base main --head fix/short-description --title "fix(scope): short summary"
+```
+
+For multi-line PR descriptions, prefer a body file to avoid shell quoting issues:
+
+```bash
+cat > /tmp/pr_body.md <<'EOF'
+## Summary
+- what changed
+
+## Why
+- why this is needed
+
+## Testing
+- what was run
+
+## Review provenance
+- Implemented by AI agent / Human
+- Human review: yes/no
+EOF
+
+gh pr edit --body-file /tmp/pr_body.md
+```
+
+## Codex & Claude Code
+- All features must be compatible with both Codex and Claude Code. If a feature is only compatible with one, it must be gated behind a clear UI affordance (e.g. "This feature requires Claude Code") and the incompatible option should be hidden or disabled.
+- When implementing a new feature, always consider how it will work with both models and test with both if possible. If a feature is only implemented for one model, document that clearly in the code and in the UI.
+
+## Legacy: HTML Skills System
+
+**Note**: Upstream removed the HTML Skills plugin system in favor of MCP server management. Our implementation is preserved in:
+- `web/server/skill-manager-legacy.ts` — Skill manager module
+- `web/server/skill-routes-legacy.ts` — API routes for skills
+
+The skills system provided:
+- Tab skills (via "+" picker): Full panels like htop with `window.vibe` API
+- Inline HTML fragments in chat with `window.vibeCommand()` access in YOLO mode
+
+See git history (`git log --grep=skill`) for full implementation details.
 
 <!-- end of CLAUDE.md -->

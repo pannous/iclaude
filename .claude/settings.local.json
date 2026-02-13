@@ -12,7 +12,8 @@
       "Bash(bun run typecheck:*)",
       "Bash(bun test:*)",
       "Bash(git status:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(git fetch:*)"
     ]
   }
 }
