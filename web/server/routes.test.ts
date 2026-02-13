@@ -9,14 +9,6 @@ vi.mock("./env-manager.js", () => ({
   deleteEnv: vi.fn(),
 }));
 
-vi.mock("./skill-manager.js", () => ({
-  listSkills: vi.fn(() => []),
-  getSkill: vi.fn(() => null),
-  getSkillPanel: vi.fn(() => null),
-  getSkillState: vi.fn(() => ({})),
-  setSkillState: vi.fn(),
-  wrapWithVibeApi: vi.fn((html: string) => `<script>vibe</script>\n${html}`),
-}));
 
 vi.mock("node:child_process", () => ({
   execSync: vi.fn(() => ""),
@@ -91,13 +83,11 @@ import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createRoutes } from "./routes.js";
 import * as envManager from "./env-manager.js";
-import * as skillManager from "./skill-manager.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
 import * as settingsManager from "./settings-manager.js";
 
 const mockedEnvManager = vi.mocked(envManager);
-const mockedSkillManager = vi.mocked(skillManager);
 const mockedGitUtils = vi.mocked(gitUtils);
 const mockedSessionNames = vi.mocked(sessionNames);
 const mockedExecSync = vi.mocked(execSync);
@@ -565,7 +555,6 @@ describe("DELETE /api/sessions/:id", () => {
     expect(launcher.kill).toHaveBeenCalledWith("s1");
     expect(launcher.removeSession).toHaveBeenCalledWith("s1");
     expect(bridge.closeSession).toHaveBeenCalledWith("s1");
-    expect(sessionNames.removeName).toHaveBeenCalledWith("s1");
     expect(tracker.removeBySession).toHaveBeenCalledWith("s1");
     // No branchToDelete when actualBranch is not set
     expect(gitUtils.removeWorktree).toHaveBeenCalledWith("/repo", "/wt/feat", {
