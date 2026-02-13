@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { CopyButton } from "./CopyButton.js";
@@ -9,9 +9,19 @@ import { conversationToText } from "../utils/message-text.js";
 const EMPTY_MESSAGES: import("../types.js").ChatMessage[] = [];
 
 export function TopBar() {
+  const hash = useSyncExternalStore(
+    (cb) => {
+      window.addEventListener("hashchange", cb);
+      return () => window.removeEventListener("hashchange", cb);
+    },
+    () => window.location.hash,
+  );
+  const isSessionView = hash !== "#/settings" && hash !== "#/terminal" && hash !== "#/environments";
   const currentSessionId = useStore((s) => s.currentSessionId);
   const cliConnected = useStore((s) => s.cliConnected);
   const sessionStatus = useStore((s) => s.sessionStatus);
+  const sessionNames = useStore((s) => s.sessionNames);
+  const sdkSessions = useStore((s) => s.sdkSessions);
   const sidebarOpen = useStore((s) => s.sidebarOpen);
   const setSidebarOpen = useStore((s) => s.setSidebarOpen);
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
@@ -53,6 +63,11 @@ export function TopBar() {
   });
   const isConnected = currentSessionId ? (cliConnected.get(currentSessionId) ?? false) : false;
   const status = currentSessionId ? (sessionStatus.get(currentSessionId) ?? null) : null;
+  const sessionName = currentSessionId
+    ? (sessionNames?.get(currentSessionId) ||
+      sdkSessions.find((s) => s.sessionId === currentSessionId)?.name ||
+      `Session ${currentSessionId.slice(0, 8)}`)
+    : null;
 
   return (
     <header className="shrink-0 flex items-center justify-between px-2 sm:px-4 py-2 sm:py-2.5 bg-cc-card border-b border-cc-border">
@@ -98,7 +113,7 @@ export function TopBar() {
       </div>
 
       {/* Right side */}
-      {currentSessionId && (
+      {currentSessionId && isSessionView && (
         <div className="flex items-center gap-2 sm:gap-3 text-[12px] text-cc-muted">
           {status === "compacting" && (
             <span className="text-cc-warning font-medium animate-pulse">Compacting...</span>

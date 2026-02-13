@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { execSync } from "node:child_process";
+import { resolveBinary } from "./path-resolver.js";
 import { readdir, readFile, writeFile, stat } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { homedir } from "node:os";
@@ -21,6 +22,7 @@ import {
   isUpdateAvailable,
   setUpdateInProgress,
 } from "./update-checker.js";
+import { refreshServiceDefinition } from "./service.js";
 
 const UPDATE_CHECK_STALE_MS = 5 * 60 * 1000;
 
@@ -38,6 +40,32 @@ function execCaptureStdout(
     }
     throw err;
   }
+}
+
+function resolveBranchDiffBases(
+  repoRoot: string,
+): string[] {
+  const options = { cwd: repoRoot, encoding: "utf-8", timeout: 5000 } as const;
+
+  try {
+    const originHead = execSync("git symbolic-ref refs/remotes/origin/HEAD", options).trim();
+    const match = originHead.match(/^refs\/remotes\/origin\/(.+)$/);
+    if (match?.[1]) {
+      return [`origin/${match[1]}`, match[1]];
+    }
+  } catch {
+    // No remote HEAD ref available, fallback to common local defaults.
+  }
+
+  try {
+    const branches = execSync("git branch --list main master", options).trim();
+    if (branches.includes("main")) return ["main"];
+    if (branches.includes("master")) return ["master"];
+  } catch {
+    // Ignore and use a conservative fallback below.
+  }
+
+  return ["main"];
 }
 
 export function createRoutes(
@@ -294,21 +322,8 @@ export function createRoutes(
   api.get("/backends", (c) => {
     const backends: Array<{ id: string; name: string; available: boolean }> = [];
 
-    // Check Claude Code
-    let claudeAvailable = false;
-    try {
-      execSync("which claude", { encoding: "utf-8", timeout: 3000 });
-      claudeAvailable = true;
-    } catch {}
-    backends.push({ id: "claude", name: "Claude Code", available: claudeAvailable });
-
-    // Check Codex
-    let codexAvailable = false;
-    try {
-      execSync("which codex", { encoding: "utf-8", timeout: 3000 });
-      codexAvailable = true;
-    } catch {}
-    backends.push({ id: "codex", name: "Codex", available: codexAvailable });
+    backends.push({ id: "claude", name: "Claude Code", available: resolveBinary("claude") !== null });
+    backends.push({ id: "codex", name: "Codex", available: resolveBinary("codex") !== null });
 
     return c.json(backends);
   });
@@ -510,13 +525,22 @@ export function createRoutes(
         timeout: 5000,
       }).trim() || absPath;
 
-      let diff = execCaptureStdout(`git diff HEAD -- "${relPath}"`, {
-        cwd: repoRoot,
-        encoding: "utf-8",
-        timeout: 5000,
-      });
+      let diff = "";
+      const diffBases = resolveBranchDiffBases(repoRoot);
+      for (const base of diffBases) {
+        try {
+          diff = execCaptureStdout(`git diff ${base} -- "${relPath}"`, {
+            cwd: repoRoot,
+            encoding: "utf-8",
+            timeout: 5000,
+          });
+          break;
+        } catch {
+          // If a base ref is unavailable, try the next candidate.
+        }
+      }
 
-      // For untracked files, HEAD diff is empty. Show full file as added.
+      // For untracked files, base-branch diff is empty. Show full file as added.
       if (!diff.trim()) {
         const untracked = execSync(`git ls-files --others --exclude-standard -- "${relPath}"`, {
           cwd: repoRoot,
@@ -897,11 +921,47 @@ export function createRoutes(
           setUpdateInProgress(false);
           return;
         }
+
+        // Refresh the service definition so the new unit/plist template
+        // (e.g. Restart=always) takes effect for existing installations.
+        try {
+          refreshServiceDefinition();
+          console.log("[update] Service definition refreshed.");
+        } catch (err) {
+          console.warn("[update] Failed to refresh service definition:", err);
+        }
+
         console.log(
-          "[update] Update successful, exiting for service restart...",
+          "[update] Update successful, restarting service...",
         );
-        // Exit with non-zero code so the service manager restarts us
-        process.exit(42);
+
+        // Explicitly restart via the service manager in a detached process
+        // so the restart survives our own exit.
+        const isLinux = process.platform === "linux";
+        const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
+        const restartCmd = isLinux
+          ? ["systemctl", "--user", "restart", "the-companion.service"]
+          : uid !== undefined
+            ? ["launchctl", "kickstart", "-k", `gui/${uid}/sh.thecompanion.app`]
+            : ["launchctl", "kickstart", "-k", "sh.thecompanion.app"];
+
+        Bun.spawn(restartCmd, {
+          stdout: "ignore",
+          stderr: "ignore",
+          stdin: "ignore",
+          env: isLinux
+            ? {
+                ...process.env,
+                XDG_RUNTIME_DIR:
+                  process.env.XDG_RUNTIME_DIR ||
+                  `/run/user/${uid ?? 1000}`,
+              }
+            : undefined,
+        });
+
+        // Give the spawn a moment to dispatch, then exit cleanly.
+        // The service manager restart will kill us if we haven't exited yet.
+        setTimeout(() => process.exit(0), 500);
       } catch (err) {
         console.error("[update] Update failed:", err);
         setUpdateInProgress(false);

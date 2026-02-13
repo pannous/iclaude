@@ -31,11 +31,6 @@ vi.mock("../api.js", () => ({
   },
 }));
 
-// Mock EnvManager to avoid rendering complexity
-vi.mock("./EnvManager.js", () => ({
-  EnvManager: () => <div data-testid="env-manager">EnvManager</div>,
-}));
-
 // ─── Store mock helpers ──────────────────────────────────────────────────────
 
 // We need to mock the store. The Sidebar uses `useStore((s) => s.xxx)` selector pattern.
@@ -45,9 +40,6 @@ interface MockStoreState {
   sessions: Map<string, SessionState>;
   sdkSessions: SdkSessionInfo[];
   currentSessionId: string | null;
-  darkMode: boolean;
-  notificationSound: boolean;
-  notificationDesktop: boolean;
   cliConnected: Map<string, boolean>;
   sessionStatus: Map<string, "idle" | "running" | "compacting" | null>;
   sessionNames: Map<string, string>;
@@ -56,9 +48,6 @@ interface MockStoreState {
   sessionTasks: Map<string, unknown[]>;
   collapsedProjects: Set<string>;
   setCurrentSession: ReturnType<typeof vi.fn>;
-  toggleDarkMode: ReturnType<typeof vi.fn>;
-  toggleNotificationSound: ReturnType<typeof vi.fn>;
-  setNotificationDesktop: ReturnType<typeof vi.fn>;
   toggleProjectCollapse: ReturnType<typeof vi.fn>;
   removeSession: ReturnType<typeof vi.fn>;
   newSession: ReturnType<typeof vi.fn>;
@@ -67,6 +56,7 @@ interface MockStoreState {
   markRecentlyRenamed: ReturnType<typeof vi.fn>;
   clearRecentlyRenamed: ReturnType<typeof vi.fn>;
   setSdkSessions: ReturnType<typeof vi.fn>;
+  closeTerminal: ReturnType<typeof vi.fn>;
 }
 
 function makeSession(id: string, overrides: Partial<SessionState> = {}): SessionState {
@@ -103,6 +93,8 @@ function makeSdkSession(id: string, overrides: Partial<SdkSessionInfo> = {}): Sd
     cwd: "/home/user/projects/myapp",
     createdAt: Date.now(),
     archived: false,
+    // Default title so sessions aren't filtered as ghosts; pass title:undefined to test sessionName fallback
+    ...("title" in overrides ? {} : { title: `Session ${id}` }),
     ...overrides,
   };
 }
@@ -114,9 +106,6 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     sessions: new Map(),
     sdkSessions: [],
     currentSessionId: null,
-    darkMode: false,
-    notificationSound: true,
-    notificationDesktop: true,
     cliConnected: new Map(),
     sessionStatus: new Map(),
     sessionNames: new Map(),
@@ -125,9 +114,6 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     sessionTasks: new Map(),
     collapsedProjects: new Set(),
     setCurrentSession: vi.fn(),
-    toggleDarkMode: vi.fn(),
-    toggleNotificationSound: vi.fn(),
-    setNotificationDesktop: vi.fn(),
     toggleProjectCollapse: vi.fn(),
     removeSession: vi.fn(),
     newSession: vi.fn(),
@@ -136,6 +122,7 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     markRecentlyRenamed: vi.fn(),
     clearRecentlyRenamed: vi.fn(),
     setSdkSessions: vi.fn(),
+    closeTerminal: vi.fn(),
     ...overrides,
   };
 }
@@ -161,6 +148,7 @@ import { Sidebar } from "./Sidebar.js";
 beforeEach(() => {
   vi.clearAllMocks();
   mockState = createMockState();
+  window.location.hash = "";
 });
 
 describe("Sidebar", () => {
@@ -177,43 +165,38 @@ describe("Sidebar", () => {
 
   it("renders session items for active sessions", () => {
     const session = makeSession("s1");
-    const sdk = makeSdkSession("s1", { model: "claude-sonnet-4-5-20250929" });
+    const sdk = makeSdkSession("s1", { title: "My Active Session" });
     mockState = createMockState({
       sessions: new Map([["s1", session]]),
       sdkSessions: [sdk],
     });
 
     render(<Sidebar />);
-    // The session label defaults to model name
-    expect(screen.getByText("claude-sonnet-4-5-20250929")).toBeInTheDocument();
+    expect(screen.getByText("My Active Session")).toBeInTheDocument();
   });
 
-  it("session items show model name or session ID", () => {
-    // Session with model name
-    const session1 = makeSession("s1", { model: "claude-opus-4-6" });
-    const sdk1 = makeSdkSession("s1", { model: "claude-opus-4-6" });
+  it("filters out ghost sessions that only have model name as label", () => {
+    // Session with a real title — should be visible
+    const session1 = makeSession("s1");
+    const sdk1 = makeSdkSession("s1", { title: "Real Session" });
 
-    // Session without model (falls back to short ID)
-    const session2 = makeSession("abcdef12-3456-7890-abcd-ef1234567890", { model: "" });
-    const sdk2 = makeSdkSession("abcdef12-3456-7890-abcd-ef1234567890", { model: "" });
+    // Ghost session: no title, label would fall back to model name — should be filtered
+    const session2 = makeSession("s2", { model: "claude-opus-4-6" });
+    const sdk2 = makeSdkSession("s2", { model: "claude-opus-4-6" });
 
     mockState = createMockState({
-      sessions: new Map([
-        ["s1", session1],
-        ["abcdef12-3456-7890-abcd-ef1234567890", session2],
-      ]),
+      sessions: new Map([["s1", session1], ["s2", session2]]),
       sdkSessions: [sdk1, sdk2],
     });
 
     render(<Sidebar />);
-    expect(screen.getByText("claude-opus-4-6")).toBeInTheDocument();
-    // Falls back to shortId (first 8 chars)
-    expect(screen.getByText("abcdef12")).toBeInTheDocument();
+    expect(screen.getByText("Real Session")).toBeInTheDocument();
+    expect(screen.queryByText("claude-opus-4-6")).not.toBeInTheDocument();
   });
 
   it("session items show project name in group header (not in session row)", () => {
     const session = makeSession("s1", { cwd: "/home/user/projects/myapp" });
-    const sdk = makeSdkSession("s1");
+    const sdk = makeSdkSession("s1", { title: "Test Session" });
     mockState = createMockState({
       sessions: new Map([["s1", session]]),
       sdkSessions: [sdk],
@@ -294,8 +277,7 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    // Find the session button element
-    const sessionButton = screen.getByText("claude-sonnet-4-5-20250929").closest("button");
+    const sessionButton = screen.getByText("Session s1").closest("button");
     expect(sessionButton).toHaveClass("bg-cc-active");
   });
 
@@ -309,7 +291,7 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    const sessionButton = screen.getByText("claude-sonnet-4-5-20250929").closest("button")!;
+    const sessionButton = screen.getByText("Session s1").closest("button")!;
     fireEvent.click(sessionButton);
 
     expect(mockState.setCurrentSession).toHaveBeenCalledWith("s1");
@@ -332,11 +314,11 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    const sessionButton = screen.getByText("claude-sonnet-4-5-20250929").closest("button")!;
+    const sessionButton = screen.getByText("Session s1").closest("button")!;
     fireEvent.doubleClick(sessionButton);
 
     // After double-click, an input should appear for renaming
-    const input = screen.getByDisplayValue("claude-sonnet-4-5-20250929");
+    const input = screen.getByDisplayValue("Session s1");
     expect(input).toBeInTheDocument();
     expect(input.tagName).toBe("INPUT");
   });
@@ -370,8 +352,8 @@ describe("Sidebar", () => {
   });
 
   it("toggle archived shows/hides archived sessions", () => {
-    const sdk1 = makeSdkSession("s1", { archived: false, model: "active-model" });
-    const sdk2 = makeSdkSession("s2", { archived: true, model: "archived-model" });
+    const sdk1 = makeSdkSession("s1", { archived: false, title: "Active Session" });
+    const sdk2 = makeSdkSession("s2", { archived: true, title: "Archived Session" });
 
     mockState = createMockState({
       sdkSessions: [sdk1, sdk2],
@@ -380,41 +362,43 @@ describe("Sidebar", () => {
     render(<Sidebar />);
 
     // Archived sessions should not be visible initially
-    expect(screen.queryByText("archived-model")).not.toBeInTheDocument();
+    expect(screen.queryByText("Archived Session")).not.toBeInTheDocument();
 
     // Click the archived toggle button
     const toggleButton = screen.getByText(/Archived \(1\)/);
     fireEvent.click(toggleButton);
 
     // Now the archived session should be visible
-    expect(screen.getByText("archived-model")).toBeInTheDocument();
+    expect(screen.getByText("Archived Session")).toBeInTheDocument();
   });
 
-  it("dark mode button toggles theme", () => {
-    mockState = createMockState({ darkMode: false });
-
+  it("does not render settings controls directly in sidebar", () => {
     render(<Sidebar />);
-    const darkModeButton = screen.getByText("Dark mode").closest("button")!;
-    fireEvent.click(darkModeButton);
-
-    expect(mockState.toggleDarkMode).toHaveBeenCalled();
+    expect(screen.queryByText("Notification")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dark mode")).not.toBeInTheDocument();
   });
 
-  it("groups notification toggles under Notification section", () => {
-    vi.stubGlobal("Notification", {
-      permission: "granted",
-      requestPermission: vi.fn().mockResolvedValue("granted"),
-    });
+  it("navigates to environments page when Environments is clicked", () => {
     render(<Sidebar />);
-    expect(screen.getByText("Notification")).toBeInTheDocument();
-    expect(screen.getByText("Sound on")).toBeInTheDocument();
-    expect(screen.getByText("Alerts on")).toBeInTheDocument();
-    vi.unstubAllGlobals();
+    fireEvent.click(screen.getByText("Environments").closest("button")!);
+    expect(window.location.hash).toBe("#/environments");
+  });
+
+  it("navigates to settings page when Settings is clicked", () => {
+    render(<Sidebar />);
+    fireEvent.click(screen.getByText("Settings").closest("button")!);
+    expect(window.location.hash).toBe("#/settings");
+  });
+
+  it("navigates to terminal page when Terminal is clicked", () => {
+    render(<Sidebar />);
+    fireEvent.click(screen.getByText("Terminal").closest("button")!);
+    expect(window.location.hash).toBe("#/terminal");
   });
 
   it("session name shows animate-name-appear class when recently renamed", () => {
     const session = makeSession("s1");
-    const sdk = makeSdkSession("s1");
+    const sdk = makeSdkSession("s1", { title: undefined });
     mockState = createMockState({
       sessions: new Map([["s1", session]]),
       sdkSessions: [sdk],
@@ -430,7 +414,7 @@ describe("Sidebar", () => {
 
   it("session name does NOT have animate-name-appear when not recently renamed", () => {
     const session = makeSession("s1");
-    const sdk = makeSdkSession("s1");
+    const sdk = makeSdkSession("s1", { title: undefined });
     mockState = createMockState({
       sessions: new Map([["s1", session]]),
       sdkSessions: [sdk],
@@ -445,7 +429,7 @@ describe("Sidebar", () => {
 
   it("calls clearRecentlyRenamed on animation end", () => {
     const session = makeSession("s1");
-    const sdk = makeSdkSession("s1");
+    const sdk = makeSdkSession("s1", { title: undefined });
     mockState = createMockState({
       sessions: new Map([["s1", session]]),
       sdkSessions: [sdk],
@@ -462,8 +446,8 @@ describe("Sidebar", () => {
   it("animation class applies only to the recently renamed session, not others", () => {
     const session1 = makeSession("s1");
     const session2 = makeSession("s2");
-    const sdk1 = makeSdkSession("s1");
-    const sdk2 = makeSdkSession("s2");
+    const sdk1 = makeSdkSession("s1", { title: undefined });
+    const sdk2 = makeSdkSession("s2", { title: undefined });
     mockState = createMockState({
       sessions: new Map([["s1", session1], ["s2", session2]]),
       sdkSessions: [sdk1, sdk2],
@@ -607,8 +591,8 @@ describe("Sidebar", () => {
   });
 
   it("collapsing a project group hides its sessions", () => {
-    const session = makeSession("s1", { cwd: "/home/user/myapp", model: "hidden-model" });
-    const sdk = makeSdkSession("s1", { cwd: "/home/user/myapp" });
+    const session = makeSession("s1", { cwd: "/home/user/myapp" });
+    const sdk = makeSdkSession("s1", { cwd: "/home/user/myapp", title: "Hidden Session" });
     mockState = createMockState({
       sessions: new Map([["s1", session]]),
       sdkSessions: [sdk],
@@ -619,6 +603,6 @@ describe("Sidebar", () => {
     // Group header should still be visible
     expect(screen.getByText("myapp")).toBeInTheDocument();
     // But the session inside it should be hidden
-    expect(screen.queryByText("hidden-model")).not.toBeInTheDocument();
+    expect(screen.queryByText("Hidden Session")).not.toBeInTheDocument();
   });
 });

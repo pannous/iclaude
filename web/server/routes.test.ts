@@ -14,10 +14,19 @@ vi.mock("node:child_process", () => ({
   execSync: vi.fn(() => ""),
 }));
 
-vi.mock("node:fs", () => ({
-  existsSync: vi.fn(() => false),
-  readFileSync: vi.fn(() => ""),
+const mockResolveBinary = vi.hoisted(() => vi.fn((_name: string) => null as string | null));
+vi.mock("./path-resolver.js", () => ({
+  resolveBinary: mockResolveBinary,
 }));
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    existsSync: vi.fn(() => false),
+    readFileSync: vi.fn(() => ""),
+  };
+});
 
 vi.mock("./git-utils.js", () => ({
   getRepoInfo: vi.fn(() => null),
@@ -413,22 +422,22 @@ describe("GET /api/sessions", () => {
     ]);
   });
 
-  it("enriches untitled sessions with title from bridge first user message", async () => {
+  it("enriches untitled sessions with title from sessionNames", async () => {
     const sessions = [
       { sessionId: "s1", state: "running", cwd: "/a" },
-      { sessionId: "s2", state: "running", cwd: "/b", title: "Existing Title" },
+      { sessionId: "s2", state: "running", cwd: "/b", name: "Existing Title" },
     ];
     launcher.listSessions.mockReturnValue(sessions);
-    vi.mocked(sessionNames.getAllNames).mockReturnValue({});
-    bridge.getSessionTitle.mockImplementation((id: string) =>
-      id === "s1" ? "Fix the login page alignment issue" : undefined,
-    );
+    // s1 has a name in sessionNames, s2 uses its existing name
+    vi.mocked(sessionNames.getAllNames).mockReturnValue({
+      s1: "Fix the login page alignment issue",
+    });
 
     const res = await app.request("/api/sessions", { method: "GET" });
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json[0].title).toBe("Fix the login page alignment issue");
-    expect(json[1].title).toBe("Existing Title");
+    expect(json[0].name).toBe("Fix the login page alignment issue");
+    expect(json[1].name).toBe("Existing Title");
   });
 
   it("enriches sessions with git data from bridge state", async () => {
@@ -720,103 +729,6 @@ describe("DELETE /api/envs/:slug", () => {
     expect(res.status).toBe(404);
     const json = await res.json();
     expect(json).toEqual({ error: "Environment not found" });
-  });
-});
-
-// ─── HTML Skills ────────────────────────────────────────────────────────────
-
-// Legacy skills system has been removed from main routes
-describe.skip("GET /api/skills (legacy)", () => {
-  it("returns the list of skills", async () => {
-    const skills = [{ slug: "htop", name: "Process Monitor", description: "View procs", icon: "cpu", refreshInterval: 2000 }];
-    mockedSkillManager.listSkills.mockReturnValue(skills);
-
-    const res = await app.request("/api/skills", { method: "GET" });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual(skills);
-  });
-});
-
-// Legacy skills system has been removed from main routes
-describe.skip("GET /api/skills/:slug (legacy)", () => {
-  it("returns skill info when found", async () => {
-    const skill = { slug: "htop", name: "Process Monitor", description: "", icon: "cpu", refreshInterval: null };
-    mockedSkillManager.getSkill.mockReturnValue(skill);
-
-    const res = await app.request("/api/skills/htop", { method: "GET" });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual(skill);
-  });
-
-  it("returns 404 when skill not found", async () => {
-    mockedSkillManager.getSkill.mockReturnValue(null);
-    const res = await app.request("/api/skills/nope", { method: "GET" });
-    expect(res.status).toBe(404);
-  });
-});
-
-// Legacy skills system has been removed from main routes
-describe.skip("GET /api/skills/:slug/panel (legacy)", () => {
-  it("returns wrapped HTML when skill and panel exist", async () => {
-    mockedSkillManager.getSkill.mockReturnValue({ slug: "htop", name: "htop", description: "", icon: "cpu", refreshInterval: null });
-    mockedSkillManager.getSkillPanel.mockReturnValue("<html><body>Hello</body></html>");
-    mockedSkillManager.wrapWithVibeApi.mockReturnValue("<script>vibe</script>\n<html><body>Hello</body></html>");
-
-    const res = await app.request("/api/skills/htop/panel", { method: "GET" });
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/html");
-    const text = await res.text();
-    expect(text).toContain("vibe");
-    expect(skillManager.wrapWithVibeApi).toHaveBeenCalledWith("<html><body>Hello</body></html>", "htop");
-  });
-
-  it("returns 404 when skill not found", async () => {
-    mockedSkillManager.getSkill.mockReturnValue(null);
-    const res = await app.request("/api/skills/nope/panel", { method: "GET" });
-    expect(res.status).toBe(404);
-  });
-
-  it("returns 404 when panel.html is missing", async () => {
-    mockedSkillManager.getSkill.mockReturnValue({ slug: "x", name: "x", description: "", icon: "terminal", refreshInterval: null });
-    mockedSkillManager.getSkillPanel.mockReturnValue(null);
-    const res = await app.request("/api/skills/x/panel", { method: "GET" });
-    expect(res.status).toBe(404);
-  });
-});
-
-// Legacy skills system has been removed from main routes
-describe.skip("GET /api/skills/:slug/state (legacy)", () => {
-  it("returns skill state", async () => {
-    mockedSkillManager.getSkillState.mockReturnValue({ sortBy: "cpu" });
-    const res = await app.request("/api/skills/htop/state", { method: "GET" });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ sortBy: "cpu" });
-  });
-});
-
-// Legacy skills system has been removed from main routes
-describe.skip("PUT /api/skills/:slug/state (legacy)", () => {
-  it("saves skill state", async () => {
-    mockedSkillManager.getSkill.mockReturnValue({ slug: "htop", name: "htop", description: "", icon: "cpu", refreshInterval: null });
-
-    const res = await app.request("/api/skills/htop/state", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sortBy: "mem" }),
-    });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
-    expect(skillManager.setSkillState).toHaveBeenCalledWith("htop", { sortBy: "mem" });
-  });
-
-  it("returns 404 when skill not found", async () => {
-    mockedSkillManager.getSkill.mockReturnValue(null);
-    const res = await app.request("/api/skills/nope/state", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    expect(res.status).toBe(404);
   });
 });
 
@@ -1239,6 +1151,7 @@ describe("GET /api/fs/diff", () => {
   });
 
   it("returns unified diff for a file", async () => {
+    // Validates that /api/fs/diff uses the repository default branch as base (origin/main here).
     const diffOutput = `diff --git a/file.ts b/file.ts
 --- a/file.ts
 +++ b/file.ts
@@ -1250,7 +1163,8 @@ describe("GET /api/fs/diff", () => {
     vi.mocked(execSync)
       .mockReturnValueOnce("/repo\n") // rev-parse --show-toplevel
       .mockReturnValueOnce("file.ts\n") // ls-files --full-name
-      .mockReturnValueOnce(diffOutput); // git diff HEAD
+      .mockReturnValueOnce("refs/remotes/origin/main\n") // symbolic-ref refs/remotes/origin/HEAD
+      .mockReturnValueOnce(diffOutput); // git diff origin/main
 
     const res = await app.request("/api/fs/diff?path=/repo/file.ts", { method: "GET" });
 
@@ -1258,13 +1172,14 @@ describe("GET /api/fs/diff", () => {
     const json = await res.json();
     expect(json.diff).toBe(diffOutput);
     expect(json.path).toContain("file.ts");
-    expect((execSync as any)).toHaveBeenCalledWith(
-      expect.stringContaining("git diff HEAD"),
+    expect(vi.mocked(execSync)).toHaveBeenCalledWith(
+      expect.stringContaining("git diff origin/main"),
       expect.objectContaining({ encoding: "utf-8", timeout: 5000 }),
     );
   });
 
   it("returns no-index diff for untracked files", async () => {
+    // Untracked files have no base-branch diff content, so API must fallback to a full-file no-index diff.
     const untrackedDiff = `diff --git a/new.txt b/new.txt
 new file mode 100644
 index 0000000..e69de29
@@ -1276,7 +1191,8 @@ index 0000000..e69de29
     vi.mocked(execSync)
       .mockReturnValueOnce("/repo\n") // rev-parse --show-toplevel
       .mockReturnValueOnce("new.txt\n") // ls-files --full-name
-      .mockReturnValueOnce("") // git diff HEAD -> empty for untracked
+      .mockReturnValueOnce("refs/remotes/origin/main\n") // symbolic-ref refs/remotes/origin/HEAD
+      .mockReturnValueOnce("") // git diff origin/main -> empty for untracked
       .mockReturnValueOnce("new.txt\n") // ls-files --others --exclude-standard
       .mockImplementationOnce(() => {
         const err = new Error("diff exits with 1 for differences") as Error & { stdout: string };
@@ -1291,6 +1207,36 @@ index 0000000..e69de29
     expect(json.diff).toContain("new file mode");
     expect(vi.mocked(execSync)).toHaveBeenCalledWith(
       expect.stringContaining("git diff --no-index -- /dev/null"),
+      expect.objectContaining({ encoding: "utf-8", timeout: 5000 }),
+    );
+  });
+
+  it("falls back to local default branch when origin HEAD is unavailable", async () => {
+    // Ensures fallback chain works when symbolic-ref fails (e.g. no origin/HEAD): use local fallback branch.
+    const diffOutput = `diff --git a/file.ts b/file.ts
+--- a/file.ts
++++ b/file.ts
+@@ -1,2 +1,3 @@
+ line1
++added`;
+    vi.mocked(execSync)
+      .mockReturnValueOnce("/repo\n") // rev-parse --show-toplevel
+      .mockReturnValueOnce("file.ts\n") // ls-files --full-name
+      .mockImplementationOnce(() => {
+        const err = new Error("no symbol ref") as Error & { stdout: string };
+        err.stdout = "error: ref refs/remotes/origin/HEAD is not a symbolic ref";
+        throw err;
+      }) // symbolic-ref refs/remotes/origin/HEAD unavailable
+      .mockReturnValueOnce("main\n") // branch --list fallback
+      .mockReturnValueOnce(diffOutput); // git diff main
+
+    const res = await app.request("/api/fs/diff?path=/repo/file.ts", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.diff).toBe(diffOutput);
+    expect(vi.mocked(execSync)).toHaveBeenCalledWith(
+      expect.stringContaining("git diff main"),
       expect.objectContaining({ encoding: "utf-8", timeout: 5000 }),
     );
   });
@@ -1313,8 +1259,8 @@ index 0000000..e69de29
 
 describe("GET /api/backends", () => {
   it("returns both backends with availability status", async () => {
-    // First call: `which claude` succeeds, second: `which codex` succeeds
-    (execSync as any)
+    // resolveBinary returns a path for both binaries
+    mockResolveBinary
       .mockReturnValueOnce("/usr/bin/claude")
       .mockReturnValueOnce("/usr/bin/codex");
 
@@ -1328,10 +1274,11 @@ describe("GET /api/backends", () => {
     ]);
   });
 
-  it("marks backends as unavailable when CLI is not found", async () => {
-    (execSync as any)
-      .mockImplementationOnce(() => { throw new Error("not found"); })
-      .mockImplementationOnce(() => { throw new Error("not found"); });
+  it("marks backends as unavailable when binary is not found", async () => {
+    // resolveBinary returns null for both
+    mockResolveBinary
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce(null);
 
     const res = await app.request("/api/backends", { method: "GET" });
 
@@ -1344,9 +1291,9 @@ describe("GET /api/backends", () => {
   });
 
   it("handles mixed availability", async () => {
-    (execSync as any)
+    mockResolveBinary
       .mockReturnValueOnce("/usr/bin/claude") // claude found
-      .mockImplementationOnce(() => { throw new Error("not found"); }); // codex not found
+      .mockReturnValueOnce(null); // codex not found
 
     const res = await app.request("/api/backends", { method: "GET" });
 

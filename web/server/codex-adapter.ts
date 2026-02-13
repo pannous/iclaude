@@ -302,6 +302,7 @@ export class CodexAdapter {
   private currentTurnId: string | null = null;
   private connected = false;
   private initialized = false;
+  private initFailed = false;
 
   // Streaming accumulator for agent messages
   private streamingText = "";
@@ -377,6 +378,11 @@ export class CodexAdapter {
   }
 
   sendBrowserMessage(msg: BrowserOutgoingMessage): boolean {
+    // If initialization failed, reject all new messages
+    if (this.initFailed) {
+      return false;
+    }
+
     // Queue messages if not yet initialized (init is async)
     if (!this.initialized || !this.threadId) {
       if (
@@ -474,7 +480,7 @@ export class CodexAdapter {
       // Step 1: Send initialize request
       const result = await this.transport.call("initialize", {
         clientInfo: {
-          name: "the-companion",
+          name: "thecompanion",
           title: "The Companion",
           version: "1.0.0",
         },
@@ -543,8 +549,11 @@ export class CodexAdapter {
     } catch (err) {
       const errorMsg = `Codex initialization failed: ${err}`;
       console.error(`[codex-adapter] ${errorMsg}`);
-      this.emit({ type: "error", message: errorMsg });
+      this.initFailed = true;
       this.connected = false;
+      // Discard any messages queued during the failed init attempt
+      this.pendingOutgoing.length = 0;
+      this.emit({ type: "error", message: errorMsg });
       this.initErrorCb?.(errorMsg);
     }
   }

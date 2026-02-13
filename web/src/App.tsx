@@ -8,8 +8,11 @@ import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
 import { HomePage } from "./components/HomePage.js";
 import { TaskPanel } from "./components/TaskPanel.js";
-import { TerminalView } from "./components/TerminalView.js";
+import { Playground } from "./components/Playground.js";
+import { UpdateBanner } from "./components/UpdateBanner.js";
 import { SettingsPage } from "./components/SettingsPage.js";
+import { EnvManager } from "./components/EnvManager.js";
+import { TerminalPage } from "./components/TerminalPage.js";
 
 const DiffPanel = lazy(() => import("./components/DiffPanel.js").then(m => ({ default: m.DiffPanel })));
 const SkillPanel = lazy(() => import("./components/SkillPanel.js").then(m => ({ default: m.SkillPanel })));
@@ -28,10 +31,12 @@ export default function App() {
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
   const homeResetKey = useStore((s) => s.homeResetKey);
   const activeTab = useStore((s) => s.activeTab);
-  const terminalOpen = useStore((s) => s.terminalOpen);
-  const terminalCwd = useStore((s) => s.terminalCwd);
   const [showArchiveAllConfirm, setShowArchiveAllConfirm] = useState(false);
   const hash = useHash();
+  const isSettingsPage = hash === "#/settings";
+  const isTerminalPage = hash === "#/terminal";
+  const isEnvironmentsPage = hash === "#/environments";
+  const isSessionView = !isSettingsPage && !isTerminalPage && !isEnvironmentsPage;
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
@@ -43,6 +48,18 @@ export default function App() {
     if (restoredId) {
       connectSession(restoredId);
     }
+  }, []);
+
+  // Poll for updates
+  useEffect(() => {
+    const check = () => {
+      api.checkForUpdate().then((info) => {
+        useStore.getState().setUpdateInfo(info);
+      }).catch(() => {});
+    };
+    check();
+    const interval = setInterval(check, 5 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   // Listen for postMessage from skill iframes (vibe.notify)
@@ -271,8 +288,9 @@ export default function App() {
 
     setShowArchiveAllConfirm(false);
   }
-  if (hash === "#/settings") {
-    return <SettingsPage />;
+
+  if (hash === "#/playground") {
+    return <Playground />;
   }
 
   return (
@@ -333,46 +351,69 @@ export default function App() {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <TopBar />
+        <UpdateBanner />
         <div className="flex-1 overflow-hidden relative">
-          {/* Chat tab — visible when activeTab is "chat" or no session */}
-          <div className={`absolute inset-0 ${activeTab === "chat" || !currentSessionId ? "" : "hidden"}`}>
-            {currentSessionId ? (
-              <ChatView sessionId={currentSessionId} />
-            ) : (
-              <HomePage key={homeResetKey} />
-            )}
-          </div>
-
-          {/* Diffs tab — lazy-loaded to reduce initial bundle */}
-          {currentSessionId && (activeTab === "diff" || activeTab === "editor") && (
+          {isSettingsPage && (
             <div className="absolute inset-0">
-              <Suspense fallback={
-                <div className="h-full flex items-center justify-center">
-                  <div className="w-5 h-5 border-2 border-cc-primary border-t-transparent rounded-full animate-spin" />
-                </div>
-              }>
-                <DiffPanel sessionId={currentSessionId} />
-              </Suspense>
+              <SettingsPage embedded />
             </div>
           )}
 
-          {/* Skill panels — lazy-loaded, one per open skill */}
-          {activeTab.startsWith("skill:") && (
+          {isTerminalPage && (
             <div className="absolute inset-0">
-              <Suspense fallback={
-                <div className="h-full flex items-center justify-center">
-                  <div className="w-5 h-5 border-2 border-cc-primary border-t-transparent rounded-full animate-spin" />
-                </div>
-              }>
-                <SkillPanel slug={activeTab.slice(6)} />
-              </Suspense>
+              <TerminalPage />
             </div>
+          )}
+
+          {isEnvironmentsPage && (
+            <div className="absolute inset-0">
+              <EnvManager embedded />
+            </div>
+          )}
+
+          {isSessionView && (
+            <>
+              {/* Chat tab — visible when activeTab is "chat" or no session */}
+              <div className={`absolute inset-0 ${activeTab === "chat" || !currentSessionId ? "" : "hidden"}`}>
+                {currentSessionId ? (
+                  <ChatView sessionId={currentSessionId} />
+                ) : (
+                  <HomePage key={homeResetKey} />
+                )}
+              </div>
+
+              {/* Diffs tab — lazy-loaded to reduce initial bundle */}
+              {currentSessionId && (activeTab === "diff" || activeTab === "editor") && (
+                <div className="absolute inset-0">
+                  <Suspense fallback={
+                    <div className="h-full flex items-center justify-center">
+                      <div className="w-5 h-5 border-2 border-cc-primary border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  }>
+                    <DiffPanel sessionId={currentSessionId} />
+                  </Suspense>
+                </div>
+              )}
+
+              {/* Skill panels — lazy-loaded, one per open skill */}
+              {activeTab.startsWith("skill:") && (
+                <div className="absolute inset-0">
+                  <Suspense fallback={
+                    <div className="h-full flex items-center justify-center">
+                      <div className="w-5 h-5 border-2 border-cc-primary border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  }>
+                    <SkillPanel slug={activeTab.slice(6)} />
+                  </Suspense>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
 
       {/* Task panel — overlay on mobile, inline on desktop */}
-      {currentSessionId && (
+      {currentSessionId && isSessionView && (
         <>
           {/* Mobile overlay backdrop */}
           {taskPanelOpen && (
@@ -393,14 +434,6 @@ export default function App() {
             <TaskPanel sessionId={currentSessionId} />
           </div>
         </>
-      )}
-
-      {/* Global terminal overlay */}
-      {terminalOpen && terminalCwd && (
-        <TerminalView
-          cwd={terminalCwd}
-          onClose={() => useStore.getState().closeTerminal()}
-        />
       )}
     </div>
   );

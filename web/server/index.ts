@@ -1,5 +1,11 @@
 process.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1";
 
+// Enrich process PATH at startup so binary resolution and `which` calls can find
+// binaries installed via version managers (nvm, volta, fnm, etc.).
+// Critical when running as a launchd/systemd service with a restricted PATH.
+import { getEnrichedPath } from "./path-resolver.js";
+process.env.PATH = getEnrichedPath();
+
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
@@ -213,7 +219,7 @@ if (process.env.NODE_ENV !== "production") {
 startPeriodicCheck();
 if (isRunningAsService()) {
   setServiceMode(true);
-  console.log("[server] Running as launchd service (auto-update available)");
+  console.log("[server] Running as background service (auto-update available)");
 }
 
 // ── Reconnection watchdog ────────────────────────────────────────────────────
