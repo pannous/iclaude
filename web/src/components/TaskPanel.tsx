@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useStore } from "../store.js";
 import { api, type UsageLimits, type GitHubPRInfo } from "../api.js";
 import type { TaskItem } from "../types.js";
+import { McpSection } from "./McpPanel.js";
 
 const EMPTY_TASKS: TaskItem[] = [];
 const POLL_INTERVAL = 60_000;
@@ -319,7 +320,7 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
   const contextPct = Math.round(session?.context_used_percent ?? 0);
 
   return (
-    <aside className="w-[280px] h-full flex flex-col bg-cc-card border-l border-cc-border">
+    <aside className="w-[280px] h-full flex flex-col overflow-hidden bg-cc-card border-l border-cc-border">
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-cc-border">
         <span className="text-sm font-semibold text-cc-fg tracking-tight">
@@ -341,99 +342,104 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
         </button>
       </div>
 
-      {/* Session stats */}
-      {session && (
-        <div className="shrink-0 px-4 py-3 border-b border-cc-border space-y-2.5">
-          {/* Cost */}
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted uppercase tracking-wider">
-              Cost
-            </span>
-            <span className="text-[13px] font-medium text-cc-fg tabular-nums">
-              ${session.total_cost_usd.toFixed(2)}
-            </span>
-          </div>
-
-          {/* Context usage */}
-          <div className="space-y-1">
+      <div data-testid="task-panel-content" className="min-h-0 flex-1 overflow-y-auto">
+        {/* Session stats */}
+        {session && (
+          <div className="shrink-0 px-4 py-3 border-b border-cc-border space-y-2.5">
+            {/* Cost */}
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-cc-muted uppercase tracking-wider">
-                Context
+                Cost
               </span>
-              <span className="text-[11px] text-cc-muted tabular-nums">
-                {`${contextPct}%`}
+              <span className="text-[13px] font-medium text-cc-fg tabular-nums">
+                ${session.total_cost_usd.toFixed(2)}
               </span>
             </div>
-            <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  contextPct > 80
-                    ? "bg-cc-error"
-                    : contextPct > 50
-                      ? "bg-cc-warning"
-                      : "bg-cc-primary"
-                }`}
-                style={{ width: `${Math.min(contextPct, 100)}%` }}
-              />
-            </div>
-          </div>
 
-          {/* Turns */}
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted uppercase tracking-wider">
-              Turns
-            </span>
-            <span className="text-[13px] font-medium text-cc-fg tabular-nums">
-              {session.num_turns}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Usage limits */}
-      <UsageLimitsSection sessionId={sessionId} />
-
-      {/* GitHub PR status */}
-      <GitHubPRSection sessionId={sessionId} />
-
-      {showTasks && (
-        <>
-          {/* Task section header */}
-          <div className="shrink-0 px-4 py-2.5 border-b border-cc-border flex items-center justify-between">
-            <span className="text-[12px] font-semibold text-cc-fg flex items-center gap-1.5">
-              Tasks
-              {allTasksDone && (
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-cc-success">
-                  <path fillRule="evenodd" d="M8 15A7 7 0 108 1a7 7 0 000 14zm3.354-9.354a.5.5 0 00-.708-.708L7 8.586 5.354 6.94a.5.5 0 10-.708.708l2 2a.5.5 0 00.708 0l4-4z" clipRule="evenodd" />
-                </svg>
-              )}
-            </span>
-            {tasks.length > 0 && (
-              <span className={`text-[11px] tabular-nums ${allTasksDone ? "text-cc-success font-medium" : "text-cc-muted"}`}>
-                {completedCount}/{tasks.length}
-              </span>
-            )}
-          </div>
-
-          {/* Task list */}
-          <div className="flex-1 overflow-y-auto px-3 py-2">
-            {tasks.length === 0 ? (
-              <p className="text-xs text-cc-muted text-center py-8">No tasks yet</p>
-            ) : (
-              <div className="space-y-0.5">
-                {tasks.map((task) => (
-                  <TaskRow key={task.id} task={task} />
-                ))}
-                {allTasksDone && (
-                  <div className="mt-3 mx-1 px-3 py-2 rounded-lg bg-cc-success/10 text-cc-success text-[12px] font-medium text-center">
-                    All tasks completed
-                  </div>
-                )}
+            {/* Context usage */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-cc-muted uppercase tracking-wider">
+                  Context
+                </span>
+                <span className="text-[11px] text-cc-muted tabular-nums">
+                  {`${contextPct}%`}
+                </span>
               </div>
-            )}
+              <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    contextPct > 80
+                      ? "bg-cc-error"
+                      : contextPct > 50
+                        ? "bg-cc-warning"
+                        : "bg-cc-primary"
+                  }`}
+                  style={{ width: `${Math.min(contextPct, 100)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Turns */}
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-cc-muted uppercase tracking-wider">
+                Turns
+              </span>
+              <span className="text-[13px] font-medium text-cc-fg tabular-nums">
+                {session.num_turns}
+              </span>
+            </div>
           </div>
-        </>
-      )}
+        )}
+
+        {/* Usage limits */}
+        <UsageLimitsSection sessionId={sessionId} />
+
+        {/* GitHub PR status */}
+        <GitHubPRSection sessionId={sessionId} />
+
+        {/* MCP servers */}
+        <McpSection sessionId={sessionId} />
+
+        {showTasks && (
+          <>
+            {/* Task section header */}
+            <div className="px-4 py-2.5 border-b border-cc-border flex items-center justify-between">
+              <span className="text-[12px] font-semibold text-cc-fg flex items-center gap-1.5">
+                Tasks
+                {allTasksDone && (
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-cc-success">
+                    <path fillRule="evenodd" d="M8 15A7 7 0 108 1a7 7 0 000 14zm3.354-9.354a.5.5 0 00-.708-.708L7 8.586 5.354 6.94a.5.5 0 10-.708.708l2 2a.5.5 0 00.708 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </span>
+              {tasks.length > 0 && (
+                <span className={`text-[11px] tabular-nums ${allTasksDone ? "text-cc-success font-medium" : "text-cc-muted"}`}>
+                  {completedCount}/{tasks.length}
+                </span>
+              )}
+            </div>
+
+            {/* Task list */}
+            <div className="px-3 py-2">
+              {tasks.length === 0 ? (
+                <p className="text-xs text-cc-muted text-center py-8">No tasks yet</p>
+              ) : (
+                <div className="space-y-0.5">
+                  {tasks.map((task) => (
+                    <TaskRow key={task.id} task={task} />
+                  ))}
+                  {allTasksDone && (
+                    <div className="mt-3 mx-1 px-3 py-2 rounded-lg bg-cc-success/10 text-cc-success text-[12px] font-medium text-center">
+                      All tasks completed
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </aside>
   );
 }

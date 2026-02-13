@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem } from "./types.js";
+import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem, McpServerDetail } from "./types.js";
 import type { UpdateInfo, PRStatusResponse } from "./api.js";
 import { safeStorage } from "./utils/safe-storage.js";
 
@@ -47,6 +47,9 @@ interface AppState {
   // PR status per session (pushed by server via WebSocket)
   prStatus: Map<string, PRStatusResponse>;
 
+  // MCP servers per session
+  mcpServers: Map<string, McpServerDetail[]>;
+
   // Sidebar project grouping
   collapsedProjects: Set<string>;
 
@@ -61,6 +64,7 @@ interface AppState {
   darkMode: boolean;
   notificationSound: boolean;
   yoloMode: boolean;
+  notificationDesktop: boolean;
   sidebarOpen: boolean;
   taskPanelOpen: boolean;
   homeResetKey: number;
@@ -77,6 +81,8 @@ interface AppState {
   toggleNotificationSound: () => void;
   setYoloMode: (v: boolean) => void;
   toggleYoloMode: () => void;
+  setNotificationDesktop: (v: boolean) => void;
+  toggleNotificationDesktop: () => void;
   setSidebarOpen: (v: boolean) => void;
   setTaskPanelOpen: (open: boolean) => void;
   newSession: () => void;
@@ -116,6 +122,9 @@ interface AppState {
 
   // PR status action
   setPRStatus: (sessionId: string, status: PRStatusResponse) => void;
+
+  // MCP actions
+  setMcpServers: (sessionId: string, servers: McpServerDetail[]) => void;
 
   // Sidebar project grouping actions
   toggleProjectCollapse: (projectKey: string) => void;
@@ -192,6 +201,18 @@ function getInitialYoloMode(): boolean {
   return stored === "true";
 }
 
+function getInitialNotificationDesktop(): boolean {
+  if (typeof window === "undefined") return false;
+  const stored = localStorage.getItem("cc-notification-desktop");
+  if (stored !== null) return stored === "true";
+  return false;
+}
+
+function getInitialDismissedVersion(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("cc-update-dismissed") || null;
+}
+
 function getInitialCollapsedProjects(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
@@ -223,10 +244,12 @@ export const useStore = create<AppState>((set) => ({
   sessionSubtitles: new Map(),
   recentlyRenamed: new Set(),
   prStatus: new Map(),
+  mcpServers: new Map(),
   collapsedProjects: getInitialCollapsedProjects(),
   darkMode: getInitialDarkMode(),
   notificationSound: getInitialNotificationSound(),
   yoloMode: getInitialYoloMode(),
+  notificationDesktop: getInitialNotificationDesktop(),
   sidebarOpen: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
   taskPanelOpen: typeof window !== "undefined" ? window.innerWidth >= 1024 : false,
   homeResetKey: 0,
@@ -268,6 +291,16 @@ export const useStore = create<AppState>((set) => ({
       const next = !s.yoloMode;
       safeStorage.setItem("cc-yolo-mode", String(next));
       return { yoloMode: next };
+    }),
+  setNotificationDesktop: (v) => {
+    localStorage.setItem("cc-notification-desktop", String(v));
+    set({ notificationDesktop: v });
+  },
+  toggleNotificationDesktop: () =>
+    set((s) => {
+      const next = !s.notificationDesktop;
+      localStorage.setItem("cc-notification-desktop", String(next));
+      return { notificationDesktop: next };
     }),
   setSidebarOpen: (v) => set({ sidebarOpen: v }),
   setTaskPanelOpen: (open) => set({ taskPanelOpen: open }),
@@ -340,6 +373,10 @@ export const useStore = create<AppState>((set) => ({
       editorUrl.delete(sessionId);
       const editorLoading = new Map(s.editorLoading);
       editorLoading.delete(sessionId);
+      const diffPanelSelectedFile = new Map(s.diffPanelSelectedFile);
+      diffPanelSelectedFile.delete(sessionId);
+      const mcpServers = new Map(s.mcpServers);
+      mcpServers.delete(sessionId);
       const prStatus = new Map(s.prStatus);
       prStatus.delete(sessionId);
       safeStorage.setItem("cc-session-names", JSON.stringify(Array.from(sessionNames.entries())));
@@ -365,6 +402,7 @@ export const useStore = create<AppState>((set) => ({
         editorOpenFile,
         editorUrl,
         editorLoading,
+        mcpServers,
         prStatus,
         sdkSessions: s.sdkSessions.filter((sdk) => sdk.sessionId !== sessionId),
         currentSessionId: s.currentSessionId === sessionId ? null : s.currentSessionId,
@@ -532,6 +570,13 @@ export const useStore = create<AppState>((set) => ({
       return { prStatus };
     }),
 
+  setMcpServers: (sessionId, servers) =>
+    set((s) => {
+      const mcpServers = new Map(s.mcpServers);
+      mcpServers.set(sessionId, servers);
+      return { mcpServers };
+    }),
+
   toggleProjectCollapse: (projectKey) =>
     set((s) => {
       const collapsedProjects = new Set(s.collapsedProjects);
@@ -651,6 +696,7 @@ export const useStore = create<AppState>((set) => ({
       sessionNames: new Map(),
       sessionSubtitles: new Map(),
       recentlyRenamed: new Set(),
+      mcpServers: new Map(),
       prStatus: new Map(),
       activeTab: "chat" as const,
       editorOpenFile: new Map(),

@@ -20,6 +20,12 @@ bunx the-companion
 
 Open [localhost:3456](http://localhost:3456). In production, the backend serves the built frontend on this port. In dev mode, open [localhost:2345](http://localhost:2345) for the Vite dev server with HMR.
 
+Foreground mode is also available explicitly with:
+
+```bash
+the-companion serve
+```
+
 ## Why
 
 Claude Code is powerful but stuck in a terminal. You can't easily run multiple sessions, there's no visual feedback on tool calls, and if the process dies your context is gone.
@@ -80,6 +86,7 @@ the-companion install
 Other commands:
 
 ```bash
+the-companion start       # start the installed background service
 the-companion status      # check if the service is running
 the-companion stop        # stop the service (keeps it installed)
 the-companion restart     # restart the service

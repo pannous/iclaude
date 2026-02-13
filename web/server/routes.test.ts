@@ -344,7 +344,7 @@ describe("POST /api/sessions/create", () => {
     expect(launcher.launch).not.toHaveBeenCalled();
   });
 
-  it("returns 500 and does not launch when pull fails before create", async () => {
+  it("proceeds with session creation when pull fails (non-fatal)", async () => {
     vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
       repoRoot: TEST_CWD,
       repoName: "my-repo",
@@ -354,7 +354,7 @@ describe("POST /api/sessions/create", () => {
     });
     vi.mocked(gitUtils.gitPull).mockReturnValueOnce({
       success: false,
-      output: "non-fast-forward",
+      output: "no tracking information",
     });
 
     const res = await app.request("/api/sessions/create", {
@@ -363,12 +363,9 @@ describe("POST /api/sessions/create", () => {
       body: JSON.stringify({ cwd: TEST_CWD, branch: "main" }),
     });
 
-    expect(res.status).toBe(500);
-    const json = await res.json();
-    expect(json).toEqual({
-      error: "git pull failed before session create: non-fast-forward",
-    });
-    expect(launcher.launch).not.toHaveBeenCalled();
+    // Pull failure is non-fatal — session should still be created
+    expect(res.status).toBe(200);
+    expect(launcher.launch).toHaveBeenCalled();
   });
 
   it("returns 500 when launch throws an error", async () => {

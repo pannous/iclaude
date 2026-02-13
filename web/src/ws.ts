@@ -1,5 +1,5 @@
 import { useStore } from "./store.js";
-import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, SdkSessionInfo } from "./types.js";
+import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, SdkSessionInfo, McpServerConfig } from "./types.js";
 import { resultScanner, scanContent } from "./utils/result-scanner.js";
 import { generateUniqueSessionName } from "./utils/names.js";
 import { playNotificationSound } from "./utils/notification-sound.js";
@@ -125,6 +125,12 @@ function extractChangedFilesFromBlocks(sessionId: string, blocks: ContentBlock[]
       }
     }
   }
+}
+
+function sendBrowserNotification(title: string, body: string, tag: string) {
+  if (typeof Notification === "undefined") return;
+  if (Notification.permission !== "granted") return;
+  new Notification(title, { body, tag });
 }
 
 let idCounter = 0;
@@ -333,6 +339,9 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       if (!document.hasFocus() && store.notificationSound) {
         playNotificationSound();
       }
+      if (!document.hasFocus() && store.notificationDesktop) {
+        sendBrowserNotification("Session completed", "Claude finished the task", sessionId);
+      }
       if (r.is_error && r.errors?.length) {
         store.appendMessage(sessionId, {
           id: nextId(),
@@ -348,6 +357,14 @@ function handleMessage(sessionId: string, event: MessageEvent) {
 
     case "permission_request": {
       store.addPermission(sessionId, data.request);
+      if (!document.hasFocus() && store.notificationDesktop) {
+        const req = data.request;
+        sendBrowserNotification(
+          "Permission needed",
+          `${req.tool_name}: approve or deny`,
+          req.request_id,
+        );
+      }
       // Also extract tasks and changed files from permission requests
       const req = data.request;
       if (req.tool_name && req.input) {
@@ -446,6 +463,11 @@ function handleMessage(sessionId: string, event: MessageEvent) {
 
     case "pr_status_update": {
       store.setPRStatus(sessionId, { available: data.available, pr: data.pr });
+      break;
+    }
+
+    case "mcp_status": {
+      store.setMcpServers(sessionId, data.servers);
       break;
     }
 
@@ -627,4 +649,20 @@ export function sendToSession(sessionId: string, msg: BrowserOutgoingMessage) {
   if (ws?.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(msg));
   }
+}
+
+export function sendMcpGetStatus(sessionId: string) {
+  sendToSession(sessionId, { type: "mcp_get_status" });
+}
+
+export function sendMcpToggle(sessionId: string, serverName: string, enabled: boolean) {
+  sendToSession(sessionId, { type: "mcp_toggle", serverName, enabled });
+}
+
+export function sendMcpReconnect(sessionId: string, serverName: string) {
+  sendToSession(sessionId, { type: "mcp_reconnect", serverName });
+}
+
+export function sendMcpSetServers(sessionId: string, servers: Record<string, McpServerConfig>) {
+  sendToSession(sessionId, { type: "mcp_set_servers", servers });
 }
