@@ -3,6 +3,7 @@ import { useStore } from "../store.js";
 import { api, type ResumableSession } from "../api.js";
 import { connectSession, connectAllSessions, disconnectSession, waitForConnection } from "../ws.js";
 import { EnvManager } from "./EnvManager.js";
+import { FolderPicker } from "./FolderPicker.js";
 import { ProjectGroup } from "./ProjectGroup.js";
 import { SessionItem } from "./SessionItem.js";
 import { groupSessionsByProject, type SessionItem as SessionItemType } from "../utils/project-grouping.js";
@@ -22,6 +23,7 @@ export function Sidebar() {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [showEnvManager, setShowEnvManager] = useState(false);
+  const [showTerminalPicker, setShowTerminalPicker] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [showResumePicker, setShowResumePicker] = useState(false);
   const [resumableSessions, setResumableSessions] = useState<ResumableSession[]>([]);
@@ -45,6 +47,7 @@ export function Sidebar() {
   const pendingPermissions = useStore((s) => s.pendingPermissions);
   const collapsedProjects = useStore((s) => s.collapsedProjects);
   const toggleProjectCollapse = useStore((s) => s.toggleProjectCollapse);
+  const terminalOpen = useStore((s) => s.terminalOpen);
 
   // Poll for SDK sessions on mount
   useEffect(() => {
@@ -497,6 +500,21 @@ export function Sidebar() {
       {/* Footer */}
       <div className="p-3 border-t border-cc-border space-y-0.5">
         <button
+          onClick={() => {
+            if (terminalOpen) {
+              useStore.getState().closeTerminal();
+            } else {
+              setShowTerminalPicker(true);
+            }
+          }}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+            <path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm2 1.5l3 2.5-3 2.5V4.5zM8.5 10h3v1h-3v-1z" />
+          </svg>
+          <span>{terminalOpen ? "Close Terminal" : "Terminal"}</span>
+        </button>
+        <button
           onClick={() => setShowEnvManager(true)}
           className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
         >
@@ -535,11 +553,34 @@ export function Sidebar() {
           )}
           <span>{darkMode ? "Light mode" : "Dark mode"}</span>
         </button>
+        <button
+          onClick={() => {
+            window.location.hash = "#/settings";
+          }}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.53 1.53 0 01-2.29.95c-1.35-.8-2.92.77-2.12 2.12.54.9.07 2.04-.95 2.29-1.56.38-1.56 2.6 0 2.98 1.02.25 1.49 1.39.95 2.29-.8 1.35.77 2.92 2.12 2.12.9-.54 2.04-.07 2.29.95.38 1.56 2.6 1.56 2.98 0 .25-1.02 1.39-1.49 2.29-.95 1.35.8 2.92-.77 2.12-2.12-.54-.9-.07-2.04.95-2.29 1.56-.38 1.56-2.6 0-2.98-1.02-.25-1.49-1.39-.95-2.29.8-1.35-.77-2.92-2.12-2.12-.9.54-2.04.07-2.29-.95zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+          </svg>
+          <span>Settings</span>
+        </button>
       </div>
 
       {/* Environment manager modal */}
       {showEnvManager && (
         <EnvManager onClose={() => setShowEnvManager(false)} />
+      )}
+
+      {/* Terminal folder picker */}
+      {showTerminalPicker && (
+        <FolderPicker
+          initialPath=""
+          onSelect={(path) => {
+            useStore.getState().openTerminal(path);
+            setShowTerminalPicker(false);
+          }}
+          onClose={() => setShowTerminalPicker(false)}
+        />
       )}
     </aside>
   );

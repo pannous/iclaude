@@ -1,8 +1,9 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { CopyButton } from "./CopyButton.js";
 import { SkillPicker } from "./SkillPicker.js";
+import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
 import { conversationToText } from "../utils/message-text.js";
 
 const EMPTY_MESSAGES: import("../types.js").ChatMessage[] = [];
@@ -21,6 +22,7 @@ export function TopBar() {
   const setActiveTab = useStore((s) => s.setActiveTab);
   const openSkills = useStore((s) => s.openSkills);
   const closeSkill = useStore((s) => s.closeSkill);
+  const [claudeMdOpen, setClaudeMdOpen] = useState(false);
   const changedFilesCount = useStore((s) => {
     if (!currentSessionId) return 0;
     const cwd =
@@ -41,6 +43,14 @@ export function TopBar() {
   const sessionSubtitle = useStore((s) =>
     currentSessionId ? s.sessionSubtitles.get(currentSessionId) : undefined
   );
+  const cwd = useStore((s) => {
+    if (!currentSessionId) return null;
+    return (
+      s.sessions.get(currentSessionId)?.cwd ||
+      s.sdkSessions.find((sdk) => sdk.sessionId === currentSessionId)?.cwd ||
+      null
+    );
+  });
   const isConnected = currentSessionId ? (cliConnected.get(currentSessionId) ?? false) : false;
   const status = currentSessionId ? (sessionStatus.get(currentSessionId) ?? null) : null;
 
@@ -121,6 +131,23 @@ export function TopBar() {
             <SkillPicker />
           </div>
 
+          {/* CLAUDE.md editor */}
+          {cwd && (
+            <button
+              onClick={() => setClaudeMdOpen(true)}
+              className={`flex items-center justify-center w-7 h-7 rounded-lg transition-colors cursor-pointer ${
+                claudeMdOpen
+                  ? "text-cc-primary bg-cc-active"
+                  : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+              }`}
+              title="Edit CLAUDE.md"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+                <path d="M4 1.5a.5.5 0 01.5-.5h7a.5.5 0 01.354.146l2 2A.5.5 0 0114 3.5v11a.5.5 0 01-.5.5h-11a.5.5 0 01-.5-.5v-13zm1 .5v12h8V4h-1.5a.5.5 0 01-.5-.5V2H5zm6 0v1h1l-1-1zM6.5 7a.5.5 0 000 1h5a.5.5 0 000-1h-5zm0 2a.5.5 0 000 1h5a.5.5 0 000-1h-5zm0 2a.5.5 0 000 1h3a.5.5 0 000-1h-3z" />
+              </svg>
+            </button>
+          )}
+
           <button
             onClick={() => setTaskPanelOpen(!taskPanelOpen)}
             className={`flex items-center justify-center w-7 h-7 rounded-lg transition-colors cursor-pointer ${
@@ -135,6 +162,15 @@ export function TopBar() {
             </svg>
           </button>
         </div>
+      )}
+
+      {/* CLAUDE.md editor modal */}
+      {cwd && (
+        <ClaudeMdEditor
+          cwd={cwd}
+          open={claudeMdOpen}
+          onClose={() => setClaudeMdOpen(false)}
+        />
       )}
     </header>
   );

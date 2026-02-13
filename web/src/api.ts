@@ -60,6 +60,18 @@ async function del<T = unknown>(path: string, body?: object): Promise<T> {
   return res.json();
 }
 
+export interface ContainerCreateOpts {
+  image?: string;
+  ports?: number[];
+  volumes?: string[];
+  env?: Record<string, string>;
+}
+
+export interface ContainerStatus {
+  available: boolean;
+  version: string | null;
+}
+
 export interface CreateSessionOpts {
   model?: string;
   permissionMode?: string;
@@ -75,6 +87,7 @@ export interface CreateSessionOpts {
   resumeSessionId?: string;
   backend?: "claude" | "codex";
   prewarm?: boolean;
+  container?: ContainerCreateOpts;
 }
 
 export interface ResumableSession {
@@ -182,6 +195,11 @@ export interface UsageLimits {
   } | null;
 }
 
+export interface AppSettings {
+  openrouterApiKeyConfigured: boolean;
+  openrouterModel: string;
+}
+
 export interface GitHubPRInfo {
   number: number;
   title: string;
@@ -266,6 +284,11 @@ export const api = {
   ) => put<CompanionEnv>(`/envs/${encodeURIComponent(slug)}`, data),
   deleteEnv: (slug: string) => del(`/envs/${encodeURIComponent(slug)}`),
 
+  // Settings
+  getSettings: () => get<AppSettings>("/settings"),
+  updateSettings: (data: { openrouterApiKey?: string; openrouterModel?: string }) =>
+    put<AppSettings>("/settings", data),
+
   // Git operations
   getRepoInfo: (path: string) =>
     get<GitRepoInfo>(`/git/repo-info?path=${encodeURIComponent(path)}`),
@@ -310,6 +333,10 @@ export const api = {
   getBackendModels: (backendId: string) =>
     get<BackendModelInfo[]>(`/backends/${encodeURIComponent(backendId)}/models`),
 
+  // Containers
+  getContainerStatus: () => get<ContainerStatus>("/containers/status"),
+  getContainerImages: () => get<string[]>("/containers/images"),
+
   // Editor
   startEditor: (sessionId: string) =>
     post<{ url: string }>(
@@ -331,6 +358,12 @@ export const api = {
     get<{ path: string; diff: string }>(
       `/fs/diff?path=${encodeURIComponent(path)}`,
     ),
+  getClaudeMdFiles: (cwd: string) =>
+    get<{ cwd: string; files: { path: string; content: string }[] }>(
+      `/fs/claude-md?cwd=${encodeURIComponent(cwd)}`,
+    ),
+  saveClaudeMd: (path: string, content: string) =>
+    put<{ ok: boolean; path: string }>("/fs/claude-md", { path, content }),
 
   // Usage limits
   getUsageLimits: () => get<UsageLimits>("/usage-limits"),
@@ -340,6 +373,14 @@ export const api = {
   // HTML Skills
   listSkills: () => get<SkillInfo[]>("/skills"),
   getSkillPanelUrl: (slug: string) => `/api/skills/${encodeURIComponent(slug)}/panel`,
+
+  // Terminal
+  spawnTerminal: (cwd: string, cols?: number, rows?: number) =>
+    post<{ terminalId: string }>("/terminal/spawn", { cwd, cols, rows }),
+  killTerminal: () =>
+    post<{ ok: boolean }>("/terminal/kill"),
+  getTerminal: () =>
+    get<{ active: boolean; terminalId?: string; cwd?: string }>("/terminal"),
 
   // Update checking
   checkForUpdate: () => get<UpdateInfo>("/update-check"),

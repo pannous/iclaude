@@ -444,6 +444,11 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       break;
     }
 
+    case "pr_status_update": {
+      store.setPRStatus(sessionId, { available: data.available, pr: data.pr });
+      break;
+    }
+
     case "message_history": {
       const chatMessages: ChatMessage[] = [];
       const seenIds = new Set<string>();

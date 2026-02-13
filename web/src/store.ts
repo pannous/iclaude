@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem } from "./types.js";
-import type { UpdateInfo } from "./api.js";
+import type { UpdateInfo, PRStatusResponse } from "./api.js";
 import { safeStorage } from "./utils/safe-storage.js";
 
 interface AppState {
@@ -43,6 +43,9 @@ interface AppState {
   sessionSubtitles: Map<string, string>;
   // Track sessions that were just renamed (for animation)
   recentlyRenamed: Set<string>;
+
+  // PR status per session (pushed by server via WebSocket)
+  prStatus: Map<string, PRStatusResponse>;
 
   // Sidebar project grouping
   collapsedProjects: Set<string>;
@@ -111,6 +114,9 @@ interface AppState {
   markRecentlyRenamed: (sessionId: string) => void;
   clearRecentlyRenamed: (sessionId: string) => void;
 
+  // PR status action
+  setPRStatus: (sessionId: string, status: PRStatusResponse) => void;
+
   // Sidebar project grouping actions
   toggleProjectCollapse: (projectKey: string) => void;
 
@@ -136,6 +142,18 @@ interface AppState {
   setEditorOpenFile: (sessionId: string, filePath: string | null) => void;
   setEditorUrl: (sessionId: string, url: string) => void;
   setEditorLoading: (sessionId: string, loading: boolean) => void;
+
+  // Terminal state
+  terminalOpen: boolean;
+  terminalCwd: string | null;
+  terminalId: string | null;
+
+  // Terminal actions
+  setTerminalOpen: (open: boolean) => void;
+  setTerminalCwd: (cwd: string | null) => void;
+  setTerminalId: (id: string | null) => void;
+  openTerminal: (cwd: string) => void;
+  closeTerminal: () => void;
 
   reset: () => void;
 }
@@ -204,6 +222,7 @@ export const useStore = create<AppState>((set) => ({
   sessionNames: getInitialSessionNames(),
   sessionSubtitles: new Map(),
   recentlyRenamed: new Set(),
+  prStatus: new Map(),
   collapsedProjects: getInitialCollapsedProjects(),
   darkMode: getInitialDarkMode(),
   notificationSound: getInitialNotificationSound(),
@@ -216,6 +235,9 @@ export const useStore = create<AppState>((set) => ({
   editorOpenFile: new Map(),
   editorUrl: new Map(),
   editorLoading: new Map(),
+  terminalOpen: false,
+  terminalCwd: null,
+  terminalId: null,
 
   setDarkMode: (v) => {
     safeStorage.setItem("cc-dark-mode", String(v));
@@ -318,6 +340,8 @@ export const useStore = create<AppState>((set) => ({
       editorUrl.delete(sessionId);
       const editorLoading = new Map(s.editorLoading);
       editorLoading.delete(sessionId);
+      const prStatus = new Map(s.prStatus);
+      prStatus.delete(sessionId);
       safeStorage.setItem("cc-session-names", JSON.stringify(Array.from(sessionNames.entries())));
       if (s.currentSessionId === sessionId) {
         safeStorage.removeItem("cc-current-session");
@@ -341,6 +365,7 @@ export const useStore = create<AppState>((set) => ({
         editorOpenFile,
         editorUrl,
         editorLoading,
+        prStatus,
         sdkSessions: s.sdkSessions.filter((sdk) => sdk.sessionId !== sessionId),
         currentSessionId: s.currentSessionId === sessionId ? null : s.currentSessionId,
       };
@@ -500,6 +525,13 @@ export const useStore = create<AppState>((set) => ({
       return { recentlyRenamed };
     }),
 
+  setPRStatus: (sessionId, status) =>
+    set((s) => {
+      const prStatus = new Map(s.prStatus);
+      prStatus.set(sessionId, status);
+      return { prStatus };
+    }),
+
   toggleProjectCollapse: (projectKey) =>
     set((s) => {
       const collapsedProjects = new Set(s.collapsedProjects);
@@ -591,6 +623,12 @@ export const useStore = create<AppState>((set) => ({
       return { editorLoading };
     }),
 
+  setTerminalOpen: (open) => set({ terminalOpen: open }),
+  setTerminalCwd: (cwd) => set({ terminalCwd: cwd }),
+  setTerminalId: (id) => set({ terminalId: id }),
+  openTerminal: (cwd) => set({ terminalOpen: true, terminalCwd: cwd }),
+  closeTerminal: () => set({ terminalOpen: false, terminalCwd: null, terminalId: null }),
+
   reset: () =>
     set({
       sessions: new Map(),
@@ -613,9 +651,13 @@ export const useStore = create<AppState>((set) => ({
       sessionNames: new Map(),
       sessionSubtitles: new Map(),
       recentlyRenamed: new Set(),
+      prStatus: new Map(),
       activeTab: "chat" as const,
       editorOpenFile: new Map(),
       editorUrl: new Map(),
       editorLoading: new Map(),
+      terminalOpen: false,
+      terminalCwd: null,
+      terminalId: null,
     }),
 }));

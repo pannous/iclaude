@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from "react";
+import { useEffect, useState, useSyncExternalStore, lazy, Suspense } from "react";
 import { useStore } from "./store.js";
 import { connectSession } from "./ws.js";
 import { disconnectSession } from "./ws.js";
@@ -8,9 +8,18 @@ import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
 import { HomePage } from "./components/HomePage.js";
 import { TaskPanel } from "./components/TaskPanel.js";
+import { TerminalView } from "./components/TerminalView.js";
+import { SettingsPage } from "./components/SettingsPage.js";
 
 const DiffPanel = lazy(() => import("./components/DiffPanel.js").then(m => ({ default: m.DiffPanel })));
 const SkillPanel = lazy(() => import("./components/SkillPanel.js").then(m => ({ default: m.SkillPanel })));
+
+function useHash() {
+  return useSyncExternalStore(
+    (cb) => { window.addEventListener("hashchange", cb); return () => window.removeEventListener("hashchange", cb); },
+    () => window.location.hash,
+  );
+}
 
 export default function App() {
   const darkMode = useStore((s) => s.darkMode);
@@ -19,7 +28,10 @@ export default function App() {
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
   const homeResetKey = useStore((s) => s.homeResetKey);
   const activeTab = useStore((s) => s.activeTab);
+  const terminalOpen = useStore((s) => s.terminalOpen);
+  const terminalCwd = useStore((s) => s.terminalCwd);
   const [showArchiveAllConfirm, setShowArchiveAllConfirm] = useState(false);
+  const hash = useHash();
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
@@ -259,6 +271,9 @@ export default function App() {
 
     setShowArchiveAllConfirm(false);
   }
+  if (hash === "#/settings") {
+    return <SettingsPage />;
+  }
 
   return (
     <div className="h-[100dvh] flex font-sans-ui bg-cc-bg text-cc-fg antialiased">
@@ -378,6 +393,14 @@ export default function App() {
             <TaskPanel sessionId={currentSessionId} />
           </div>
         </>
+      )}
+
+      {/* Global terminal overlay */}
+      {terminalOpen && terminalCwd && (
+        <TerminalView
+          cwd={terminalCwd}
+          onClose={() => useStore.getState().closeTerminal()}
+        />
       )}
     </div>
   );
