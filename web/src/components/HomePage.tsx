@@ -34,14 +34,14 @@ let idCounter = 0;
 export function HomePage() {
   const [text, setText] = useState("");
   const [backend, setBackend] = useState<BackendType>(() =>
-    (localStorage.getItem("cc-backend") as BackendType) || "claude",
+    (safeStorage.getItem("cc-backend") as BackendType) || "claude",
   );
   const [backends, setBackends] = useState<BackendInfo[]>([]);
   const [model, setModel] = useState(() => getDefaultModel(
-    (localStorage.getItem("cc-backend") as BackendType) || "claude",
+    (safeStorage.getItem("cc-backend") as BackendType) || "claude",
   ));
   const [mode, setMode] = useState(() => getDefaultMode(
-    (localStorage.getItem("cc-backend") as BackendType) || "claude",
+    (safeStorage.getItem("cc-backend") as BackendType) || "claude",
   ));
   const [cwd, setCwd] = useState(() => getRecentDirs()[0] || "");
   const [images, setImages] = useState<ImageAttachment[]>([]);
@@ -49,7 +49,7 @@ export function HomePage() {
   const [error, setError] = useState("");
   const [dynamicModels, setDynamicModels] = useState<ModelOption[] | null>(null);
   const [codexInternetAccess, setCodexInternetAccess] = useState(() =>
-    localStorage.getItem("cc-codex-internet-access") === "1",
+    safeStorage.getItem("cc-codex-internet-access") === "1",
   );
 
   const MODELS = dynamicModels || getModelsForBackend(backend);
@@ -169,7 +169,7 @@ export function HomePage() {
   // When backend changes, reset model and mode to defaults
   function switchBackend(newBackend: BackendType) {
     setBackend(newBackend);
-    localStorage.setItem("cc-backend", newBackend);
+    safeStorage.setItem("cc-backend", newBackend);
     setDynamicModels(null);
     setModel(getDefaultModel(newBackend));
     setMode(getDefaultMode(newBackend));
@@ -641,7 +641,7 @@ export function HomePage() {
               onClick={() => {
                 const next = !codexInternetAccess;
                 setCodexInternetAccess(next);
-                localStorage.setItem("cc-codex-internet-access", next ? "1" : "0");
+                safeStorage.setItem("cc-codex-internet-access", next ? "1" : "0");
               }}
               className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded-md transition-colors cursor-pointer ${
                 codexInternetAccess

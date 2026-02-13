@@ -181,7 +181,7 @@ function getInitialDarkMode(): boolean {
 
 function getInitialNotificationSound(): boolean {
   if (typeof window === "undefined") return true;
-  const stored = localStorage.getItem("cc-notification-sound");
+  const stored = safeStorage.getItem("cc-notification-sound");
   if (stored !== null) return stored === "true";
   return true;
 }
@@ -195,7 +195,7 @@ function getInitialYoloMode(): boolean {
 function getInitialCollapsedProjects(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    return new Set(JSON.parse(localStorage.getItem("cc-collapsed-projects") || "[]"));
+    return new Set(JSON.parse(safeStorage.getItem("cc-collapsed-projects") || "[]"));
   } catch {
     return new Set();
   }
@@ -250,13 +250,13 @@ export const useStore = create<AppState>((set) => ({
       return { darkMode: next };
     }),
   setNotificationSound: (v) => {
-    localStorage.setItem("cc-notification-sound", String(v));
+    safeStorage.setItem("cc-notification-sound", String(v));
     set({ notificationSound: v });
   },
   toggleNotificationSound: () =>
     set((s) => {
       const next = !s.notificationSound;
-      localStorage.setItem("cc-notification-sound", String(next));
+      safeStorage.setItem("cc-notification-sound", String(next));
       return { notificationSound: next };
     }),
   setYoloMode: (v) => {
@@ -540,7 +540,7 @@ export const useStore = create<AppState>((set) => ({
       } else {
         collapsedProjects.add(projectKey);
       }
-      localStorage.setItem("cc-collapsed-projects", JSON.stringify(Array.from(collapsedProjects)));
+      safeStorage.setItem("cc-collapsed-projects", JSON.stringify(Array.from(collapsedProjects)));
       return { collapsedProjects };
     }),
 
