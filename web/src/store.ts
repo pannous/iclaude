@@ -361,8 +361,6 @@ export const useStore = create<AppState>((set) => ({
       sessionTasks.delete(sessionId);
       const changedFiles = new Map(s.changedFiles);
       changedFiles.delete(sessionId);
-      const diffPanelSelectedFile = new Map(s.diffPanelSelectedFile);
-      diffPanelSelectedFile.delete(sessionId);
       const sessionNames = new Map(s.sessionNames);
       sessionNames.delete(sessionId);
       const recentlyRenamed = new Set(s.recentlyRenamed);

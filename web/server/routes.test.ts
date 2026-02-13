@@ -736,7 +736,8 @@ describe("DELETE /api/envs/:slug", () => {
 
 // ─── HTML Skills ────────────────────────────────────────────────────────────
 
-describe("GET /api/skills", () => {
+// Legacy skills system has been removed from main routes
+describe.skip("GET /api/skills (legacy)", () => {
   it("returns the list of skills", async () => {
     const skills = [{ slug: "htop", name: "Process Monitor", description: "View procs", icon: "cpu", refreshInterval: 2000 }];
     mockedSkillManager.listSkills.mockReturnValue(skills);
@@ -747,7 +748,8 @@ describe("GET /api/skills", () => {
   });
 });
 
-describe("GET /api/skills/:slug", () => {
+// Legacy skills system has been removed from main routes
+describe.skip("GET /api/skills/:slug (legacy)", () => {
   it("returns skill info when found", async () => {
     const skill = { slug: "htop", name: "Process Monitor", description: "", icon: "cpu", refreshInterval: null };
     mockedSkillManager.getSkill.mockReturnValue(skill);
@@ -764,7 +766,8 @@ describe("GET /api/skills/:slug", () => {
   });
 });
 
-describe("GET /api/skills/:slug/panel", () => {
+// Legacy skills system has been removed from main routes
+describe.skip("GET /api/skills/:slug/panel (legacy)", () => {
   it("returns wrapped HTML when skill and panel exist", async () => {
     mockedSkillManager.getSkill.mockReturnValue({ slug: "htop", name: "htop", description: "", icon: "cpu", refreshInterval: null });
     mockedSkillManager.getSkillPanel.mockReturnValue("<html><body>Hello</body></html>");
@@ -792,7 +795,8 @@ describe("GET /api/skills/:slug/panel", () => {
   });
 });
 
-describe("GET /api/skills/:slug/state", () => {
+// Legacy skills system has been removed from main routes
+describe.skip("GET /api/skills/:slug/state (legacy)", () => {
   it("returns skill state", async () => {
     mockedSkillManager.getSkillState.mockReturnValue({ sortBy: "cpu" });
     const res = await app.request("/api/skills/htop/state", { method: "GET" });
@@ -801,7 +805,8 @@ describe("GET /api/skills/:slug/state", () => {
   });
 });
 
-describe("PUT /api/skills/:slug/state", () => {
+// Legacy skills system has been removed from main routes
+describe.skip("PUT /api/skills/:slug/state (legacy)", () => {
   it("saves skill state", async () => {
     mockedSkillManager.getSkill.mockReturnValue({ slug: "htop", name: "htop", description: "", icon: "cpu", refreshInterval: null });
 

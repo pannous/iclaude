@@ -15,7 +15,7 @@ vi.mock("./McpPanel.js", () => ({
 
 interface MockStoreState {
   sessionTasks: Map<string, { id: string; status: string; subject: string }[]>;
-  sessions: Map<string, { backend_type?: string; cwd?: string; git_branch?: string }>;
+  sessions: Map<string, { backend_type?: string; cwd?: string; git_branch?: string; total_cost_usd?: number; context_used_percent?: number; num_turns?: number }>;
   sdkSessions: { sessionId: string; backendType?: string; cwd?: string; gitBranch?: string }[];
   taskPanelOpen: boolean;
   setTaskPanelOpen: ReturnType<typeof vi.fn>;
@@ -27,7 +27,7 @@ let mockState: MockStoreState;
 function resetStore(overrides: Partial<MockStoreState> = {}) {
   mockState = {
     sessionTasks: new Map(),
-    sessions: new Map([["s1", { backend_type: "codex" }]]),
+    sessions: new Map([["s1", { backend_type: "codex", total_cost_usd: 0, context_used_percent: 0, num_turns: 0 }]]),
     sdkSessions: [],
     taskPanelOpen: true,
     setTaskPanelOpen: vi.fn(),

@@ -13,7 +13,9 @@
       "Bash(bun test:*)",
       "Bash(git status:*)",
       "Bash(curl:*)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "Bash(ls:*)",
+      "Bash(git merge:*)"
     ]
   }
 }
