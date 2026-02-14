@@ -9,6 +9,14 @@ vi.mock("./env-manager.js", () => ({
   deleteEnv: vi.fn(),
 }));
 
+vi.mock("./skill-manager.js", () => ({
+  listSkills: vi.fn(() => []),
+  getSkill: vi.fn(() => null),
+  getSkillPanel: vi.fn(() => null),
+  getSkillState: vi.fn(() => ({})),
+  setSkillState: vi.fn(),
+  wrapWithVibeApi: vi.fn((html: string) => `<script>vibe</script>\n${html}`),
+}));
 
 vi.mock("node:child_process", () => ({
   execSync: vi.fn(() => ""),
