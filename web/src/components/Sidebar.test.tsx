@@ -93,8 +93,7 @@ function makeSdkSession(id: string, overrides: Partial<SdkSessionInfo> = {}): Sd
     cwd: "/home/user/projects/myapp",
     createdAt: Date.now(),
     archived: false,
-    // Default title so sessions aren't filtered as ghosts; pass title:undefined to test sessionName fallback
-    ...("title" in overrides ? {} : { title: `Session ${id}` }),
+    title: overrides.title ?? `Session ${id}`,
     ...overrides,
   };
 }
@@ -175,14 +174,14 @@ describe("Sidebar", () => {
     expect(screen.getByText("My Active Session")).toBeInTheDocument();
   });
 
-  it("filters out ghost sessions that only have model name as label", () => {
+  it("filters out ghost sessions that only have model name as title", () => {
     // Session with a real title — should be visible
     const session1 = makeSession("s1");
     const sdk1 = makeSdkSession("s1", { title: "Real Session" });
 
-    // Ghost session: no title, label would fall back to model name — should be filtered
+    // Ghost session with no title — should be filtered out
     const session2 = makeSession("s2", { model: "claude-opus-4-6" });
-    const sdk2 = makeSdkSession("s2", { model: "claude-opus-4-6" });
+    const sdk2 = makeSdkSession("s2", { title: undefined, model: "claude-opus-4-6" });
 
     mockState = createMockState({
       sessions: new Map([["s1", session1], ["s2", session2]]),
@@ -191,6 +190,7 @@ describe("Sidebar", () => {
 
     render(<Sidebar />);
     expect(screen.getByText("Real Session")).toBeInTheDocument();
+    // Ghost session with only model name should not appear
     expect(screen.queryByText("claude-opus-4-6")).not.toBeInTheDocument();
   });
 
@@ -277,6 +277,7 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
+    // Find the session button element (title takes priority over model)
     const sessionButton = screen.getByText("Session s1").closest("button");
     expect(sessionButton).toHaveClass("bg-cc-active");
   });

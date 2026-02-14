@@ -1,7 +1,7 @@
 import { useStore } from "./store.js";
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, SdkSessionInfo, McpServerConfig } from "./types.js";
 import { resultScanner, scanContent } from "./utils/result-scanner.js";
-import { generateUniqueSessionName } from "./utils/names.js";
+
 import { playNotificationSound } from "./utils/notification-sound.js";
 
 const sockets = new Map<string, WebSocket>();
@@ -300,11 +300,7 @@ function handleParsedMessage(
       if (!existingSession) {
         store.setSessionStatus(sessionId, "idle");
       }
-      if (!store.sessionNames.has(sessionId)) {
-        const existingNames = new Set(store.sessionNames.values());
-        const name = generateUniqueSessionName(existingNames);
-        store.setSessionName(sessionId, name);
-      }
+      // Name will be set by session_name_update from server — no random fallback
       break;
     }
 
@@ -529,13 +525,9 @@ function handleParsedMessage(
     }
 
     case "session_name_update": {
-      // Only apply auto-name if user hasn't manually renamed (still has random Adj+Noun name)
-      const currentName = store.sessionNames.get(sessionId);
-      const isRandomName = currentName && /^[A-Z][a-z]+ [A-Z][a-z]+$/.test(currentName);
-      if (!currentName || isRandomName) {
-        store.setSessionName(sessionId, data.name);
-        store.markRecentlyRenamed(sessionId);
-      }
+      // Always apply server-provided name (user manual renames go through REST API)
+      store.setSessionName(sessionId, data.name);
+      store.markRecentlyRenamed(sessionId);
       break;
     }
 

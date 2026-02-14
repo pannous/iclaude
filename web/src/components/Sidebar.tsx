@@ -54,18 +54,11 @@ export function Sidebar() {
           useStore.getState().setSdkSessions(list);
           // Connect all active sessions so we receive notifications for all of them
           connectAllSessions(list);
-          // Hydrate session names from server (server is source of truth for auto-generated names)
+          // Hydrate session names from server (server is source of truth)
           const store = useStore.getState();
           for (const s of list) {
-            if (s.name && (!store.sessionNames.has(s.sessionId) || /^[A-Z][a-z]+ [A-Z][a-z]+$/.test(store.sessionNames.get(s.sessionId)!))) {
-              const currentStoreName = store.sessionNames.get(s.sessionId);
-              const hadRandomName = !!currentStoreName && /^[A-Z][a-z]+ [A-Z][a-z]+$/.test(currentStoreName);
-              if (currentStoreName !== s.name) {
-                store.setSessionName(s.sessionId, s.name);
-                if (hadRandomName) {
-                  store.markRecentlyRenamed(s.sessionId);
-                }
-              }
+            if (s.name && !store.sessionNames.has(s.sessionId)) {
+              store.setSessionName(s.sessionId, s.name);
             }
           }
         }
@@ -310,6 +303,7 @@ export function Sidebar() {
     if (!s.cwd && !s.title) return false;
     const name = sessionNames.get(s.id);
     const label = s.title || name;
+    // Sessions with no real title (only model name or short ID) are ghosts
     if (!label || label === s.model) return false;
     return true;
   });
