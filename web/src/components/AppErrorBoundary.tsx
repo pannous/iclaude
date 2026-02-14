@@ -1,6 +1,5 @@
 import type { ErrorInfo, ReactNode } from "react";
 import { Component } from "react";
-import { captureException } from "../analytics.js";
 
 interface Props {
   children: ReactNode;
@@ -20,11 +19,8 @@ export class AppErrorBoundary extends Component<Props, State> {
     return { hasError: true };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    captureException(error, {
-      source: "react_error_boundary",
-      componentStack: info.componentStack,
-    });
+  componentDidCatch(error: Error, _info: ErrorInfo) {
+    console.error("React Error Boundary caught error:", error);
   }
 
   render() {
@@ -34,7 +30,7 @@ export class AppErrorBoundary extends Component<Props, State> {
           <div className="max-w-md w-full rounded-xl border border-cc-border bg-cc-card p-5 shadow-sm">
             <h1 className="text-base font-semibold">A runtime error occurred</h1>
             <p className="text-sm text-cc-muted mt-2">
-              Reload the page to recover. The error has been reported.
+              Reload the page to recover.
             </p>
             <button
               type="button"

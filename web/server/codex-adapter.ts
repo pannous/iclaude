@@ -517,7 +517,7 @@ export class CodexAdapter {
         mcp_servers: [],
         agents: [],
         slash_commands: listProjectSlashCommands(this.options.cwd),
-        skills: listSkills().map((s) => s.slug),
+        skills: listSkills(this.options.cwd).map((s) => s.slug),
         total_cost_usd: 0,
         num_turns: 0,
         context_used_percent: 0,

@@ -14,14 +14,26 @@ export interface SkillInfo {
 
 // ─── Paths ──────────────────────────────────────────────────────────────────
 
-const SKILLS_DIR = join(homedir(), ".companion", "skills");
+const GLOBAL_SKILLS_DIR = join(homedir(), ".companion", "skills");
 
-function ensureDir(): void {
-  mkdirSync(SKILLS_DIR, { recursive: true });
+function projectSkillsDir(cwd: string): string {
+  return join(cwd, "skills");
 }
 
-function skillDir(slug: string): string {
-  return join(SKILLS_DIR, slug);
+function ensureGlobalDir(): void {
+  mkdirSync(GLOBAL_SKILLS_DIR, { recursive: true });
+}
+
+/** Resolve the directory for a skill slug, checking project-local first. */
+function resolveSkillDir(slug: string, cwd?: string): string | null {
+  if (!isValidSlug(slug)) return null;
+  if (cwd) {
+    const local = join(projectSkillsDir(cwd), slug);
+    if (existsSync(join(local, "skill.json"))) return local;
+  }
+  const global = join(GLOBAL_SKILLS_DIR, slug);
+  if (existsSync(join(global, "skill.json"))) return global;
+  return null;
 }
 
 function isValidSlug(slug: string): boolean {
@@ -41,13 +53,13 @@ function isValidCommandName(command: string): boolean {
 
 // ─── CRUD ───────────────────────────────────────────────────────────────────
 
-export function listSkills(): SkillInfo[] {
-  ensureDir();
+function scanSkillsDir(baseDir: string): SkillInfo[] {
+  if (!existsSync(baseDir)) return [];
   try {
-    const entries = readdirSync(SKILLS_DIR);
+    const entries = readdirSync(baseDir);
     const skills: SkillInfo[] = [];
     for (const entry of entries) {
-      const dir = join(SKILLS_DIR, entry);
+      const dir = join(baseDir, entry);
       try {
         if (!statSync(dir).isDirectory()) continue;
         const manifestPath = join(dir, "skill.json");
@@ -64,18 +76,32 @@ export function listSkills(): SkillInfo[] {
         // Skip malformed skills
       }
     }
-    skills.sort((a, b) => a.name.localeCompare(b.name));
     return skills;
   } catch {
     return [];
   }
 }
 
-export function getSkill(slug: string): SkillInfo | null {
-  if (!isValidSlug(slug)) return null;
-  const manifestPath = join(skillDir(slug), "skill.json");
+/** List skills from global (~/.companion/skills/) and optionally project-local (<cwd>/skills/) directories. */
+export function listSkills(cwd?: string): SkillInfo[] {
+  ensureGlobalDir();
+  const bySlug = new Map<string, SkillInfo>();
+  for (const skill of scanSkillsDir(GLOBAL_SKILLS_DIR)) {
+    bySlug.set(skill.slug, skill);
+  }
+  if (cwd) {
+    for (const skill of scanSkillsDir(projectSkillsDir(cwd))) {
+      bySlug.set(skill.slug, skill);
+    }
+  }
+  return Array.from(bySlug.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function getSkill(slug: string, cwd?: string): SkillInfo | null {
+  const dir = resolveSkillDir(slug, cwd);
+  if (!dir) return null;
   try {
-    const raw = JSON.parse(readFileSync(manifestPath, "utf-8"));
+    const raw = JSON.parse(readFileSync(join(dir, "skill.json"), "utf-8"));
     return {
       slug,
       name: raw.name || slug,
@@ -88,9 +114,10 @@ export function getSkill(slug: string): SkillInfo | null {
   }
 }
 
-export function getSkillPanel(slug: string): string | null {
-  if (!isValidSlug(slug)) return null;
-  const panelPath = join(skillDir(slug), "panel.html");
+export function getSkillPanel(slug: string, cwd?: string): string | null {
+  const dir = resolveSkillDir(slug, cwd);
+  if (!dir) return null;
+  const panelPath = join(dir, "panel.html");
   try {
     return readFileSync(panelPath, "utf-8");
   } catch {
@@ -98,20 +125,19 @@ export function getSkillPanel(slug: string): string | null {
   }
 }
 
-export function getSkillState(slug: string): Record<string, unknown> {
-  if (!isValidSlug(slug)) return {};
-  const statePath = join(skillDir(slug), "state.json");
+export function getSkillState(slug: string, cwd?: string): Record<string, unknown> {
+  const dir = resolveSkillDir(slug, cwd);
+  if (!dir) return {};
   try {
-    return JSON.parse(readFileSync(statePath, "utf-8"));
+    return JSON.parse(readFileSync(join(dir, "state.json"), "utf-8"));
   } catch {
     return {};
   }
 }
 
-export function setSkillState(slug: string, state: Record<string, unknown>): void {
-  if (!isValidSlug(slug)) return;
-  const dir = skillDir(slug);
-  if (!existsSync(dir)) return;
+export function setSkillState(slug: string, state: Record<string, unknown>, cwd?: string): void {
+  const dir = resolveSkillDir(slug, cwd);
+  if (!dir) return;
   writeFileSync(join(dir, "state.json"), JSON.stringify(state, null, 2), "utf-8");
 }
 

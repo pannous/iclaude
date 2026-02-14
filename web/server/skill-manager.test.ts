@@ -32,17 +32,33 @@ afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true });
 });
 
-function skillsDir(): string {
+function globalSkillsDir(): string {
   return join(tempDir, ".companion", "skills");
 }
 
-function createSkillOnDisk(slug: string, manifest: object, panelHtml?: string): void {
-  const dir = join(skillsDir(), slug);
+function projectDir(): string {
+  return join(tempDir, "project");
+}
+
+function projectSkillsDir(): string {
+  return join(projectDir(), "skills");
+}
+
+function createSkillInDir(baseDir: string, slug: string, manifest: object, panelHtml?: string): void {
+  const dir = join(baseDir, slug);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "skill.json"), JSON.stringify(manifest), "utf-8");
   if (panelHtml !== undefined) {
     writeFileSync(join(dir, "panel.html"), panelHtml, "utf-8");
   }
+}
+
+function createSkillOnDisk(slug: string, manifest: object, panelHtml?: string): void {
+  createSkillInDir(globalSkillsDir(), slug, manifest, panelHtml);
+}
+
+function createProjectSkill(slug: string, manifest: object, panelHtml?: string): void {
+  createSkillInDir(projectSkillsDir(), slug, manifest, panelHtml);
 }
 
 function commandsDir(): string {
@@ -73,7 +89,7 @@ describe("listSkills", () => {
   });
 
   it("skips directories without skill.json", () => {
-    mkdirSync(join(skillsDir(), "empty-dir"), { recursive: true });
+    mkdirSync(join(globalSkillsDir(), "empty-dir"), { recursive: true });
     createSkillOnDisk("valid", { name: "Valid" });
 
     const result = skillManager.listSkills();
@@ -82,7 +98,7 @@ describe("listSkills", () => {
   });
 
   it("skips directories with malformed skill.json", () => {
-    const dir = join(skillsDir(), "broken");
+    const dir = join(globalSkillsDir(), "broken");
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "skill.json"), "NOT JSON{{{", "utf-8");
     createSkillOnDisk("good", { name: "Good" });
