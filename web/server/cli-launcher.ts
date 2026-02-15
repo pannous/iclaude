@@ -12,6 +12,7 @@ import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import type { SessionStore } from "./session-store.js";
 import type { BackendType } from "./session-types.js";
+import type { RecorderManager } from "./recorder.js";
 import { CodexAdapter } from "./codex-adapter.js";
 import { resolveBinary, getEnrichedPath } from "./path-resolver.js";
 import {
@@ -60,6 +61,10 @@ export interface SdkSessionInfo {
   codexSandbox?: "workspace-write" | "danger-full-access";
   /** Pre-warmed standby session, hidden from session lists until adopted */
   prewarm?: boolean;
+  /** If this session was spawned by a cron job */
+  cronJobId?: string;
+  /** Human-readable name of the cron job that spawned this session */
+  cronJobName?: string;
 }
 
 export interface LaunchOptions {
@@ -100,7 +105,9 @@ export class CliLauncher {
   private processes = new Map<string, Subprocess>();
   private port: number;
   private store: SessionStore | null = null;
+  private recorder: RecorderManager | null = null;
   private onCodexAdapter: ((sessionId: string, adapter: CodexAdapter) => void) | null = null;
+  private exitHandlers: ((sessionId: string, exitCode: number | null) => void)[] = [];
 
   constructor(port: number) {
     this.port = port;
@@ -111,9 +118,19 @@ export class CliLauncher {
     this.onCodexAdapter = cb;
   }
 
+  /** Register a callback for when a CLI/Codex process exits. */
+  onSessionExited(cb: (sessionId: string, exitCode: number | null) => void): void {
+    this.exitHandlers.push(cb);
+  }
+
   /** Attach a persistent store for surviving server restarts. */
   setStore(store: SessionStore): void {
     this.store = store;
+  }
+
+  /** Attach a recorder for raw message capture. */
+  setRecorder(recorder: RecorderManager): void {
+    this.recorder = recorder;
   }
 
   /** Persist launcher state to disk. */
@@ -387,6 +404,9 @@ export class CliLauncher {
       }
       this.processes.delete(sessionId);
       this.persistState();
+      for (const handler of this.exitHandlers) {
+        try { handler(sessionId, exitCode); } catch {}
+      }
     });
 
     this.persistState();
@@ -517,6 +537,7 @@ export class CliLauncher {
       approvalMode: options.permissionMode,
       threadId: info.cliSessionId,
       sandbox: options.codexSandbox,
+      recorder: this.recorder ?? undefined,
     });
 
     // Handle init errors — mark session as exited so UI shows failure.
@@ -552,6 +573,9 @@ export class CliLauncher {
       }
       this.processes.delete(sessionId);
       this.persistState();
+      for (const handler of this.exitHandlers) {
+        try { handler(sessionId, exitCode); } catch {}
+      }
     });
 
     this.persistState();

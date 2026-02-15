@@ -22,6 +22,7 @@ export function TopBar() {
   const sessionStatus = useStore((s) => s.sessionStatus);
   const sessionNames = useStore((s) => s.sessionNames);
   const sdkSessions = useStore((s) => s.sdkSessions);
+  const assistantSessionId = useStore((s) => s.assistantSessionId);
   const sidebarOpen = useStore((s) => s.sidebarOpen);
   const setSidebarOpen = useStore((s) => s.setSidebarOpen);
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
@@ -63,10 +64,13 @@ export function TopBar() {
   });
   const isConnected = currentSessionId ? (cliConnected.get(currentSessionId) ?? false) : false;
   const status = currentSessionId ? (sessionStatus.get(currentSessionId) ?? null) : null;
+  const isAssistant = !!(currentSessionId && assistantSessionId && currentSessionId === assistantSessionId);
   const sessionName = currentSessionId
-    ? (sessionNames?.get(currentSessionId) ||
-      sdkSessions.find((s) => s.sessionId === currentSessionId)?.name ||
-      `Session ${currentSessionId.slice(0, 8)}`)
+    ? isAssistant
+      ? "Companion"
+      : (sessionNames?.get(currentSessionId) ||
+        sdkSessions.find((s) => s.sessionId === currentSessionId)?.name ||
+        `Session ${currentSessionId.slice(0, 8)}`)
     : null;
 
   return (
@@ -85,14 +89,23 @@ export function TopBar() {
         {/* Session name + connection status */}
         {currentSessionId && (
           <div className="flex items-center gap-2">
-            <div className="flex flex-col min-w-0">
-              {sessionTitle && (
-                <span className="text-[13px] font-medium text-cc-fg truncate">{sessionTitle}</span>
-              )}
-              {sessionSubtitle && (
-                <span className="text-[11px] text-cc-muted truncate">{sessionSubtitle}</span>
-              )}
-            </div>
+            {isAssistant ? (
+              <span className="text-[11px] font-medium text-cc-fg flex items-center gap-1">
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-primary shrink-0">
+                  <path d="M8 0l1.5 5.2L14.8 4 9.8 6.5 14 11l-5.2-1.5L8 16l-1-6.5L1.2 11l5-4.5L1.2 4l5.3 1.2z" />
+                </svg>
+                Companion
+              </span>
+            ) : (
+              <div className="flex flex-col min-w-0">
+                {sessionTitle && (
+                  <span className="text-[13px] font-medium text-cc-fg truncate">{sessionTitle}</span>
+                )}
+                {sessionSubtitle && (
+                  <span className="text-[11px] text-cc-muted truncate">{sessionSubtitle}</span>
+                )}
+              </div>
+            )}
             <div className="flex items-center gap-1.5">
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
@@ -130,24 +143,26 @@ export function TopBar() {
             <CopyButton getText={getConversationText} size="md" title="Copy entire conversation" />
           )}
 
-          {/* Tab toggle: Chat / Diffs / Skills */}
-          <div className="flex items-center bg-cc-hover rounded-lg p-0.5">
-            <TabBtn label="Chat" active={activeTab === "chat"} onClick={() => setActiveTab("chat")} />
-            <TabBtn label="Diffs" active={activeTab === "diff"} onClick={() => setActiveTab("diff")} badge={changedFilesCount || undefined} />
-            {openSkills.map((slug) => (
-              <TabBtn
-                key={slug}
-                label={slug}
-                active={activeTab === `skill:${slug}`}
-                onClick={() => setActiveTab(`skill:${slug}`)}
-                onClose={() => closeSkill(slug)}
-              />
-            ))}
-            <SkillPicker />
-          </div>
+          {/* Tab toggle: Chat / Diffs / Skills — hidden for assistant (no git/diffs) */}
+          {!isAssistant && (
+            <div className="flex items-center bg-cc-hover rounded-lg p-0.5">
+              <TabBtn label="Chat" active={activeTab === "chat"} onClick={() => setActiveTab("chat")} />
+              <TabBtn label="Diffs" active={activeTab === "diff"} onClick={() => setActiveTab("diff")} badge={changedFilesCount || undefined} />
+              {openSkills.map((slug) => (
+                <TabBtn
+                  key={slug}
+                  label={slug}
+                  active={activeTab === `skill:${slug}`}
+                  onClick={() => setActiveTab(`skill:${slug}`)}
+                  onClose={() => closeSkill(slug)}
+                />
+              ))}
+              <SkillPicker />
+            </div>
+          )}
 
-          {/* CLAUDE.md editor */}
-          {cwd && (
+          {/* CLAUDE.md editor — hidden for assistant */}
+          {cwd && !isAssistant && (
             <button
               onClick={() => setClaudeMdOpen(true)}
               className={`flex items-center justify-center w-7 h-7 rounded-lg transition-colors cursor-pointer ${

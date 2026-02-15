@@ -1,5 +1,4 @@
 import type { RefObject } from "react";
-import { useStore } from "../store.js";
 import type { SessionItem as SessionItemType } from "../utils/project-grouping.js";
 
 interface SessionItemProps {
@@ -14,6 +13,7 @@ interface SessionItemProps {
   onArchive: (e: React.MouseEvent, id: string) => void;
   onUnarchive: (e: React.MouseEvent, id: string) => void;
   onDelete: (e: React.MouseEvent, id: string) => void;
+  onClearRecentlyRenamed: (id: string) => void;
   editingSessionId: string | null;
   editingName: string;
   setEditingName: (name: string) => void;
@@ -34,6 +34,7 @@ export function SessionItem({
   onArchive,
   onUnarchive,
   onDelete,
+  onClearRecentlyRenamed,
   editingSessionId,
   editingName,
   setEditingName,
@@ -136,7 +137,7 @@ export function SessionItem({
                   className={`text-[13px] font-medium truncate text-cc-fg leading-snug ${
                     isRecentlyRenamed ? "animate-name-appear" : ""
                   }`}
-                  onAnimationEnd={() => useStore.getState().clearRecentlyRenamed(s.id)}
+                  onAnimationEnd={() => onClearRecentlyRenamed(s.id)}
                 >
                   {label}
                 </span>
@@ -162,6 +163,11 @@ export function SessionItem({
                   <span className="truncate">{s.gitBranch}</span>
                   {s.isWorktree && (
                     <span className="text-[8px] bg-cc-primary/10 text-cc-primary px-0.5 rounded shrink-0">wt</span>
+                  )}
+                  {s.cronJobId && (
+                    <span className="text-[9px] font-medium px-1.5 rounded-full leading-[16px] shrink-0 text-violet-500 bg-violet-500/10">
+                      Cron
+                    </span>
                   )}
                 </>
               )}

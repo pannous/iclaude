@@ -1,12 +1,13 @@
 {
   "name": "the-companion",
-  "version": "0.39.1",
+  "version": "0.43.0",
   "type": "module",
   "description": "Web UI for launching and interacting with Claude Code agents",
   "license": "MIT",
   "author": "The Vibe Company",
   "bin": {
-    "the-companion": "./bin/cli.ts"
+    "the-companion": "./bin/cli.ts",
+    "companion": "./bin/cli.ts"
   },
   "files": [
     "bin/",
@@ -37,6 +38,7 @@
     "test:codex-contract": "vitest run server/codex-protocol-*.test.ts"
   },
   "dependencies": {
+    "croner": "^10.0.1",
     "diff": "^8.0.3",
     "hono": "^4.7.0"
   },

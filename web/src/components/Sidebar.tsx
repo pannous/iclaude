@@ -37,12 +37,16 @@ export function Sidebar() {
   const removeSession = useStore((s) => s.removeSession);
   const sessionNames = useStore((s) => s.sessionNames);
   const recentlyRenamed = useStore((s) => s.recentlyRenamed);
+  const clearRecentlyRenamed = useStore((s) => s.clearRecentlyRenamed);
   const pendingPermissions = useStore((s) => s.pendingPermissions);
+  const assistantSessionId = useStore((s) => s.assistantSessionId);
+  const setAssistantSessionId = useStore((s) => s.setAssistantSessionId);
   const collapsedProjects = useStore((s) => s.collapsedProjects);
   const toggleProjectCollapse = useStore((s) => s.toggleProjectCollapse);
   const isSettingsPage = hash === "#/settings";
   const isTerminalPage = hash === "#/terminal";
   const isEnvironmentsPage = hash === "#/environments";
+  const isScheduledPage = hash === "#/scheduled";
 
   // Poll for SDK sessions on mount
   useEffect(() => {
@@ -72,6 +76,20 @@ export function Sidebar() {
       active = false;
       clearInterval(interval);
     };
+  }, []);
+
+  // Hydrate assistant session ID from server on mount
+  useEffect(() => {
+    api.getAssistantStatus().then((status) => {
+      if (status.running && status.sessionId) {
+        useStore.getState().setAssistantSessionId(status.sessionId);
+      } else {
+        // Clear stale session ID if the assistant is not running
+        useStore.getState().setAssistantSessionId(null);
+      }
+    }).catch(() => {
+      // server not ready
+    });
   }, []);
 
   useEffect(() => {
@@ -295,6 +313,8 @@ export function Sidebar() {
       backendType: bridgeState?.backend_type || sdkInfo?.backendType || "claude",
       repoRoot: bridgeState?.repo_root || sdkInfo?.repoRoot || "",
       permCount: pendingPermissions.get(id)?.size ?? 0,
+      cronJobId: bridgeState?.cronJobId || sdkInfo?.cronJobId,
+      cronJobName: bridgeState?.cronJobName || sdkInfo?.cronJobName,
     };
   }).sort((a, b) => b.createdAt - a.createdAt);
 
@@ -303,12 +323,11 @@ export function Sidebar() {
     if (!s.cwd && !s.title) return false;
     const name = sessionNames.get(s.id);
     const label = s.title || name;
-    // Sessions with no real title (only model name or short ID) are ghosts
     if (!label || label === s.model) return false;
     return true;
   });
-  const activeSessions = validSessions.filter((s) => !s.archived);
-  const archivedSessions = validSessions.filter((s) => s.archived);
+  const activeSessions = validSessions.filter((s) => !s.archived && s.id !== assistantSessionId);
+  const archivedSessions = validSessions.filter((s) => s.archived && s.id !== assistantSessionId);
   const currentSession = currentSessionId ? allSessionList.find((s) => s.id === currentSessionId) : null;
   const logoSrc = currentSession?.backendType === "codex" ? "/logo-codex.svg" : "/logo.svg";
 
@@ -325,6 +344,7 @@ export function Sidebar() {
     onArchive: handleArchiveSession,
     onUnarchive: handleUnarchiveSession,
     onDelete: handleDeleteSession,
+    onClearRecentlyRenamed: clearRecentlyRenamed,
     editingSessionId,
     editingName,
     setEditingName,
@@ -405,6 +425,69 @@ export function Sidebar() {
             )}
           </div>
         )}
+
+        {(() => {
+          const isActive = !!(currentSessionId === assistantSessionId && assistantSessionId);
+          const isAlive = !!(assistantSessionId && cliConnected.get(assistantSessionId));
+          return (
+            <button
+              onClick={async () => {
+                useStore.getState().closeTerminal();
+                window.location.hash = "";
+                if (assistantSessionId) {
+                  handleSelectSession(assistantSessionId);
+                } else {
+                  try {
+                    const result = await api.launchAssistant();
+                    if (result.sessionId) {
+                      setAssistantSessionId(result.sessionId);
+                      connectSession(result.sessionId);
+                      setCurrentSession(result.sessionId);
+                    }
+                  } catch (e) {
+                    console.error("[sidebar] Failed to launch assistant:", e);
+                  }
+                }
+                if (window.innerWidth < 768) {
+                  useStore.getState().setSidebarOpen(false);
+                }
+              }}
+              className={`companion-btn ${isActive ? "companion-active" : ""} group/companion w-full mt-2.5 py-2.5 px-3 rounded-[12px] transition-all duration-300 flex items-center gap-3 cursor-pointer relative ${
+                isActive
+                  ? "bg-cc-primary/[0.06] text-cc-fg"
+                  : "text-cc-muted hover:text-cc-fg"
+              }`}
+            >
+              {/* Icon — constellation sparkle */}
+              <span className={`relative flex items-center justify-center w-7 h-7 rounded-[8px] transition-all duration-300 ${
+                isAlive ? "companion-sparkle-active" : ""
+              } ${
+                isActive
+                  ? "bg-cc-primary text-white shadow-[0_2px_8px_rgba(174,86,48,0.3)]"
+                  : "bg-cc-primary/10 text-cc-primary group-hover/companion:bg-cc-primary/15 group-hover/companion:shadow-[0_1px_4px_rgba(174,86,48,0.15)]"
+              }`}>
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                  <path d="M8 0c.2 2.7 1.4 5 3.5 6.5C13.7 8 16 8 16 8s-2.3.2-4.5 1.5C9.4 11 8.2 13.3 8 16c-.2-2.7-1.4-5-3.5-6.5C2.3 8.2 0 8 0 8s2.3-.2 4.5-1.5C6.6 5 7.8 2.7 8 0z" />
+                </svg>
+              </span>
+
+              {/* Label + subtitle */}
+              <div className="flex flex-col min-w-0">
+                <span className="text-[13px] font-semibold leading-tight tracking-tight">Companion</span>
+                {isAlive ? (
+                  <span className="text-[10px] text-cc-success leading-tight mt-0.5 flex items-center gap-1">
+                    <span className="w-1 h-1 rounded-full bg-cc-success inline-block" />
+                    online
+                  </span>
+                ) : assistantSessionId ? (
+                  <span className="text-[10px] text-cc-muted leading-tight mt-0.5">offline</span>
+                ) : (
+                  <span className="text-[10px] text-cc-muted leading-tight mt-0.5">click to start</span>
+                )}
+              </div>
+            </button>
+          );
+        })()}
       </div>
 
       {/* Worktree archive confirmation */}
@@ -537,6 +620,22 @@ export function Sidebar() {
             <path d="M8 1a2 2 0 012 2v1h2a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h2V3a2 2 0 012-2zm0 1.5a.5.5 0 00-.5.5v1h1V3a.5.5 0 00-.5-.5zM4 5.5a.5.5 0 00-.5.5v6a.5.5 0 00.5.5h8a.5.5 0 00.5-.5V6a.5.5 0 00-.5-.5H4z" />
           </svg>
           <span>Environments</span>
+        </button>
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/scheduled";
+          }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-sm transition-colors cursor-pointer ${
+            isScheduledPage
+              ? "bg-cc-active text-cc-fg"
+              : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+          }`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+            <path d="M8 2a6 6 0 100 12A6 6 0 008 2zM0 8a8 8 0 1116 0A8 8 0 010 8zm9-3a1 1 0 10-2 0v3a1 1 0 00.293.707l2 2a1 1 0 001.414-1.414L9 7.586V5z" />
+          </svg>
+          <span>Scheduled</span>
         </button>
         <button
           onClick={() => {

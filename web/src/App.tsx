@@ -12,6 +12,7 @@ import { Playground } from "./components/Playground.js";
 import { UpdateBanner } from "./components/UpdateBanner.js";
 import { SettingsPage } from "./components/SettingsPage.js";
 import { EnvManager } from "./components/EnvManager.js";
+import { CronManager } from "./components/CronManager.js";
 import { TerminalPage } from "./components/TerminalPage.js";
 
 const DiffPanel = lazy(() => import("./components/DiffPanel.js").then(m => ({ default: m.DiffPanel })));
@@ -32,11 +33,13 @@ export default function App() {
   const homeResetKey = useStore((s) => s.homeResetKey);
   const activeTab = useStore((s) => s.activeTab);
   const [showArchiveAllConfirm, setShowArchiveAllConfirm] = useState(false);
+  const assistantSessionId = useStore((s) => s.assistantSessionId);
   const hash = useHash();
   const isSettingsPage = hash === "#/settings";
   const isTerminalPage = hash === "#/terminal";
   const isEnvironmentsPage = hash === "#/environments";
-  const isSessionView = !isSettingsPage && !isTerminalPage && !isEnvironmentsPage;
+  const isScheduledPage = hash === "#/scheduled";
+  const isSessionView = !isSettingsPage && !isTerminalPage && !isEnvironmentsPage && !isScheduledPage;
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
@@ -371,6 +374,12 @@ export default function App() {
             </div>
           )}
 
+          {isScheduledPage && (
+            <div className="absolute inset-0">
+              <CronManager embedded />
+            </div>
+          )}
+
           {isSessionView && (
             <>
               {/* Chat tab — visible when activeTab is "chat" or no session */}
@@ -382,8 +391,8 @@ export default function App() {
                 )}
               </div>
 
-              {/* Diffs tab — lazy-loaded to reduce initial bundle */}
-              {currentSessionId && (activeTab === "diff" || activeTab === "editor") && (
+              {/* Diffs tab — lazy-loaded, not shown for assistant session */}
+              {currentSessionId && (activeTab === "diff" || activeTab === "editor") && currentSessionId !== assistantSessionId && (
                 <div className="absolute inset-0">
                   <Suspense fallback={
                     <div className="h-full flex items-center justify-center">

@@ -21,6 +21,7 @@ import type {
   McpServerConfig,
 } from "./session-types.js";
 import { getProjectSlashCommandTemplate, listProjectSlashCommands, listSkills } from "./skill-manager.js";
+import type { RecorderManager } from "./recorder.js";
 
 // ─── Codex JSON-RPC Types ─────────────────────────────────────────────────────
 
@@ -127,6 +128,8 @@ export interface CodexAdapterOptions {
   sandbox?: "workspace-write" | "danger-full-access";
   /** If provided, resume an existing thread instead of starting a new one. */
   threadId?: string;
+  /** Optional recorder for raw message capture. */
+  recorder?: RecorderManager;
 }
 
 // ─── JSON-RPC Transport ───────────────────────────────────────────────────────
@@ -136,6 +139,8 @@ class JsonRpcTransport {
   private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   private notificationHandler: ((method: string, params: Record<string, unknown>) => void) | null = null;
   private requestHandler: ((method: string, id: number, params: Record<string, unknown>) => void) | null = null;
+  private rawInCb: ((line: string) => void) | null = null;
+  private rawOutCb: ((data: string) => void) | null = null;
   private writer: WritableStreamDefaultWriter<Uint8Array>;
   private connected = true;
   private buffer = "";
@@ -194,6 +199,9 @@ class JsonRpcTransport {
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
+
+      // Record raw incoming line before parsing
+      this.rawInCb?.(trimmed);
 
       let msg: JsonRpcMessage;
       try {
@@ -272,10 +280,22 @@ class JsonRpcTransport {
     return this.connected;
   }
 
+  /** Register callback for raw incoming lines (before JSON parse). */
+  onRawIncoming(cb: (line: string) => void): void {
+    this.rawInCb = cb;
+  }
+
+  /** Register callback for raw outgoing data (before write). */
+  onRawOutgoing(cb: (data: string) => void): void {
+    this.rawOutCb = cb;
+  }
+
   private async writeRaw(data: string): Promise<void> {
     if (!this.connected) {
       throw new Error("Transport closed");
     }
+    // Record raw outgoing data before writing
+    this.rawOutCb?.(data);
     await this.writer.write(new TextEncoder().encode(data));
   }
 }
@@ -307,6 +327,9 @@ export class CodexAdapter {
   // Streaming accumulator for agent messages
   private streamingText = "";
   private streamingItemId: string | null = null;
+
+  // Track command execution start times for progress indicator
+  private commandStartTimes = new Map<string, number>();
 
   // Accumulate reasoning text by item ID so we can emit final thinking blocks.
   private reasoningTextByItemId = new Map<string, string>();
@@ -356,6 +379,18 @@ export class CodexAdapter {
     );
     this.transport.onNotification((method, params) => this.handleNotification(method, params));
     this.transport.onRequest((method, id, params) => this.handleRequest(method, id, params));
+
+    // Wire raw message recording if a recorder is provided
+    if (options.recorder) {
+      const recorder = options.recorder;
+      const cwd = options.cwd || "";
+      this.transport.onRawIncoming((line) => {
+        recorder.record(sessionId, "in", line, "cli", "codex", cwd);
+      });
+      this.transport.onRawOutgoing((data) => {
+        recorder.record(sessionId, "out", data.trimEnd(), "cli", "codex", cwd);
+      });
+    }
 
     // Monitor process exit
     proc.exited.then(() => {
@@ -869,8 +904,9 @@ export class CodexAdapter {
         this.handleAgentMessageDelta(params);
         break;
       case "item/commandExecution/outputDelta":
-        // Streaming command output (stdout/stderr). Not critical for rendering
-        // since item/completed provides the full output, but log for debugging.
+        // Streaming command output — emit as tool_progress so the browser
+        // shows a live elapsed-time indicator while the command runs.
+        this.emitCommandProgress(params);
         break;
       case "item/fileChange/outputDelta":
         // Streaming file change output. Same as above.
@@ -880,9 +916,20 @@ export class CodexAdapter {
       case "item/reasoning/summaryPartAdded":
         this.handleReasoningDelta(params);
         break;
-      case "item/mcpToolCall/progress":
-        // MCP tool call progress — could map to tool_progress.
+      case "item/mcpToolCall/progress": {
+        // MCP tool call progress — map to tool_progress
+        const itemId = params.itemId as string | undefined;
+        const threadId = params.threadId as string | undefined;
+        if (itemId) {
+          this.emit({
+            type: "tool_progress",
+            tool_use_id: itemId,
+            tool_name: "mcp_tool_call",
+            elapsed_time_seconds: 0,
+          });
+        }
         break;
+      }
       case "item/plan/delta":
         // Plan updates — could display in future.
         break;
@@ -1271,6 +1318,7 @@ export class CodexAdapter {
       case "commandExecution": {
         const cmd = item as CodexCommandExecutionItem;
         const commandStr = Array.isArray(cmd.command) ? cmd.command.join(" ") : (cmd.command || "");
+        this.commandStartTimes.set(item.id, Date.now());
         this.emitToolUseStart(item.id, "Bash", { command: commandStr });
         break;
       }
@@ -1424,11 +1472,14 @@ export class CodexAdapter {
         const commandStr = Array.isArray(cmd.command) ? cmd.command.join(" ") : (cmd.command || "");
         // Ensure tool_use was emitted (may be skipped when auto-approved)
         this.ensureToolUseEmitted(item.id, "Bash", { command: commandStr });
+        // Clean up progress tracking
+        this.commandStartTimes.delete(item.id);
         // Emit tool result
         const output = (item as Record<string, unknown>).stdout as string || "";
         const stderr = (item as Record<string, unknown>).stderr as string || "";
         const combinedOutput = [output, stderr].filter(Boolean).join("\n").trim();
         const exitCode = typeof cmd.exitCode === "number" ? cmd.exitCode : 0;
+        const durationMs = typeof cmd.durationMs === "number" ? cmd.durationMs : undefined;
         const failed = cmd.status === "failed" || cmd.status === "declined" || exitCode !== 0;
 
         // Keep successful no-output commands silent in the chat feed.
@@ -1441,6 +1492,13 @@ export class CodexAdapter {
           resultText = `Exit code: ${exitCode}`;
         } else if (exitCode !== 0) {
           resultText = `${resultText}\nExit code: ${exitCode}`;
+        }
+        // Append duration if available and significant (>100ms)
+        if (durationMs !== undefined && durationMs >= 100) {
+          const durationStr = durationMs >= 1000
+            ? `${(durationMs / 1000).toFixed(1)}s`
+            : `${durationMs}ms`;
+          resultText = `${resultText}\n(${durationStr})`;
         }
 
         this.emitToolResult(item.id, resultText, failed);
@@ -1560,30 +1618,52 @@ export class CodexAdapter {
       primary: rl.primary as { usedPercent: number; windowDurationMins: number; resetsAt: number } | null,
       secondary: rl.secondary as { usedPercent: number; windowDurationMins: number; resetsAt: number } | null,
     };
+    // Forward rate limits to browser for UI display
+    this.emit({
+      type: "session_update",
+      session: {
+        codex_rate_limits: {
+          primary: this._rateLimits.primary,
+          secondary: this._rateLimits.secondary,
+        },
+      },
+    });
   }
 
   private handleTokenUsageUpdated(params: Record<string, unknown>): void {
     // Codex sends: { threadId, turnId, tokenUsage: {
     //   total: { totalTokens, inputTokens, cachedInputTokens, outputTokens, reasoningOutputTokens },
-    //   last: { ... },
+    //   last: { totalTokens, inputTokens, cachedInputTokens, outputTokens, reasoningOutputTokens },
     //   modelContextWindow: 258400
     // }}
+    // IMPORTANT: `total` is cumulative across all turns and can far exceed the context window.
+    // `last` is the most recent turn — its inputTokens reflects what's actually in context.
     const tokenUsage = params.tokenUsage as Record<string, unknown> | undefined;
     if (!tokenUsage) return;
 
     const total = tokenUsage.total as Record<string, number> | undefined;
+    const last = tokenUsage.last as Record<string, number> | undefined;
     const contextWindow = tokenUsage.modelContextWindow as number | undefined;
 
-    const updates: Partial<{ total_cost_usd: number; context_used_percent: number }> = {};
+    const updates: Partial<SessionState> = {};
 
-    if (total && contextWindow && contextWindow > 0) {
-      const used = (total.inputTokens || 0) + (total.outputTokens || 0);
-      const pct = Math.round((used / contextWindow) * 100);
+    // Use last turn's input tokens for context usage — that's what's actually in the window
+    if (last && contextWindow && contextWindow > 0) {
+      const usedInContext = (last.inputTokens || 0) + (last.outputTokens || 0);
+      const pct = Math.round((usedInContext / contextWindow) * 100);
       updates.context_used_percent = Math.max(0, Math.min(pct, 100));
     }
 
-    // Codex doesn't seem to provide cost data directly in tokenUsage
-    // (no cost field observed), so we skip cost for now.
+    // Forward cumulative token breakdown for display in the UI
+    if (total) {
+      updates.codex_token_details = {
+        inputTokens: total.inputTokens || 0,
+        outputTokens: total.outputTokens || 0,
+        cachedInputTokens: total.cachedInputTokens || 0,
+        reasoningOutputTokens: total.reasoningOutputTokens || 0,
+        modelContextWindow: contextWindow || 0,
+      };
+    }
 
     if (Object.keys(updates).length > 0) {
       this.emit({
@@ -1591,6 +1671,21 @@ export class CodexAdapter {
         session: updates,
       });
     }
+  }
+
+  // ── Command progress tracking ─────────────────────────────────────────
+
+  private emitCommandProgress(params: Record<string, unknown>): void {
+    const itemId = params.itemId as string | undefined;
+    if (!itemId) return;
+    const startTime = this.commandStartTimes.get(itemId);
+    const elapsed = startTime ? Math.round((Date.now() - startTime) / 1000) : 0;
+    this.emit({
+      type: "tool_progress",
+      tool_use_id: itemId,
+      tool_name: "Bash",
+      elapsed_time_seconds: elapsed,
+    });
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────

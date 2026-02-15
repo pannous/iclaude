@@ -20,6 +20,7 @@ const mockApi = {
   deleteSession: vi.fn().mockResolvedValue({}),
   archiveSession: vi.fn().mockResolvedValue({}),
   unarchiveSession: vi.fn().mockResolvedValue({}),
+  getAssistantStatus: vi.fn().mockResolvedValue({ running: false, sessionId: null }),
 };
 
 vi.mock("../api.js", () => ({
@@ -28,6 +29,7 @@ vi.mock("../api.js", () => ({
     deleteSession: (...args: unknown[]) => mockApi.deleteSession(...args),
     archiveSession: (...args: unknown[]) => mockApi.archiveSession(...args),
     unarchiveSession: (...args: unknown[]) => mockApi.unarchiveSession(...args),
+    getAssistantStatus: (...args: unknown[]) => mockApi.getAssistantStatus(...args),
   },
 }));
 
@@ -40,6 +42,7 @@ interface MockStoreState {
   sessions: Map<string, SessionState>;
   sdkSessions: SdkSessionInfo[];
   currentSessionId: string | null;
+  assistantSessionId: string | null;
   cliConnected: Map<string, boolean>;
   sessionStatus: Map<string, "idle" | "running" | "compacting" | null>;
   sessionNames: Map<string, string>;
@@ -48,6 +51,7 @@ interface MockStoreState {
   sessionTasks: Map<string, unknown[]>;
   collapsedProjects: Set<string>;
   setCurrentSession: ReturnType<typeof vi.fn>;
+  setAssistantSessionId: ReturnType<typeof vi.fn>;
   toggleProjectCollapse: ReturnType<typeof vi.fn>;
   removeSession: ReturnType<typeof vi.fn>;
   newSession: ReturnType<typeof vi.fn>;
@@ -105,6 +109,7 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     sessions: new Map(),
     sdkSessions: [],
     currentSessionId: null,
+    assistantSessionId: null,
     cliConnected: new Map(),
     sessionStatus: new Map(),
     sessionNames: new Map(),
@@ -113,6 +118,7 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     sessionTasks: new Map(),
     collapsedProjects: new Set(),
     setCurrentSession: vi.fn(),
+    setAssistantSessionId: vi.fn(),
     toggleProjectCollapse: vi.fn(),
     removeSession: vi.fn(),
     newSession: vi.fn(),
@@ -472,9 +478,31 @@ describe("Sidebar", () => {
       recentlyRenamed: new Set(["s1"]),
     });
 
-    render(<Sidebar />);
-    const nameElement = screen.getByText("Animated Name");
-    fireEvent.animationEnd(nameElement);
+    const { container } = render(<Sidebar />);
+    // The animated span has the animate-name-appear class and an onAnimationEnd
+    // handler that calls onClearRecentlyRenamed(sessionId).
+    const animatedSpan = container.querySelector(".animate-name-appear");
+    expect(animatedSpan).toBeTruthy();
+
+    // JSDOM does not define AnimationEvent in all environments, which
+    // causes fireEvent.animationEnd to silently fail. We traverse the
+    // React fiber tree to invoke the onAnimationEnd handler directly.
+    const fiberKey = Object.keys(animatedSpan!).find((k) =>
+      k.startsWith("__reactFiber$"),
+    );
+    expect(fiberKey).toBeDefined();
+    let fiber = (animatedSpan as unknown as Record<string, unknown>)[fiberKey!] as Record<string, unknown> | null;
+    let called = false;
+    while (fiber) {
+      const props = fiber.memoizedProps as Record<string, unknown> | undefined;
+      if (props?.onAnimationEnd) {
+        (props.onAnimationEnd as () => void)();
+        called = true;
+        break;
+      }
+      fiber = fiber.return as Record<string, unknown> | null;
+    }
+    expect(called).toBe(true);
     expect(mockState.clearRecentlyRenamed).toHaveBeenCalledWith("s1");
   });
 
