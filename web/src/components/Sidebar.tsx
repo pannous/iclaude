@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useStore } from "../store.js";
 import { api, type ResumableSession } from "../api.js";
 import { connectSession, connectAllSessions, disconnectSession, waitForConnection } from "../ws.js";
+import { navigateToSession, navigateHome, parseHash } from "../utils/routing.js";
 import { ProjectGroup } from "./ProjectGroup.js";
 import { SessionItem } from "./SessionItem.js";
 import { groupSessionsByProject, type SessionItem as SessionItemType } from "../utils/project-grouping.js";
@@ -44,10 +45,11 @@ export function Sidebar() {
   const collapsedProjects = useStore((s) => s.collapsedProjects);
   const toggleProjectCollapse = useStore((s) => s.toggleProjectCollapse);
   const setAllProjectsCollapsed = useStore((s) => s.setAllProjectsCollapsed);
-  const isSettingsPage = hash === "#/settings";
-  const isTerminalPage = hash === "#/terminal";
-  const isEnvironmentsPage = hash === "#/environments";
-  const isScheduledPage = hash === "#/scheduled";
+  const route = parseHash(hash);
+  const isSettingsPage = route.page === "settings";
+  const isTerminalPage = route.page === "terminal";
+  const isEnvironmentsPage = route.page === "environments";
+  const isScheduledPage = route.page === "scheduled";
 
   // Poll for SDK sessions on mount
   useEffect(() => {
@@ -101,11 +103,8 @@ export function Sidebar() {
 
   function handleSelectSession(sessionId: string) {
     useStore.getState().closeTerminal();
-    window.location.hash = "";
-    if (currentSessionId === sessionId) return;
-    setCurrentSession(sessionId);
-    // Ensure connected (idempotent — no-op if already connected)
-    connectSession(sessionId);
+    // Navigate to session hash — App.tsx hash effect handles setCurrentSession + connectSession
+    navigateToSession(sessionId);
     // Close sidebar on mobile
     if (window.innerWidth < 768) {
       useStore.getState().setSidebarOpen(false);
@@ -114,7 +113,7 @@ export function Sidebar() {
 
   function handleNewSession() {
     useStore.getState().closeTerminal();
-    window.location.hash = "";
+    navigateHome();
     useStore.getState().newSession();
     if (window.innerWidth < 768) {
       useStore.getState().setSidebarOpen(false);
@@ -196,6 +195,9 @@ export function Sidebar() {
     } catch {
       // best-effort
     }
+    if (useStore.getState().currentSessionId === sessionId) {
+      navigateHome();
+    }
     removeSession(sessionId);
   }, [removeSession]);
 
@@ -234,6 +236,10 @@ export function Sidebar() {
     } catch {
       // best-effort
     }
+    if (useStore.getState().currentSessionId === sessionId) {
+      navigateHome();
+      useStore.getState().newSession();
+    }
     try {
       const list = await api.listSessions();
       useStore.getState().setSdkSessions(list);
@@ -267,40 +273,6 @@ export function Sidebar() {
       // best-effort
     }
   }, []);
-
-  const handleArchiveGroup = useCallback(async (e: React.MouseEvent, projectKey: string) => {
-    e.stopPropagation();
-    const group = projectGroups.find((g) => g.key === projectKey);
-    if (!group || group.sessions.length === 0) return;
-    const store = useStore.getState();
-    const ids = group.sessions.map((s) => s.id);
-    // Optimistically mark all as archived
-    store.setSdkSessions(
-      store.sdkSessions.map((s) =>
-        ids.includes(s.sessionId) ? { ...s, archived: true } : s
-      )
-    );
-    // Remove from bridge sessions
-    const bridgeSessions = new Map(store.sessions);
-    let changed = false;
-    for (const id of ids) {
-      if (bridgeSessions.delete(id)) changed = true;
-      disconnectSession(id);
-    }
-    if (changed) useStore.setState({ sessions: bridgeSessions });
-    // Navigate away if current session is in this group
-    if (store.currentSessionId && ids.includes(store.currentSessionId)) {
-      store.newSession();
-    }
-    // Archive on server in parallel
-    await Promise.allSettled(ids.map((id) => api.archiveSession(id)));
-    try {
-      const list = await api.listSessions();
-      useStore.getState().setSdkSessions(list);
-    } catch {
-      // best-effort
-    }
-  }, [projectGroups]);
 
   const handleClearArchived = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -362,16 +334,52 @@ export function Sidebar() {
     if (!label || label === s.model) return false;
     return true;
   });
-  const activeSessions = validSessions.filter((s) => !s.archived && s.id !== assistantSessionId);
+  const activeSessions = validSessions.filter((s) => !s.archived && s.id !== assistantSessionId && !s.cronJobId);
+  const cronSessions = validSessions.filter((s) => !s.archived && s.id !== assistantSessionId && !!s.cronJobId);
   const archivedSessions = validSessions.filter((s) => s.archived && s.id !== assistantSessionId);
   const currentSession = currentSessionId ? allSessionList.find((s) => s.id === currentSessionId) : null;
   const logoSrc = currentSession?.backendType === "codex" ? "/logo-codex.svg" : "/logo.svg";
+  const [showCronSessions, setShowCronSessions] = useState(true);
 
   // Group active sessions by project
   const projectGroups = useMemo(
     () => groupSessionsByProject(activeSessions),
     [activeSessions],
   );
+
+  const handleArchiveGroup = useCallback(async (e: React.MouseEvent, projectKey: string) => {
+    e.stopPropagation();
+    const group = projectGroups.find((g) => g.key === projectKey);
+    if (!group || group.sessions.length === 0) return;
+    const store = useStore.getState();
+    const ids = group.sessions.map((s) => s.id);
+    // Optimistically mark all as archived
+    store.setSdkSessions(
+      store.sdkSessions.map((s) =>
+        ids.includes(s.sessionId) ? { ...s, archived: true } : s
+      )
+    );
+    // Remove from bridge sessions
+    const bridgeSessions = new Map(store.sessions);
+    let changed = false;
+    for (const id of ids) {
+      if (bridgeSessions.delete(id)) changed = true;
+      disconnectSession(id);
+    }
+    if (changed) useStore.setState({ sessions: bridgeSessions });
+    // Navigate away if current session is in this group
+    if (store.currentSessionId && ids.includes(store.currentSessionId)) {
+      store.newSession();
+    }
+    // Archive on server in parallel
+    await Promise.allSettled(ids.map((id) => api.archiveSession(id)));
+    try {
+      const list = await api.listSessions();
+      useStore.getState().setSdkSessions(list);
+    } catch {
+      // best-effort
+    }
+  }, [projectGroups]);
 
   // Shared props for SessionItem / ProjectGroup
   const sessionItemProps = {
@@ -469,7 +477,6 @@ export function Sidebar() {
             <button
               onClick={async () => {
                 useStore.getState().closeTerminal();
-                window.location.hash = "";
                 if (assistantSessionId) {
                   handleSelectSession(assistantSessionId);
                 } else {
@@ -477,8 +484,7 @@ export function Sidebar() {
                     const result = await api.launchAssistant();
                     if (result.sessionId) {
                       setAssistantSessionId(result.sessionId);
-                      connectSession(result.sessionId);
-                      setCurrentSession(result.sessionId);
+                      navigateToSession(result.sessionId);
                     }
                   } catch (e) {
                     console.error("[sidebar] Failed to launch assistant:", e);
@@ -558,7 +564,7 @@ export function Sidebar() {
 
       {/* Session list */}
       <div className="flex-1 overflow-y-auto px-2 pb-2">
-        {activeSessions.length === 0 && archivedSessions.length === 0 ? (
+        {activeSessions.length === 0 && cronSessions.length === 0 && archivedSessions.length === 0 ? (
           <p className="px-3 py-8 text-xs text-cc-muted text-center leading-relaxed">
             No sessions yet.
           </p>
@@ -594,6 +600,38 @@ export function Sidebar() {
                 {...sessionItemProps}
               />
             ))}
+
+            {cronSessions.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-cc-border">
+                <button
+                  onClick={() => setShowCronSessions(!showCronSessions)}
+                  className="w-full px-3 py-1.5 text-[11px] font-medium text-violet-400 uppercase tracking-wider flex items-center gap-1.5 hover:text-violet-300 transition-colors cursor-pointer"
+                >
+                  <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 transition-transform ${showCronSessions ? "rotate-90" : ""}`}>
+                    <path d="M6 4l4 4-4 4" />
+                  </svg>
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-60">
+                    <path d="M8 2a6 6 0 100 12A6 6 0 008 2zM0 8a8 8 0 1116 0A8 8 0 010 8zm9-3a1 1 0 10-2 0v3a1 1 0 00.293.707l2 2a1 1 0 001.414-1.414L9 7.586V5z" />
+                  </svg>
+                  Scheduled Runs ({cronSessions.length})
+                </button>
+                {showCronSessions && (
+                  <div className="space-y-0.5 mt-1">
+                    {cronSessions.map((s) => (
+                      <SessionItem
+                        key={s.id}
+                        session={s}
+                        isActive={currentSessionId === s.id}
+                        sessionName={sessionNames.get(s.id)}
+                        permCount={pendingPermissions.get(s.id)?.size ?? 0}
+                        isRecentlyRenamed={recentlyRenamed.has(s.id)}
+                        {...sessionItemProps}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {archivedSessions.length > 0 && (
               <div className="mt-2 pt-2 border-t border-cc-border">

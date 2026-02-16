@@ -67,8 +67,12 @@ interface AppState {
   // Session creation progress (SSE streaming)
   creationProgress: CreationProgressEvent[] | null;
   creationError: string | null;
+  sessionCreating: boolean;
+  sessionCreatingBackend: "claude" | "codex" | null;
   addCreationProgress: (step: CreationProgressEvent) => void;
   clearCreation: () => void;
+  setSessionCreating: (creating: boolean, backend?: "claude" | "codex") => void;
+  setCreationError: (error: string | null) => void;
 
   // UI
   darkMode: boolean;
@@ -261,8 +265,6 @@ export const useStore = create<AppState>((set) => ({
   sessionTasks: new Map(),
   changedFiles: new Map(),
   diffPanelSelectedFile: new Map(),
-  updateInfo: null,
-  updateDismissedVersion: null,
   sessionNames: getInitialSessionNames(),
   sessionSubtitles: new Map(),
   recentlyRenamed: new Set(),
@@ -272,6 +274,10 @@ export const useStore = create<AppState>((set) => ({
   collapsedProjects: getInitialCollapsedProjects(),
   creationProgress: null,
   creationError: null,
+  sessionCreating: false,
+  sessionCreatingBackend: null,
+  updateInfo: null,
+  updateDismissedVersion: getInitialDismissedVersion(),
   darkMode: getInitialDarkMode(),
   notificationSound: getInitialNotificationSound(),
   yoloMode: getInitialYoloMode(),
@@ -298,7 +304,9 @@ export const useStore = create<AppState>((set) => ({
     }
     return { creationProgress: [...existing, step] };
   }),
-  clearCreation: () => set({ creationProgress: null, creationError: null }),
+  clearCreation: () => set({ creationProgress: null, creationError: null, sessionCreating: false, sessionCreatingBackend: null }),
+  setSessionCreating: (creating, backend) => set({ sessionCreating: creating, sessionCreatingBackend: backend ?? null }),
+  setCreationError: (error) => set({ creationError: error }),
 
   setDarkMode: (v) => {
     safeStorage.setItem("cc-dark-mode", String(v));

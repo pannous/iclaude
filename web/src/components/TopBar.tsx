@@ -1,10 +1,11 @@
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useState, useMemo, useSyncExternalStore } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { CopyButton } from "./CopyButton.js";
 import { SkillPicker } from "./SkillPicker.js";
 import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
 import { conversationToText } from "../utils/message-text.js";
+import { parseHash } from "../utils/routing.js";
 
 const EMPTY_MESSAGES: import("../types.js").ChatMessage[] = [];
 
@@ -16,7 +17,8 @@ export function TopBar() {
     },
     () => window.location.hash,
   );
-  const isSessionView = hash !== "#/settings" && hash !== "#/terminal" && hash !== "#/environments";
+  const route = useMemo(() => parseHash(hash), [hash]);
+  const isSessionView = route.page === "session" || route.page === "home";
   const currentSessionId = useStore((s) => s.currentSessionId);
   const cliConnected = useStore((s) => s.cliConnected);
   const sessionStatus = useStore((s) => s.sessionStatus);

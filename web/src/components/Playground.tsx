@@ -3,16 +3,18 @@ import { PermissionBanner } from "./PermissionBanner.js";
 import { MessageBubble } from "./MessageBubble.js";
 import { ToolBlock, getToolIcon, getToolLabel, getPreview, ToolIcon } from "./ToolBlock.js";
 import { DiffViewer } from "./DiffViewer.js";
+import { useStore } from "../store.js";
+import { navigateToSession, navigateHome } from "../utils/routing.js";
 import { UpdateBanner } from "./UpdateBanner.js";
 import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
 import { ChatView } from "./ChatView.js";
-import { useStore } from "../store.js";
 import { api } from "../api.js";
 import type { PermissionRequest, ChatMessage, ContentBlock, SessionState, McpServerDetail } from "../types.js";
 import type { TaskItem } from "../types.js";
 import type { UpdateInfo, GitHubPRInfo } from "../api.js";
 import { GitHubPRDisplay, CodexRateLimitsSection, CodexTokenDetailsSection } from "./TaskPanel.js";
 import { SessionCreationProgress } from "./SessionCreationProgress.js";
+import { SessionLaunchOverlay } from "./SessionLaunchOverlay.js";
 import type { CreationProgressEvent } from "../types.js";
 
 // ─── Mock Data ──────────────────────────────────────────────────────────────
@@ -543,12 +545,19 @@ export function Playground() {
             <p className="text-xs text-cc-muted mt-0.5">Visual catalog of all UI components</p>
           </div>
           <div className="flex items-center gap-3">
-            <a
-              href="/"
-              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-cc-hover hover:bg-cc-active text-cc-fg border border-cc-border transition-colors cursor-pointer inline-block"
+            <button
+              onClick={() => {
+                const sessionId = useStore.getState().currentSessionId;
+                if (sessionId) {
+                  navigateToSession(sessionId);
+                } else {
+                  navigateHome();
+                }
+              }}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-cc-hover hover:bg-cc-active text-cc-fg border border-cc-border transition-colors cursor-pointer"
             >
               Back to App
-            </a>
+            </button>
             <button
               onClick={() => setDarkMode(!darkMode)}
               className="px-3 py-1.5 text-xs font-medium rounded-lg bg-cc-primary/10 hover:bg-cc-primary/20 text-cc-primary border border-cc-primary/20 transition-colors cursor-pointer"
@@ -1150,6 +1159,63 @@ export function Playground() {
                 ] satisfies CreationProgressEvent[]}
                 error={"npm ERR! code ENOENT\nnpm ERR! syscall open\nnpm ERR! path /app/package.json"}
               />
+            </Card>
+          </div>
+        </Section>
+        {/* ─── Session Launch Overlay ──────────────────────────── */}
+        <Section title="Session Launch Overlay" description="Full-screen overlay shown during session creation, replacing the inline progress list">
+          <div className="space-y-4">
+            <Card label="In progress (container session)">
+              <div className="relative h-[360px] bg-cc-bg rounded-lg overflow-hidden border border-cc-border">
+                <SessionLaunchOverlay
+                  steps={[
+                    { step: "resolving_env", label: "Environment resolved", status: "done" },
+                    { step: "pulling_image", label: "Pulling Docker image...", status: "done" },
+                    { step: "creating_container", label: "Starting container...", status: "in_progress" },
+                    { step: "launching_cli", label: "Launching Claude Code...", status: "in_progress" },
+                  ] satisfies CreationProgressEvent[]}
+                  backend="claude"
+                  onCancel={() => {}}
+                />
+              </div>
+            </Card>
+            <Card label="All steps done (launching)">
+              <div className="relative h-[360px] bg-cc-bg rounded-lg overflow-hidden border border-cc-border">
+                <SessionLaunchOverlay
+                  steps={[
+                    { step: "resolving_env", label: "Environment resolved", status: "done" },
+                    { step: "fetching_git", label: "Fetch complete", status: "done" },
+                    { step: "creating_worktree", label: "Worktree created", status: "done" },
+                    { step: "launching_cli", label: "CLI launched", status: "done" },
+                  ] satisfies CreationProgressEvent[]}
+                  backend="claude"
+                />
+              </div>
+            </Card>
+            <Card label="Error state">
+              <div className="relative h-[400px] bg-cc-bg rounded-lg overflow-hidden border border-cc-border">
+                <SessionLaunchOverlay
+                  steps={[
+                    { step: "resolving_env", label: "Environment resolved", status: "done" },
+                    { step: "pulling_image", label: "Pulling Docker image...", status: "error" },
+                  ] satisfies CreationProgressEvent[]}
+                  error="Failed to pull docker.io/stangirard/the-companion:latest — connection timed out after 30s"
+                  backend="claude"
+                  onCancel={() => {}}
+                />
+              </div>
+            </Card>
+            <Card label="Codex backend">
+              <div className="relative h-[320px] bg-cc-bg rounded-lg overflow-hidden border border-cc-border">
+                <SessionLaunchOverlay
+                  steps={[
+                    { step: "resolving_env", label: "Environment resolved", status: "done" },
+                    { step: "launching_cli", label: "Launching Codex...", status: "in_progress" },
+                  ] satisfies CreationProgressEvent[]}
+                  backend="codex"
+                  onCancel={() => {}}
+                />
+              </div>
             </Card>
           </div>
         </Section>
