@@ -734,7 +734,14 @@ export function createRoutes(
     const id = c.req.param("id");
     const session = launcher.getSession(id);
     if (!session) return c.json({ error: "Session not found" }, 404);
-    return c.json(session);
+
+    // Include message history from wsBridge
+    const wsBridgeSession = wsBridge.getSession(id);
+    const enriched = {
+      ...session,
+      messageHistory: wsBridgeSession?.messageHistory || []
+    };
+    return c.json(enriched);
   });
 
   api.patch("/sessions/:id/name", async (c) => {
@@ -1630,8 +1637,126 @@ export function createRoutes(
     if (typeof body.content !== "string" || !body.content.trim()) {
       return c.json({ error: "content is required" }, 400);
     }
-    wsBridge.injectUserMessage(id, body.content);
-    return c.json({ ok: true, sessionId: id });
+
+    // Wait for session to be registered in wsBridge (race condition fix)
+    const maxWait = 5000; // 5 seconds
+    const startWait = Date.now();
+    while (!wsBridge.getSession(id) && Date.now() - startWait < maxWait) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    if (!wsBridge.getSession(id)) {
+      return c.json({ error: "Session not ready in wsBridge" }, 500);
+    }
+
+    // Check if client wants synchronous response
+    const waitForResponse = body.waitForResponse === true;
+    const timeout = typeof body.timeout === "number" ? Math.min(body.timeout, 300000) : 120000;
+
+    if (waitForResponse) {
+      // Synchronous mode: wait for result before responding
+      const initialHistoryLength = wsBridge.getSession(id)?.messageHistory.length || 0;
+      wsBridge.injectUserMessage(id, body.content);
+
+      // Give the system time to process the message before polling
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Poll for new result message
+      const startTime = Date.now();
+      while (Date.now() - startTime < timeout) {
+        const currentSession = wsBridge.getSession(id);
+        if (!currentSession) return c.json({ error: "Session terminated" }, 500);
+
+        const history = currentSession.messageHistory;
+        if (history.length > initialHistoryLength) {
+          // Find the most recent assistant or result message
+          for (let i = history.length - 1; i >= initialHistoryLength; i--) {
+            const msg = history[i];
+            if (msg.type === "result") {
+              // Extract text from result
+              const resultData = msg.data as { text?: string; is_error?: boolean };
+              return c.json({
+                success: true,
+                response: resultData.text || "",
+                is_error: resultData.is_error || false
+              });
+            } else if (msg.type === "assistant" && (msg as any).message?.content) {
+              // Extract text from assistant message
+              const content = (msg as any).message.content;
+              const textParts = Array.isArray(content)
+                ? content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n")
+                : "";
+              if (textParts) {
+                return c.json({ success: true, response: textParts });
+              }
+            }
+          }
+        }
+
+        // Wait a bit before checking again
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      return c.json({ error: "Timeout waiting for response" }, 408);
+    } else {
+      // Async mode: queue and return immediately
+      wsBridge.injectUserMessage(id, body.content);
+      return c.json({ ok: true, sessionId: id });
+    }
+  });
+
+  // SSE streaming endpoint for message responses
+  api.post("/sessions/:id/message-stream", async (c) => {
+    const id = c.req.param("id");
+    const session = launcher.getSession(id);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    if (!launcher.isAlive(id)) return c.json({ error: "Session is not running" }, 400);
+    const body = await c.req.json().catch(() => ({}));
+    if (typeof body.content !== "string" || !body.content.trim()) {
+      return c.json({ error: "content is required" }, 400);
+    }
+
+    return streamSSE(c, async (stream) => {
+      const initialHistoryLength = wsBridge.getSession(id)?.messageHistory.length || 0;
+      wsBridge.injectUserMessage(id, body.content);
+
+      await stream.writeSSE({ data: JSON.stringify({ type: "queued" }) });
+
+      const timeout = typeof body.timeout === "number" ? Math.min(body.timeout, 300000) : 120000;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < timeout) {
+        const currentSession = wsBridge.getSession(id);
+        if (!currentSession) {
+          await stream.writeSSE({ data: JSON.stringify({ type: "error", message: "Session terminated" }) });
+          return;
+        }
+
+        const history = currentSession.messageHistory;
+        if (history.length > initialHistoryLength) {
+          for (let i = initialHistoryLength; i < history.length; i++) {
+            const msg = history[i];
+            if (msg.type === "assistant") {
+              await stream.writeSSE({ data: JSON.stringify({ type: "assistant", message: msg }) });
+            } else if (msg.type === "result") {
+              const resultData = msg.data as { text?: string; is_error?: boolean };
+              await stream.writeSSE({
+                data: JSON.stringify({
+                  type: "result",
+                  text: resultData.text || "",
+                  is_error: resultData.is_error || false
+                })
+              });
+              // End stream after result
+              return;
+            }
+          }
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      await stream.writeSSE({ data: JSON.stringify({ type: "timeout" }) });
+    });
   });
 
   // ─── Companion Assistant ──────────────────────────────────────────
