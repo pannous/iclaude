@@ -268,6 +268,40 @@ export function Sidebar() {
     }
   }, []);
 
+  const handleArchiveGroup = useCallback(async (e: React.MouseEvent, projectKey: string) => {
+    e.stopPropagation();
+    const group = projectGroups.find((g) => g.key === projectKey);
+    if (!group || group.sessions.length === 0) return;
+    const store = useStore.getState();
+    const ids = group.sessions.map((s) => s.id);
+    // Optimistically mark all as archived
+    store.setSdkSessions(
+      store.sdkSessions.map((s) =>
+        ids.includes(s.sessionId) ? { ...s, archived: true } : s
+      )
+    );
+    // Remove from bridge sessions
+    const bridgeSessions = new Map(store.sessions);
+    let changed = false;
+    for (const id of ids) {
+      if (bridgeSessions.delete(id)) changed = true;
+      disconnectSession(id);
+    }
+    if (changed) useStore.setState({ sessions: bridgeSessions });
+    // Navigate away if current session is in this group
+    if (store.currentSessionId && ids.includes(store.currentSessionId)) {
+      store.newSession();
+    }
+    // Archive on server in parallel
+    await Promise.allSettled(ids.map((id) => api.archiveSession(id)));
+    try {
+      const list = await api.listSessions();
+      useStore.getState().setSdkSessions(list);
+    } catch {
+      // best-effort
+    }
+  }, [projectGroups]);
+
   const handleClearArchived = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     const store = useStore.getState();
@@ -555,6 +589,7 @@ export function Sidebar() {
                 sessionNames={sessionNames}
                 pendingPermissions={pendingPermissions}
                 recentlyRenamed={recentlyRenamed}
+                onArchiveGroup={handleArchiveGroup}
                 isFirst={i === 0}
                 {...sessionItemProps}
               />
