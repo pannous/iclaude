@@ -156,11 +156,7 @@ function notifySessionDone(sessionId: string, isError: boolean, resultText?: str
 
   const sdkTitle = store.sdkSessions.find((s) => s.sessionId === sessionId)?.title;
   const title = sdkTitle || store.sessionNames.get(sessionId) || sessionId.slice(0, 8);
-  const tasks = store.sessionTasks.get(sessionId) || [];
-  const completedCount = tasks.filter((t) => t.status === "completed").length;
   const body = resultText ? firstParagraph(resultText)
-    : tasks.length > 0
-    ? `${completedCount}/${tasks.length} tasks completed`
     : isError ? "Session ended with an error" : "Session finished successfully";
 
   const createNotification = () => {
