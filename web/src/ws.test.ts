@@ -558,7 +558,7 @@ describe("notifySessionDone", () => {
       { sessionId: "s1", state: "running", cwd: "/home", createdAt: Date.now(), title: "Fix Auth Bug" },
     ]);
 
-    fireResult("s1");
+    fireResult("s1", false, "Task completed successfully");
 
     expect(notificationSpy).toHaveBeenCalledWith(
       "Fix Auth Bug",
@@ -572,7 +572,7 @@ describe("notifySessionDone", () => {
     useStore.getState().setCurrentSession("other");
     useStore.getState().setSessionName("s1", "My Session");
 
-    fireResult("s1");
+    fireResult("s1", false, "Done");
 
     expect(notificationSpy).toHaveBeenCalledWith(
       "My Session",
@@ -580,7 +580,7 @@ describe("notifySessionDone", () => {
     );
   });
 
-  it("shows session title for error results too", () => {
+  it("shows session title for error results with text", () => {
     wsModule.connectSession("s1");
     fireMessage({ type: "session_init", session: makeSession("s1") });
     useStore.getState().setCurrentSession("other");
@@ -588,7 +588,7 @@ describe("notifySessionDone", () => {
       { sessionId: "s1", state: "running", cwd: "/home", createdAt: Date.now(), title: "Deploy API" },
     ]);
 
-    fireResult("s1", true);
+    fireResult("s1", true, "Deployment failed");
 
     expect(notificationSpy).toHaveBeenCalledWith(
       "Deploy API",
@@ -641,7 +641,7 @@ describe("notifySessionDone", () => {
     useStore.getState().setCurrentSession("other");
     useStore.getState().setSessionName("s1", "Build");
 
-    fireResult("s1");
+    fireResult("s1", false, "Build complete");
 
     const notificationInstance = notificationSpy.mock.instances.at(-1) as { onclick?: (() => void) | null };
     expect(notificationInstance.onclick).toBeTypeOf("function");
