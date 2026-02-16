@@ -4,7 +4,8 @@ import { resolveBinary } from "./path-resolver.js";
 import { readdir, readFile, writeFile, stat } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { homedir } from "node:os";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, createReadStream } from "node:fs";
+import { createInterface } from "node:readline";
 import type { CliLauncher } from "./cli-launcher.js";
 import type { WsBridge } from "./ws-bridge.js";
 import type { SessionStore } from "./session-store.js";
@@ -241,6 +242,51 @@ export function createRoutes(
       };
     });
     return c.json(enriched);
+  });
+
+  api.get("/sessions/resumable", async (c) => {
+    try {
+      const projectsDir = join(homedir(), ".claude", "projects");
+      const projEntries = await readdir(projectsDir, { withFileTypes: true }).catch(() => []);
+
+      const candidates: { sessionId: string; project: string; mtime: number; filePath: string }[] = [];
+
+      for (const entry of projEntries) {
+        if (!entry.isDirectory()) continue;
+        const projPath = join(projectsDir, entry.name);
+        const project = "/" + entry.name.replace(/^-/, "").replace(/-/g, "/");
+        const files = await readdir(projPath).catch(() => []);
+        for (const file of files) {
+          if (!file.endsWith(".jsonl")) continue;
+          const sessionId = file.replace(".jsonl", "");
+          const filePath = join(projPath, file);
+          try {
+            const s = await stat(filePath);
+            candidates.push({ sessionId, project, mtime: s.mtime.getTime(), filePath });
+          } catch { /* skip */ }
+        }
+      }
+
+      candidates.sort((a, b) => b.mtime - a.mtime);
+      const top = candidates.slice(0, 20);
+
+      const results: { sessionId: string; project: string; lastModified: number; title: string }[] = [];
+      for (const item of top) {
+        const title = await extractSessionTitle(item.filePath);
+        if (title === "") continue;
+        results.push({
+          sessionId: item.sessionId,
+          project: item.project,
+          lastModified: item.mtime,
+          title,
+        });
+      }
+
+      return c.json(results);
+    } catch (e: unknown) {
+      console.error("[routes] Failed to list resumable sessions:", e);
+      return c.json([], 500);
+    }
   });
 
   api.get("/sessions/:id", (c) => {
@@ -1370,4 +1416,50 @@ export function createRoutes(
   });
 
   return api;
+}
+
+const TITLE_GEN_PREFIX = "Generate a concise 3-5 word session title";
+
+function stripTitleGenPrompt(text: string): string {
+  if (!text.startsWith(TITLE_GEN_PREFIX)) return text;
+  return "";
+}
+
+async function extractSessionTitle(filePath: string): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: createReadStream(filePath), crlfDelay: Infinity });
+    let found = false;
+    rl.on("line", (line) => {
+      if (found) return;
+      try {
+        const data = JSON.parse(line);
+        if (data.type === "summary") {
+          found = true;
+          rl.close();
+          resolve(stripTitleGenPrompt(data.summary?.slice(0, 120) || ""));
+          return;
+        }
+        if (data.type !== "user") return;
+        const msg = data.message;
+        if (!msg) return;
+        const content = msg.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block?.type === "text" && block.text) {
+              found = true;
+              rl.close();
+              resolve(stripTitleGenPrompt(block.text.slice(0, 120)));
+              return;
+            }
+          }
+        } else if (typeof content === "string") {
+          found = true;
+          rl.close();
+          resolve(stripTitleGenPrompt(content.slice(0, 120)));
+        }
+      } catch { /* skip malformed lines */ }
+    });
+    rl.on("close", () => { if (!found) resolve(""); });
+    rl.on("error", () => resolve(""));
+  });
 }
