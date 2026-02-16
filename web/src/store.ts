@@ -137,6 +137,7 @@ interface AppState {
 
   // Sidebar project grouping actions
   toggleProjectCollapse: (projectKey: string) => void;
+  setAllProjectsCollapsed: (projectKeys: string[], collapsed: boolean) => void;
 
   // Plan mode actions
   setPreviousPermissionMode: (sessionId: string, mode: string) => void;
@@ -636,6 +637,13 @@ export const useStore = create<AppState>((set) => ({
       } else {
         collapsedProjects.add(projectKey);
       }
+      safeStorage.setItem("cc-collapsed-projects", JSON.stringify(Array.from(collapsedProjects)));
+      return { collapsedProjects };
+    }),
+
+  setAllProjectsCollapsed: (projectKeys, collapsed) =>
+    set(() => {
+      const collapsedProjects = collapsed ? new Set(projectKeys) : new Set<string>();
       safeStorage.setItem("cc-collapsed-projects", JSON.stringify(Array.from(collapsedProjects)));
       return { collapsedProjects };
     }),

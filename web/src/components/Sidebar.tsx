@@ -43,6 +43,7 @@ export function Sidebar() {
   const setAssistantSessionId = useStore((s) => s.setAssistantSessionId);
   const collapsedProjects = useStore((s) => s.collapsedProjects);
   const toggleProjectCollapse = useStore((s) => s.toggleProjectCollapse);
+  const setAllProjectsCollapsed = useStore((s) => s.setAllProjectsCollapsed);
   const isSettingsPage = hash === "#/settings";
   const isTerminalPage = hash === "#/terminal";
   const isEnvironmentsPage = hash === "#/environments";
@@ -528,6 +529,21 @@ export function Sidebar() {
           </p>
         ) : (
           <>
+            {projectGroups.length > 1 && (
+              <div className="flex justify-end px-1 mb-0.5">
+                <button
+                  onClick={() => {
+                    const allKeys = projectGroups.map((g) => g.key);
+                    const allCollapsed = allKeys.every((k) => collapsedProjects.has(k));
+                    setAllProjectsCollapsed(allKeys, !allCollapsed);
+                  }}
+                  className="px-1.5 py-0.5 text-[10px] text-cc-muted hover:text-cc-fg transition-colors cursor-pointer rounded hover:bg-cc-hover"
+                  title={projectGroups.every((g) => collapsedProjects.has(g.key)) ? "Expand all groups" : "Collapse all groups"}
+                >
+                  {projectGroups.every((g) => collapsedProjects.has(g.key)) ? "Expand all" : "Collapse all"}
+                </button>
+              </div>
+            )}
             {projectGroups.map((group, i) => (
               <ProjectGroup
                 key={group.key}
