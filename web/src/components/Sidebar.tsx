@@ -201,11 +201,11 @@ export function Sidebar() {
 
   const handleArchiveSession = useCallback((e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
-    // Check if session uses a worktree — if so, ask for confirmation
+    // Check if session uses a container — if so, ask for confirmation
     const sdkInfo = sdkSessions.find((s) => s.sessionId === sessionId);
     const bridgeState = sessions.get(sessionId);
-    const isWorktree = bridgeState?.is_worktree || sdkInfo?.isWorktree || false;
-    if (isWorktree) {
+    const isContainerized = bridgeState?.is_containerized || !!sdkInfo?.containerId || false;
+    if (isContainerized) {
       setConfirmArchiveId(sessionId);
       return;
     }
@@ -302,6 +302,7 @@ export function Sidebar() {
       cwd: bridgeState?.cwd || sdkInfo?.cwd || "",
       gitBranch: bridgeState?.git_branch || sdkInfo?.gitBranch || "",
       isWorktree: bridgeState?.is_worktree || sdkInfo?.isWorktree || false,
+      isContainerized: bridgeState?.is_containerized || !!sdkInfo?.containerId || false,
       gitAhead: bridgeState?.git_ahead || sdkInfo?.gitAhead || 0,
       gitBehind: bridgeState?.git_behind || sdkInfo?.gitBehind || 0,
       linesAdded: bridgeState?.total_lines_added || sdkInfo?.totalLinesAdded || 0,
@@ -312,7 +313,7 @@ export function Sidebar() {
       createdAt: sdkInfo?.createdAt ?? 0,
       archived: sdkInfo?.archived ?? false,
       backendType: bridgeState?.backend_type || sdkInfo?.backendType || "claude",
-      repoRoot: bridgeState?.repo_root || sdkInfo?.repoRoot || "",
+      repoRoot: bridgeState?.repo_root || "",
       permCount: pendingPermissions.get(id)?.size ?? 0,
       cronJobId: bridgeState?.cronJobId || sdkInfo?.cronJobId,
       cronJobName: bridgeState?.cronJobName || sdkInfo?.cronJobName,
@@ -491,7 +492,7 @@ export function Sidebar() {
         })()}
       </div>
 
-      {/* Worktree archive confirmation */}
+      {/* Container archive confirmation */}
       {confirmArchiveId && (
         <div className="mx-2 mb-1 p-2.5 rounded-[10px] bg-amber-500/10 border border-amber-500/20">
           <div className="flex items-start gap-2">
@@ -500,7 +501,7 @@ export function Sidebar() {
             </svg>
             <div className="flex-1 min-w-0">
               <p className="text-[11px] text-cc-fg leading-snug">
-                Archiving will <strong>delete the worktree</strong> and any uncommitted changes.
+                Archiving will <strong>remove the container</strong> and any uncommitted changes.
               </p>
               <div className="flex gap-2 mt-2">
                 <button

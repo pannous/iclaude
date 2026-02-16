@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem, McpServerDetail } from "./types.js";
-import type { UpdateInfo, PRStatusResponse } from "./api.js";
+import type { UpdateInfo, PRStatusResponse, CreationProgressEvent } from "./api.js";
 import { safeStorage } from "./utils/safe-storage.js";
 
 interface AppState {
@@ -63,6 +63,12 @@ interface AppState {
   // Update banner
   updateInfo: UpdateInfo | null;
   updateDismissedVersion: string | null;
+
+  // Session creation progress (SSE streaming)
+  creationProgress: CreationProgressEvent[] | null;
+  creationError: string | null;
+  addCreationProgress: (step: CreationProgressEvent) => void;
+  clearCreation: () => void;
 
   // UI
   darkMode: boolean;
@@ -206,9 +212,10 @@ function getInitialNotificationSound(): boolean {
 }
 
 function getInitialYoloMode(): boolean {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") return true;
   const stored = safeStorage.getItem("cc-yolo-mode");
-  return stored === "true";
+  if (stored !== null) return stored === "true";
+  return true;
 }
 
 function getInitialNotificationDesktop(): boolean {
@@ -263,6 +270,8 @@ export const useStore = create<AppState>((set) => ({
   mcpServers: new Map(),
   toolProgress: new Map(),
   collapsedProjects: getInitialCollapsedProjects(),
+  creationProgress: null,
+  creationError: null,
   darkMode: getInitialDarkMode(),
   notificationSound: getInitialNotificationSound(),
   yoloMode: getInitialYoloMode(),
@@ -278,6 +287,18 @@ export const useStore = create<AppState>((set) => ({
   terminalOpen: false,
   terminalCwd: null,
   terminalId: null,
+
+  addCreationProgress: (step) => set((state) => {
+    const existing = state.creationProgress || [];
+    const idx = existing.findIndex((s) => s.step === step.step);
+    if (idx >= 0) {
+      const updated = [...existing];
+      updated[idx] = step;
+      return { creationProgress: updated };
+    }
+    return { creationProgress: [...existing, step] };
+  }),
+  clearCreation: () => set({ creationProgress: null, creationError: null }),
 
   setDarkMode: (v) => {
     safeStorage.setItem("cc-dark-mode", String(v));

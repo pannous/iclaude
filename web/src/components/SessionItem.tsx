@@ -164,6 +164,11 @@ export function SessionItem({
                   {s.isWorktree && (
                     <span className="text-[8px] bg-cc-primary/10 text-cc-primary px-0.5 rounded shrink-0">wt</span>
                   )}
+                  {s.isContainerized && (
+                    <span className="text-[9px] font-medium px-1.5 rounded-full leading-[16px] shrink-0 text-blue-400 bg-blue-500/10">
+                      Docker
+                    </span>
+                  )}
                   {s.cronJobId && (
                     <span className="text-[9px] font-medium px-1.5 rounded-full leading-[16px] shrink-0 text-violet-500 bg-violet-500/10">
                       Cron
@@ -172,6 +177,8 @@ export function SessionItem({
                 </>
               )}
             </div>
+
+
 
             {/* Row 3: Git stats (conditional) */}
             {(s.gitAhead > 0 || s.gitBehind > 0 || s.linesAdded > 0 || s.linesRemoved > 0) && (

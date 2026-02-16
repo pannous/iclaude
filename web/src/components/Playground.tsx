@@ -12,6 +12,8 @@ import type { PermissionRequest, ChatMessage, ContentBlock, SessionState, McpSer
 import type { TaskItem } from "../types.js";
 import type { UpdateInfo, GitHubPRInfo } from "../api.js";
 import { GitHubPRDisplay, CodexRateLimitsSection, CodexTokenDetailsSection } from "./TaskPanel.js";
+import { SessionCreationProgress } from "./SessionCreationProgress.js";
+import type { CreationProgressEvent } from "../types.js";
 
 // ─── Mock Data ──────────────────────────────────────────────────────────────
 
@@ -470,7 +472,8 @@ export function Playground() {
       context_used_percent: 62,
       is_compacting: false,
       git_branch: "feat/jwt-auth",
-      is_worktree: true,
+      is_worktree: false,
+      is_containerized: true,
       repo_root: "/Users/stan/Dev/project",
       git_ahead: 3,
       git_behind: 0,
@@ -957,7 +960,7 @@ export function Playground() {
                         <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.116.862a2.25 2.25 0 10-.862.862A4.48 4.48 0 007.25 7.5h-1.5A2.25 2.25 0 003.5 9.75v.318a2.25 2.25 0 101.5 0V9.75a.75.75 0 01.75-.75h1.5a5.98 5.98 0 003.884-1.435A2.25 2.25 0 109.634 3.362zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5z" />
                       </svg>
                       <span className="truncate">feat/jwt-auth</span>
-                      <span className="text-[10px] bg-cc-primary/10 text-cc-primary px-1 rounded">worktree</span>
+                      <span className="text-[10px] bg-blue-500/10 text-blue-400 px-1 rounded">container</span>
                     </span>
                     <span className="flex items-center gap-0.5 text-[10px]">
                       <span className="text-green-500">3&#8593;</span>
@@ -1101,6 +1104,52 @@ export function Playground() {
             </Card>
             <Card label="No changes">
               <DiffViewer oldText="same content" newText="same content" />
+            </Card>
+          </div>
+        </Section>
+        {/* ─── Session Creation Progress ─────────────────────── */}
+        <Section title="Session Creation Progress" description="Step-by-step progress indicator shown during session creation (SSE streaming)">
+          <div className="space-y-4 max-w-md">
+            <Card label="In progress (container session)">
+              <SessionCreationProgress
+                steps={[
+                  { step: "resolving_env", label: "Resolving environment...", status: "done" },
+                  { step: "pulling_image", label: "Pulling Docker image...", status: "done" },
+                  { step: "creating_container", label: "Starting container...", status: "in_progress" },
+                  { step: "launching_cli", label: "Launching Claude Code...", status: "in_progress" },
+                ] satisfies CreationProgressEvent[]}
+              />
+            </Card>
+            <Card label="Completed (worktree session)">
+              <SessionCreationProgress
+                steps={[
+                  { step: "resolving_env", label: "Resolving environment...", status: "done" },
+                  { step: "fetching_git", label: "Fetching from remote...", status: "done" },
+                  { step: "checkout_branch", label: "Checking out feat/auth...", status: "done" },
+                  { step: "creating_worktree", label: "Creating worktree...", status: "done" },
+                  { step: "launching_cli", label: "Launching Claude Code...", status: "done" },
+                ] satisfies CreationProgressEvent[]}
+              />
+            </Card>
+            <Card label="Error during image pull">
+              <SessionCreationProgress
+                steps={[
+                  { step: "resolving_env", label: "Resolving environment...", status: "done" },
+                  { step: "pulling_image", label: "Pulling Docker image...", status: "error" },
+                ] satisfies CreationProgressEvent[]}
+                error="Failed to pull docker.io/stangirard/the-companion:latest — connection timed out after 30s"
+              />
+            </Card>
+            <Card label="Error during init script">
+              <SessionCreationProgress
+                steps={[
+                  { step: "resolving_env", label: "Resolving environment...", status: "done" },
+                  { step: "pulling_image", label: "Pulling Docker image...", status: "done" },
+                  { step: "creating_container", label: "Starting container...", status: "done" },
+                  { step: "running_init_script", label: "Running init script...", status: "error" },
+                ] satisfies CreationProgressEvent[]}
+                error={"npm ERR! code ENOENT\nnpm ERR! syscall open\nnpm ERR! path /app/package.json"}
+              />
             </Card>
           </div>
         </Section>
@@ -1291,6 +1340,7 @@ function CodexPlaygroundDemo() {
       is_compacting: false,
       git_branch: "main",
       is_worktree: false,
+      is_containerized: false,
       repo_root: "/Users/demo/project",
       git_ahead: 0,
       git_behind: 0,

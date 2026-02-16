@@ -7,6 +7,7 @@ export interface SessionItem {
   cwd: string;
   gitBranch: string;
   isWorktree: boolean;
+  isContainerized: boolean;
   gitAhead: number;
   gitBehind: number;
   linesAdded: number;
@@ -34,7 +35,7 @@ export interface ProjectGroup {
 
 /**
  * Extracts a project key from a cwd path.
- * Uses repoRoot when available (normalizes worktrees to their parent repo).
+ * Uses repoRoot when available (normalizes to the parent repo).
  */
 export function extractProjectKey(cwd: string, repoRoot?: string): string {
   const basePath = repoRoot || cwd;

@@ -155,6 +155,15 @@ export interface CompanionEnv {
   name: string;
   slug: string;
   variables: Record<string, string>;
+  dockerfile?: string;
+  imageTag?: string;
+  baseImage?: string;
+  buildStatus?: "idle" | "building" | "success" | "error";
+  buildError?: string;
+  lastBuiltAt?: number;
+  ports?: number[];
+  volumes?: string[];
+  initScript?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -285,6 +294,82 @@ export interface AssistantConfig {
   permissionMode: string;
 }
 
+// ─── SSE Session Creation ────────────────────────────────────────────────────
+
+export interface CreationProgressEvent {
+  step: string;
+  label: string;
+  status: "in_progress" | "done" | "error";
+  detail?: string;
+}
+
+export interface CreateSessionStreamResult {
+  sessionId: string;
+  state: string;
+  cwd: string;
+}
+
+/**
+ * Create a session with real-time progress streaming via SSE.
+ * Uses fetch + ReadableStream (EventSource is GET-only, this is POST).
+ */
+export async function createSessionStream(
+  opts: CreateSessionOpts | undefined,
+  onProgress: (progress: CreationProgressEvent) => void,
+): Promise<CreateSessionStreamResult> {
+  const res = await fetch(`${BASE}/sessions/create-stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts ?? {}),
+  });
+
+  if (!res.ok || !res.body) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error || res.statusText);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: CreateSessionStreamResult | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // Parse SSE events: split on double newlines
+    const chunks = buffer.split("\n\n");
+    buffer = chunks.pop() || "";
+
+    for (const chunk of chunks) {
+      if (!chunk.trim()) continue;
+      let eventType = "";
+      let data = "";
+      for (const line of chunk.split("\n")) {
+        if (line.startsWith("event:")) eventType = line.slice(6).trim();
+        else if (line.startsWith("data:")) data = line.slice(5).trim();
+      }
+      if (!data) continue;
+
+      const parsed = JSON.parse(data);
+      if (eventType === "progress") {
+        onProgress(parsed as CreationProgressEvent);
+      } else if (eventType === "done") {
+        result = parsed as CreateSessionStreamResult;
+      } else if (eventType === "error") {
+        throw new Error((parsed as { error: string }).error || "Session creation failed");
+      }
+    }
+  }
+
+  if (!result) {
+    throw new Error("Stream ended without session creation result");
+  }
+
+  return result;
+}
+
 export const api = {
   createSession: (opts?: CreateSessionOpts) =>
     post<{ sessionId: string; state: string; cwd: string }>(
@@ -341,13 +426,39 @@ export const api = {
   listEnvs: () => get<CompanionEnv[]>("/envs"),
   getEnv: (slug: string) =>
     get<CompanionEnv>(`/envs/${encodeURIComponent(slug)}`),
-  createEnv: (name: string, variables: Record<string, string>) =>
-    post<CompanionEnv>("/envs", { name, variables }),
+  createEnv: (name: string, variables: Record<string, string>, docker?: {
+    dockerfile?: string;
+    baseImage?: string;
+    ports?: number[];
+    volumes?: string[];
+    initScript?: string;
+  }) =>
+    post<CompanionEnv>("/envs", { name, variables, ...docker }),
   updateEnv: (
     slug: string,
-    data: { name?: string; variables?: Record<string, string> },
+    data: {
+      name?: string;
+      variables?: Record<string, string>;
+      dockerfile?: string;
+      baseImage?: string;
+      ports?: number[];
+      volumes?: string[];
+      initScript?: string;
+    },
   ) => put<CompanionEnv>(`/envs/${encodeURIComponent(slug)}`, data),
   deleteEnv: (slug: string) => del(`/envs/${encodeURIComponent(slug)}`),
+
+  // Environment Docker builds
+  buildEnvImage: (slug: string) =>
+    post<{ ok: boolean; imageTag: string }>(`/envs/${encodeURIComponent(slug)}/build`),
+  getEnvBuildStatus: (slug: string) =>
+    get<{ buildStatus: string; buildError?: string; lastBuiltAt?: number; imageTag?: string }>(
+      `/envs/${encodeURIComponent(slug)}/build-status`,
+    ),
+  buildBaseImage: () =>
+    post<{ ok: boolean; tag: string }>("/docker/build-base"),
+  getBaseImageStatus: () =>
+    get<{ exists: boolean; tag: string }>("/docker/base-image"),
 
   // Settings
   getSettings: () => get<AppSettings>("/settings"),
@@ -361,22 +472,6 @@ export const api = {
     get<GitBranchInfo[]>(
       `/git/branches?repoRoot=${encodeURIComponent(repoRoot)}`,
     ),
-  listWorktrees: (repoRoot: string) =>
-    get<GitWorktreeInfo[]>(
-      `/git/worktrees?repoRoot=${encodeURIComponent(repoRoot)}`,
-    ),
-  createWorktree: (
-    repoRoot: string,
-    branch: string,
-    opts?: { baseBranch?: string; createBranch?: boolean },
-  ) =>
-    post<WorktreeCreateResult>("/git/worktree", { repoRoot, branch, ...opts }),
-  removeWorktree: (repoRoot: string, worktreePath: string, force?: boolean) =>
-    del<{ removed: boolean; reason?: string }>("/git/worktree", {
-      repoRoot,
-      worktreePath,
-      force,
-    }),
   gitFetch: (repoRoot: string) =>
     post<{ success: boolean; output: string }>("/git/fetch", { repoRoot }),
   gitPull: (cwd: string) =>
@@ -386,6 +481,24 @@ export const api = {
       git_ahead: number;
       git_behind: number;
     }>("/git/pull", { cwd }),
+
+  // Git worktrees
+  listWorktrees: (repoRoot: string) =>
+    get<GitWorktreeInfo[]>(
+      `/git/worktrees?repoRoot=${encodeURIComponent(repoRoot)}`,
+    ),
+  createWorktree: (
+    repoRoot: string,
+    branch: string,
+    opts?: { baseBranch?: string; createBranch?: boolean },
+  ) =>
+    post<WorktreeCreateResult>("/git/worktree", {
+      repoRoot,
+      branch,
+      ...opts,
+    }),
+  removeWorktree: (repoRoot: string, worktreePath: string, force?: boolean) =>
+    del("/git/worktree", { repoRoot, worktreePath, force }),
 
   // GitHub PR status
   getPRStatus: (cwd: string, branch: string) =>

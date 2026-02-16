@@ -1,8 +1,10 @@
 import { Hono } from "hono";
+import { streamSSE, type SSEStreamingApi } from "hono/streaming";
 import { execSync } from "node:child_process";
 import { resolveBinary } from "./path-resolver.js";
 import { readdir, readFile, writeFile, stat } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { existsSync, readFileSync, createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
@@ -16,7 +18,9 @@ import * as skillManager from "./skill-manager.js";
 import * as cronStore from "./cron-store.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
-import { containerManager, type ContainerConfig, type ContainerInfo } from "./container-manager.js";
+import { containerManager, ContainerManager, type ContainerConfig, type ContainerInfo } from "./container-manager.js";
+import type { CreationStepId } from "./session-types.js";
+import { hasContainerClaudeAuth } from "./claude-container-auth.js";
 import { DEFAULT_OPENROUTER_MODEL, getSettings, updateSettings } from "./settings-manager.js";
 import { getUsageLimits } from "./usage-limits.js";
 import {
@@ -29,6 +33,8 @@ import { refreshServiceDefinition } from "./service.js";
 import type { AssistantManager } from "./assistant-manager.js";
 
 const UPDATE_CHECK_STALE_MS = 5 * 60 * 1000;
+const ROUTES_DIR = dirname(fileURLToPath(import.meta.url));
+const WEB_DIR = dirname(ROUTES_DIR);
 
 function execCaptureStdout(
   command: string,
@@ -113,29 +119,22 @@ export function createRoutes(
       }
 
       let cwd = body.cwd;
-      let worktreeInfo:
-        | {
-            isWorktree: boolean;
-            repoRoot: string;
-            branch: string;
-            actualBranch: string;
-            worktreePath: string;
-          }
-        | undefined;
+      let worktreeInfo: { isWorktree: boolean; repoRoot: string; branch: string; actualBranch: string; worktreePath: string } | undefined;
 
-      // If worktree is requested, set up a worktree for the selected branch
+      // Validate branch name to prevent command injection via shell metacharacters
+      if (body.branch && !/^[a-zA-Z0-9/_.\-]+$/.test(body.branch)) {
+        return c.json({ error: "Invalid branch name" }, 400);
+      }
+
       if (body.useWorktree && body.branch && cwd) {
+        // Worktree isolation: create/reuse a worktree for the selected branch
         const repoInfo = gitUtils.getRepoInfo(cwd);
         if (repoInfo) {
-          const result = gitUtils.ensureWorktree(
-            repoInfo.repoRoot,
-            body.branch,
-            {
-              baseBranch: repoInfo.defaultBranch,
-              createBranch: body.createBranch,
-              forceNew: true,
-            },
-          );
+          const result = gitUtils.ensureWorktree(repoInfo.repoRoot, body.branch, {
+            baseBranch: repoInfo.defaultBranch,
+            createBranch: body.createBranch,
+            forceNew: true,
+          });
           cwd = result.worktreePath;
           worktreeInfo = {
             isWorktree: true,
@@ -146,7 +145,7 @@ export function createRoutes(
           };
         }
       } else if (body.branch && cwd) {
-        // Non-worktree: checkout the selected branch in-place
+        // Non-worktree: checkout the selected branch in-place (lightweight)
         const repoInfo = gitUtils.getRepoInfo(cwd);
         if (repoInfo) {
           const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
@@ -160,26 +159,144 @@ export function createRoutes(
 
           const pullResult = gitUtils.gitPull(repoInfo.repoRoot);
           if (!pullResult.success) {
-            // Don't fail session creation if pull fails (e.g. no upstream tracking)
             console.warn(`[routes] git pull warning (non-fatal): ${pullResult.output}`);
           }
         }
       }
 
-      // If container mode requested, create and start the container
+      // Resolve Docker image from environment or explicit container config
+      const companionEnv = body.envSlug ? envManager.getEnv(body.envSlug) : null;
+      let effectiveImage = companionEnv
+        ? (body.envSlug ? envManager.getEffectiveImage(body.envSlug) : null)
+        : (body.container?.image || null);
+
       let containerInfo: ContainerInfo | undefined;
-      if (body.container && backend === "claude") {
+      let containerId: string | undefined;
+      let containerName: string | undefined;
+      let containerImage: string | undefined;
+
+      // Claude inside Linux containers cannot use host keychain auth.
+      // Fail fast with a clear error when no container-compatible auth is present.
+      if (effectiveImage && backend === "claude" && !hasContainerClaudeAuth(envVars)) {
+        return c.json({
+          error:
+            "Containerized Claude requires auth available inside the container. " +
+            "Set ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN / CLAUDE_CODE_AUTH_TOKEN) in the selected environment.",
+        }, 400);
+      }
+
+      // Create container if a Docker image is available.
+      // Do not silently fall back to host execution: if container startup fails,
+      // return an explicit error.
+      if (effectiveImage) {
+        if (!containerManager.imageExists(effectiveImage)) {
+          // Auto-build for default images (the-companion or legacy companion-dev)
+          const isDefaultImage = effectiveImage === "the-companion:latest" || effectiveImage === "companion-dev:latest";
+          if (isDefaultImage) {
+            // Try fallback: if the-companion requested but companion-dev exists, use it
+            if (effectiveImage === "the-companion:latest" && containerManager.imageExists("companion-dev:latest")) {
+              console.warn("[routes] the-companion:latest not found, falling back to companion-dev:latest (deprecated)");
+              effectiveImage = "companion-dev:latest";
+            } else {
+              // Try pulling from Docker Hub first, fall back to local build
+              const registryImage = ContainerManager.getRegistryImage(effectiveImage);
+              let pulled = false;
+              if (registryImage) {
+                console.log(`[routes] ${effectiveImage} missing locally, trying docker pull ${registryImage}...`);
+                pulled = await containerManager.pullImage(registryImage, effectiveImage);
+              }
+
+              if (!pulled) {
+                // Fall back to local Dockerfile build
+                const dockerfileName = effectiveImage === "the-companion:latest"
+                  ? "Dockerfile.the-companion"
+                  : "Dockerfile.companion-dev";
+                const dockerfilePath = join(WEB_DIR, "docker", dockerfileName);
+                if (!existsSync(dockerfilePath)) {
+                  return c.json({
+                    error:
+                      `Docker image ${effectiveImage} is missing, pull failed, and Dockerfile not found at ${dockerfilePath}`,
+                  }, 503);
+                }
+                try {
+                  console.log(`[routes] Pull failed/unavailable, building ${effectiveImage} from Dockerfile...`);
+                  containerManager.buildImage(dockerfilePath, effectiveImage);
+                } catch (err) {
+                  const reason = err instanceof Error ? err.message : String(err);
+                  return c.json({
+                    error:
+                      `Docker image ${effectiveImage} is missing: pull and build both failed: ${reason}`,
+                  }, 503);
+                }
+              }
+            }
+          } else {
+            return c.json({
+              error:
+                `Docker image not found locally: ${effectiveImage}. ` +
+                "Build/pull the image first, then retry.",
+            }, 503);
+          }
+        }
+
+        const tempId = crypto.randomUUID().slice(0, 8);
         const cConfig: ContainerConfig = {
-          image: body.container.image || "companion-dev:latest",
-          ports: Array.isArray(body.container.ports)
-            ? body.container.ports.map(Number).filter((n: number) => n > 0)
-            : [],
-          volumes: body.container.volumes,
-          env: body.container.env,
+          image: effectiveImage,
+          ports: companionEnv?.ports
+            ?? (Array.isArray(body.container?.ports)
+              ? body.container.ports.map(Number).filter((n: number) => n > 0)
+              : []),
+          volumes: companionEnv?.volumes ?? body.container?.volumes,
+          env: envVars,
         };
-        // Use cwd-based name since we don't have sessionId yet
-        const containerId = crypto.randomUUID().slice(0, 8);
-        containerInfo = containerManager.createContainer(containerId, cwd, cConfig);
+        try {
+          containerInfo = containerManager.createContainer(tempId, cwd, cConfig);
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err);
+          return c.json({
+            error:
+              `Docker is required to run this environment image (${effectiveImage}) ` +
+              `but container startup failed: ${reason}`,
+          }, 503);
+        }
+        containerId = containerInfo.containerId;
+        containerName = containerInfo.name;
+        containerImage = effectiveImage;
+        // Note: we intentionally do NOT run git checkout inside the container.
+        // The container uses a bind mount of hostCwd at /workspace, so the host
+        // checkout state is already visible inside the container.
+
+        // Run per-environment init script if configured
+        if (companionEnv?.initScript?.trim()) {
+          try {
+            console.log(`[routes] Running init script for env "${companionEnv.name}" in container ${containerInfo.name}...`);
+            const initTimeout = Number(process.env.COMPANION_INIT_SCRIPT_TIMEOUT) || 120_000;
+            const result = await containerManager.execInContainerAsync(
+              containerInfo.containerId,
+              ["sh", "-lc", companionEnv.initScript],
+              { timeout: initTimeout },
+            );
+            if (result.exitCode !== 0) {
+              console.error(
+                `[routes] Init script failed for env "${companionEnv.name}" (exit ${result.exitCode}):\n${result.output}`,
+              );
+              containerManager.removeContainer(tempId);
+              const truncated = result.output.length > 2000
+                ? result.output.slice(0, 500) + "\n...[truncated]...\n" + result.output.slice(-1500)
+                : result.output;
+              return c.json({
+                error: `Init script failed (exit ${result.exitCode}):\n${truncated}`,
+              }, 503);
+            }
+            console.log(`[routes] Init script completed successfully for env "${companionEnv.name}"`);
+          } catch (e) {
+            containerManager.removeContainer(tempId);
+            const reason = e instanceof Error ? e.message : String(e);
+            return c.json({
+              error: `Init script execution failed: ${reason}`,
+            }, 503);
+          }
+        }
       }
 
       const session = launcher.launch({
@@ -195,13 +312,16 @@ export function createRoutes(
         allowedTools: body.allowedTools,
         env: envVars,
         backendType: backend,
-        worktreeInfo,
+        containerId,
+        containerName,
+        containerImage,
       });
 
-      // Re-track container with real session ID
+      // Re-track container with real session ID and mark session as containerized
+      // so the bridge preserves the host cwd for sidebar grouping
       if (containerInfo) {
-        // The container was created with a temp ID; re-register under the real session ID
         containerManager.retrack(containerInfo.containerId, session.sessionId);
+        wsBridge.markContainerized(session.sessionId, cwd);
       }
 
       // Track the worktree mapping
@@ -222,6 +342,327 @@ export function createRoutes(
       console.error("[routes] Failed to create session:", msg);
       return c.json({ error: msg }, 500);
     }
+  });
+
+  // ─── SSE Session Creation (with progress streaming) ─────────────────────
+
+  api.post("/sessions/create-stream", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+
+    const emitProgress = (
+      stream: SSEStreamingApi,
+      step: CreationStepId,
+      label: string,
+      status: "in_progress" | "done" | "error",
+      detail?: string,
+    ) =>
+      stream.writeSSE({
+        event: "progress",
+        data: JSON.stringify({ step, label, status, detail }),
+      });
+
+    return streamSSE(c, async (stream) => {
+      try {
+        const backend = body.backend ?? "claude";
+        if (backend !== "claude" && backend !== "codex") {
+          await stream.writeSSE({
+            event: "error",
+            data: JSON.stringify({ error: `Invalid backend: ${String(backend)}` }),
+          });
+          return;
+        }
+
+        // --- Step: Resolve environment ---
+        await emitProgress(stream, "resolving_env", "Resolving environment...", "in_progress");
+
+        let envVars: Record<string, string> | undefined = body.env;
+        const companionEnv = body.envSlug ? envManager.getEnv(body.envSlug) : null;
+        if (body.envSlug && companionEnv) {
+          envVars = { ...companionEnv.variables, ...body.env };
+        }
+
+        await emitProgress(stream, "resolving_env", "Environment resolved", "done");
+
+        let cwd = body.cwd;
+        let worktreeInfo: { isWorktree: boolean; repoRoot: string; branch: string; actualBranch: string; worktreePath: string } | undefined;
+
+        // Validate branch name
+        if (body.branch && !/^[a-zA-Z0-9/_.\-]+$/.test(body.branch)) {
+          await stream.writeSSE({
+            event: "error",
+            data: JSON.stringify({ error: "Invalid branch name", step: "checkout_branch" }),
+          });
+          return;
+        }
+
+        // --- Step: Git operations ---
+        if (body.useWorktree && body.branch && cwd) {
+          await emitProgress(stream, "creating_worktree", "Creating worktree...", "in_progress");
+          const repoInfo = gitUtils.getRepoInfo(cwd);
+          if (repoInfo) {
+            const result = gitUtils.ensureWorktree(repoInfo.repoRoot, body.branch, {
+              baseBranch: repoInfo.defaultBranch,
+              createBranch: body.createBranch,
+              forceNew: true,
+            });
+            cwd = result.worktreePath;
+            worktreeInfo = {
+              isWorktree: true,
+              repoRoot: repoInfo.repoRoot,
+              branch: body.branch,
+              actualBranch: result.actualBranch,
+              worktreePath: result.worktreePath,
+            };
+          }
+          await emitProgress(stream, "creating_worktree", "Worktree ready", "done");
+        } else if (body.branch && cwd) {
+          const repoInfo = gitUtils.getRepoInfo(cwd);
+          if (repoInfo) {
+            await emitProgress(stream, "fetching_git", "Fetching from remote...", "in_progress");
+            const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
+            if (!fetchResult.success) {
+              await stream.writeSSE({
+                event: "error",
+                data: JSON.stringify({ error: `git fetch failed: ${fetchResult.output}`, step: "fetching_git" }),
+              });
+              return;
+            }
+            await emitProgress(stream, "fetching_git", "Fetch complete", "done");
+
+            if (repoInfo.currentBranch !== body.branch) {
+              await emitProgress(stream, "checkout_branch", `Checking out ${body.branch}...`, "in_progress");
+              gitUtils.checkoutBranch(repoInfo.repoRoot, body.branch);
+              await emitProgress(stream, "checkout_branch", `On branch ${body.branch}`, "done");
+            }
+
+            await emitProgress(stream, "pulling_git", "Pulling latest changes...", "in_progress");
+            const pullResult = gitUtils.gitPull(repoInfo.repoRoot);
+            if (!pullResult.success) {
+              console.warn(`[routes] git pull warning (non-fatal): ${pullResult.output}`);
+            }
+            await emitProgress(stream, "pulling_git", "Up to date", "done");
+          }
+        }
+
+        // --- Step: Docker image resolution ---
+        let effectiveImage = companionEnv
+          ? (body.envSlug ? envManager.getEffectiveImage(body.envSlug) : null)
+          : (body.container?.image || null);
+
+        let containerInfo: ContainerInfo | undefined;
+        let containerId: string | undefined;
+        let containerName: string | undefined;
+        let containerImage: string | undefined;
+
+        // Auth check for containerized Claude
+        if (effectiveImage && backend === "claude" && !hasContainerClaudeAuth(envVars)) {
+          await stream.writeSSE({
+            event: "error",
+            data: JSON.stringify({
+              error:
+                "Containerized Claude requires auth available inside the container. " +
+                "Set ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN / CLAUDE_CODE_AUTH_TOKEN) in the selected environment.",
+            }),
+          });
+          return;
+        }
+
+        if (effectiveImage) {
+          if (!containerManager.imageExists(effectiveImage)) {
+            const isDefaultImage = effectiveImage === "the-companion:latest" || effectiveImage === "companion-dev:latest";
+            if (isDefaultImage) {
+              if (effectiveImage === "the-companion:latest" && containerManager.imageExists("companion-dev:latest")) {
+                effectiveImage = "companion-dev:latest";
+              } else {
+                // Try pulling from Docker Hub first
+                const registryImage = ContainerManager.getRegistryImage(effectiveImage);
+                let pulled = false;
+                if (registryImage) {
+                  await emitProgress(stream, "pulling_image", "Pulling Docker image...", "in_progress");
+                  pulled = await containerManager.pullImage(registryImage, effectiveImage);
+                  if (pulled) {
+                    await emitProgress(stream, "pulling_image", "Image pulled", "done");
+                  } else {
+                    await emitProgress(stream, "pulling_image", "Pull failed, falling back to build", "error");
+                  }
+                }
+
+                // Fall back to local build if pull failed
+                if (!pulled) {
+                  const dockerfileName = effectiveImage === "the-companion:latest"
+                    ? "Dockerfile.the-companion"
+                    : "Dockerfile.companion-dev";
+                  const dockerfilePath = join(WEB_DIR, "docker", dockerfileName);
+                  if (!existsSync(dockerfilePath)) {
+                    await stream.writeSSE({
+                      event: "error",
+                      data: JSON.stringify({
+                        error: `Docker image ${effectiveImage} is missing, pull failed, and Dockerfile not found at ${dockerfilePath}`,
+                        step: "building_image",
+                      }),
+                    });
+                    return;
+                  }
+                  try {
+                    await emitProgress(stream, "building_image", "Building Docker image (this may take a minute)...", "in_progress");
+                    containerManager.buildImage(dockerfilePath, effectiveImage);
+                    await emitProgress(stream, "building_image", "Image built", "done");
+                  } catch (err) {
+                    const reason = err instanceof Error ? err.message : String(err);
+                    await stream.writeSSE({
+                      event: "error",
+                      data: JSON.stringify({
+                        error: `Docker image build failed: ${reason}`,
+                        step: "building_image",
+                      }),
+                    });
+                    return;
+                  }
+                }
+              }
+            } else {
+              await stream.writeSSE({
+                event: "error",
+                data: JSON.stringify({
+                  error: `Docker image not found locally: ${effectiveImage}. Build/pull the image first, then retry.`,
+                }),
+              });
+              return;
+            }
+          }
+
+          // --- Step: Create container ---
+          await emitProgress(stream, "creating_container", "Starting container...", "in_progress");
+          const tempId = crypto.randomUUID().slice(0, 8);
+          const cConfig: ContainerConfig = {
+            image: effectiveImage,
+            ports: companionEnv?.ports
+              ?? (Array.isArray(body.container?.ports)
+                ? body.container.ports.map(Number).filter((n: number) => n > 0)
+                : []),
+            volumes: companionEnv?.volumes ?? body.container?.volumes,
+            env: envVars,
+          };
+          try {
+            containerInfo = containerManager.createContainer(tempId, cwd, cConfig);
+          } catch (err) {
+            const reason = err instanceof Error ? err.message : String(err);
+            await stream.writeSSE({
+              event: "error",
+              data: JSON.stringify({
+                error: `Container startup failed: ${reason}`,
+                step: "creating_container",
+              }),
+            });
+            return;
+          }
+          containerId = containerInfo.containerId;
+          containerName = containerInfo.name;
+          containerImage = effectiveImage;
+          await emitProgress(stream, "creating_container", "Container running", "done");
+
+          // --- Step: Init script ---
+          if (companionEnv?.initScript?.trim()) {
+            await emitProgress(stream, "running_init_script", "Running init script...", "in_progress");
+            try {
+              const initTimeout = Number(process.env.COMPANION_INIT_SCRIPT_TIMEOUT) || 120_000;
+              const result = await containerManager.execInContainerAsync(
+                containerInfo.containerId,
+                ["sh", "-lc", companionEnv.initScript],
+                { timeout: initTimeout },
+              );
+              if (result.exitCode !== 0) {
+                console.error(
+                  `[routes] Init script failed for env "${companionEnv.name}" (exit ${result.exitCode}):\n${result.output}`,
+                );
+                containerManager.removeContainer(tempId);
+                const truncated = result.output.length > 2000
+                  ? result.output.slice(0, 500) + "\n...[truncated]...\n" + result.output.slice(-1500)
+                  : result.output;
+                await stream.writeSSE({
+                  event: "error",
+                  data: JSON.stringify({
+                    error: `Init script failed (exit ${result.exitCode}):\n${truncated}`,
+                    step: "running_init_script",
+                  }),
+                });
+                return;
+              }
+              await emitProgress(stream, "running_init_script", "Init script complete", "done");
+            } catch (e) {
+              containerManager.removeContainer(tempId);
+              const reason = e instanceof Error ? e.message : String(e);
+              await stream.writeSSE({
+                event: "error",
+                data: JSON.stringify({
+                  error: `Init script execution failed: ${reason}`,
+                  step: "running_init_script",
+                }),
+              });
+              return;
+            }
+          }
+        }
+
+        // --- Step: Launch CLI ---
+        await emitProgress(stream, "launching_cli", "Launching Claude Code...", "in_progress");
+
+        const session = launcher.launch({
+          model: body.model,
+          permissionMode: body.permissionMode,
+          cwd,
+          claudeBinary: body.claudeBinary,
+          codexBinary: body.codexBinary,
+          codexInternetAccess: backend === "codex" && body.codexInternetAccess === true,
+          codexSandbox: backend === "codex" && body.codexInternetAccess === true
+            ? "danger-full-access"
+            : "workspace-write",
+          allowedTools: body.allowedTools,
+          env: envVars,
+          backendType: backend,
+          containerId,
+          containerName,
+          containerImage,
+        });
+
+        // Re-track container and mark session as containerized
+        if (containerInfo) {
+          containerManager.retrack(containerInfo.containerId, session.sessionId);
+          wsBridge.markContainerized(session.sessionId, cwd);
+        }
+
+        // Track worktree mapping
+        if (worktreeInfo) {
+          worktreeTracker.addMapping({
+            sessionId: session.sessionId,
+            repoRoot: worktreeInfo.repoRoot,
+            branch: worktreeInfo.branch,
+            actualBranch: worktreeInfo.actualBranch,
+            worktreePath: worktreeInfo.worktreePath,
+            createdAt: Date.now(),
+          });
+        }
+
+        await emitProgress(stream, "launching_cli", "Session started", "done");
+
+        // --- Done ---
+        await stream.writeSSE({
+          event: "done",
+          data: JSON.stringify({
+            sessionId: session.sessionId,
+            state: session.state,
+            cwd: session.cwd,
+          }),
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("[routes] Failed to create session (stream):", msg);
+        await stream.writeSSE({
+          event: "error",
+          data: JSON.stringify({ error: msg }),
+        });
+      }
+    });
   });
 
   api.get("/sessions", (c) => {
@@ -322,8 +763,11 @@ export function createRoutes(
 
   api.post("/sessions/:id/relaunch", async (c) => {
     const id = c.req.param("id");
-    const ok = await launcher.relaunch(id);
-    if (!ok) return c.json({ error: "Session not found" }, 404);
+    const result = await launcher.relaunch(id);
+    if (!result.ok) {
+      const status = result.error?.includes("not found") || result.error?.includes("Session not found") ? 404 : 503;
+      return c.json({ error: result.error || "Relaunch failed" }, status);
+    }
     return c.json({ ok: true });
   });
 
@@ -337,9 +781,7 @@ export function createRoutes(
     // Clean up container if any
     containerManager.removeContainer(id);
 
-    // Clean up worktree if no other sessions use it (force: delete is destructive)
     const worktreeResult = cleanupWorktree(id, true);
-
     prPoller?.unwatch(id);
     launcher.removeSession(id);
     wsBridge.closeSession(id);
@@ -360,9 +802,7 @@ export function createRoutes(
     // Stop PR polling for this session
     prPoller?.unwatch(id);
 
-    // Clean up worktree if no other sessions use it
     const worktreeResult = cleanupWorktree(id, body.force);
-
     launcher.setArchived(id, true);
     sessionStore.setArchived(id, true);
     return c.json({ ok: true, worktree: worktreeResult });
@@ -460,7 +900,7 @@ export function createRoutes(
 
   api.get("/containers/status", (c) => {
     const available = containerManager.checkDocker();
-    const version = containerManager.getDockerVersion();
+    const version = available ? containerManager.getDockerVersion() : null;
     return c.json({ available, version });
   });
 
@@ -727,7 +1167,13 @@ export function createRoutes(
   api.post("/envs", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     try {
-      const env = envManager.createEnv(body.name, body.variables || {});
+      const env = envManager.createEnv(body.name, body.variables || {}, {
+        dockerfile: body.dockerfile,
+        baseImage: body.baseImage,
+        ports: body.ports,
+        volumes: body.volumes,
+        initScript: body.initScript,
+      });
       return c.json(env, 201);
     } catch (e: unknown) {
       return c.json({ error: e instanceof Error ? e.message : String(e) }, 400);
@@ -741,6 +1187,12 @@ export function createRoutes(
       const env = envManager.updateEnv(slug, {
         name: body.name,
         variables: body.variables,
+        dockerfile: body.dockerfile,
+        imageTag: body.imageTag,
+        baseImage: body.baseImage,
+        ports: body.ports,
+        volumes: body.volumes,
+        initScript: body.initScript,
       });
       if (!env) return c.json({ error: "Environment not found" }, 404);
       return c.json(env);
@@ -792,6 +1244,64 @@ export function createRoutes(
     const body = await c.req.json().catch(() => ({}));
     skillManager.setSkillState(slug, body);
     return c.json({ ok: true });
+  });
+
+  // ─── Docker Image Builds ─────────────────────────────────────────
+
+  api.post("/envs/:slug/build", async (c) => {
+    const slug = c.req.param("slug");
+    const env = envManager.getEnv(slug);
+    if (!env) return c.json({ error: "Environment not found" }, 404);
+    if (!env.dockerfile) return c.json({ error: "No Dockerfile configured for this environment" }, 400);
+    if (!containerManager.checkDocker()) return c.json({ error: "Docker is not available" }, 503);
+
+    const tag = `companion-env-${slug}:latest`;
+    envManager.updateBuildStatus(slug, "building");
+
+    try {
+      const result = await containerManager.buildImageStreaming(env.dockerfile, tag);
+      if (result.success) {
+        envManager.updateBuildStatus(slug, "success", { imageTag: tag });
+        return c.json({ success: true, imageTag: tag, log: result.log });
+      } else {
+        envManager.updateBuildStatus(slug, "error", { error: result.log.slice(-500) });
+        return c.json({ success: false, log: result.log }, 500);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      envManager.updateBuildStatus(slug, "error", { error: msg });
+      return c.json({ success: false, error: msg }, 500);
+    }
+  });
+
+  api.get("/envs/:slug/build-status", (c) => {
+    const env = envManager.getEnv(c.req.param("slug"));
+    if (!env) return c.json({ error: "Environment not found" }, 404);
+    return c.json({
+      buildStatus: env.buildStatus || "idle",
+      buildError: env.buildError,
+      lastBuiltAt: env.lastBuiltAt,
+      imageTag: env.imageTag,
+    });
+  });
+
+  api.post("/docker/build-base", async (c) => {
+    if (!containerManager.checkDocker()) return c.json({ error: "Docker is not available" }, 503);
+    const dockerfilePath = join(WEB_DIR, "docker", "Dockerfile.the-companion");
+    if (!existsSync(dockerfilePath)) {
+      return c.json({ error: "Base Dockerfile not found at " + dockerfilePath }, 404);
+    }
+    try {
+      const log = containerManager.buildImage(dockerfilePath, "the-companion:latest");
+      return c.json({ success: true, log });
+    } catch (e: unknown) {
+      return c.json({ success: false, error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  });
+
+  api.get("/docker/base-image", (c) => {
+    const exists = containerManager.imageExists("the-companion:latest");
+    return c.json({ exists, image: "the-companion:latest" });
   });
 
   // ─── Settings (~/.companion/settings.json) ────────────────────────
@@ -853,46 +1363,33 @@ export function createRoutes(
     }
   });
 
-  api.get("/git/worktrees", (c) => {
-    const repoRoot = c.req.query("repoRoot");
-    if (!repoRoot) return c.json({ error: "repoRoot required" }, 400);
-    try {
-      return c.json(gitUtils.listWorktrees(repoRoot));
-    } catch (e: unknown) {
-      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
-    }
-  });
-
-  api.post("/git/worktree", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
-    const { repoRoot, branch, baseBranch, createBranch } = body;
-    if (!repoRoot || !branch)
-      return c.json({ error: "repoRoot and branch required" }, 400);
-    try {
-      const result = gitUtils.ensureWorktree(repoRoot, branch, {
-        baseBranch,
-        createBranch,
-      });
-      return c.json(result);
-    } catch (e: unknown) {
-      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
-    }
-  });
-
-  api.delete("/git/worktree", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
-    const { repoRoot, worktreePath, force } = body;
-    if (!repoRoot || !worktreePath)
-      return c.json({ error: "repoRoot and worktreePath required" }, 400);
-    const result = gitUtils.removeWorktree(repoRoot, worktreePath, { force });
-    return c.json(result);
-  });
-
   api.post("/git/fetch", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const { repoRoot } = body;
     if (!repoRoot) return c.json({ error: "repoRoot required" }, 400);
     return c.json(gitUtils.gitFetch(repoRoot));
+  });
+
+  api.get("/git/worktrees", (c) => {
+    const repoRoot = c.req.query("repoRoot");
+    if (!repoRoot) return c.json({ error: "repoRoot required" }, 400);
+    return c.json(gitUtils.listWorktrees(repoRoot));
+  });
+
+  api.post("/git/worktree", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const { repoRoot, branch, baseBranch, createBranch } = body;
+    if (!repoRoot || !branch) return c.json({ error: "repoRoot and branch required" }, 400);
+    const result = gitUtils.ensureWorktree(repoRoot, branch, { baseBranch, createBranch });
+    return c.json(result);
+  });
+
+  api.delete("/git/worktree", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const { repoRoot, worktreePath, force } = body;
+    if (!repoRoot || !worktreePath) return c.json({ error: "repoRoot and worktreePath required" }, 400);
+    const result = gitUtils.removeWorktree(repoRoot, worktreePath, { force });
+    return c.json(result);
   });
 
   api.post("/git/pull", async (c) => {
@@ -1101,51 +1598,6 @@ export function createRoutes(
       message: "Update started. Server will restart shortly.",
     });
   });
-
-  // ─── Helper ─────────────────────────────────────────────────────────
-
-  function cleanupWorktree(
-    sessionId: string,
-    force?: boolean,
-  ): { cleaned?: boolean; dirty?: boolean; path?: string } | undefined {
-    const mapping = worktreeTracker.getBySession(sessionId);
-    if (!mapping) return undefined;
-
-    // Check if any other sessions still use this worktree
-    if (worktreeTracker.isWorktreeInUse(mapping.worktreePath, sessionId)) {
-      worktreeTracker.removeBySession(sessionId);
-      return { cleaned: false, path: mapping.worktreePath };
-    }
-
-    // Auto-remove if clean, or force-remove if requested
-    const dirty = gitUtils.isWorktreeDirty(mapping.worktreePath);
-    if (dirty && !force) {
-      console.log(
-        `[routes] Worktree ${mapping.worktreePath} is dirty, not auto-removing`,
-      );
-      // Keep the mapping so the worktree remains trackable
-      return { cleaned: false, dirty: true, path: mapping.worktreePath };
-    }
-
-    // Delete the companion-managed branch if it differs from the conceptual branch
-    const branchToDelete =
-      mapping.actualBranch && mapping.actualBranch !== mapping.branch
-        ? mapping.actualBranch
-        : undefined;
-    const result = gitUtils.removeWorktree(
-      mapping.repoRoot,
-      mapping.worktreePath,
-      { force: dirty, branchToDelete },
-    );
-    if (result.removed) {
-      // Only remove the mapping after successful cleanup
-      worktreeTracker.removeBySession(sessionId);
-      console.log(
-        `[routes] ${dirty ? "Force-removed dirty" : "Auto-removed clean"} worktree ${mapping.worktreePath}`,
-      );
-    }
-    return { cleaned: result.removed, path: mapping.worktreePath };
-  }
 
   // ─── Terminal ──────────────────────────────────────────────────────
 
@@ -1414,6 +1866,42 @@ export function createRoutes(
     const id = c.req.param("id");
     return c.json(cronScheduler?.getExecutions(id) ?? []);
   });
+
+  // ─── Worktree cleanup helper ────────────────────────────────────
+
+  function cleanupWorktree(
+    sessionId: string,
+    force?: boolean,
+  ): { cleaned?: boolean; dirty?: boolean; path?: string } | undefined {
+    const mapping = worktreeTracker.getBySession(sessionId);
+    if (!mapping) return undefined;
+
+    // Check if other sessions still use this worktree
+    if (worktreeTracker.isWorktreeInUse(mapping.worktreePath, sessionId)) {
+      worktreeTracker.removeBySession(sessionId);
+      return { cleaned: false, path: mapping.worktreePath };
+    }
+
+    // Auto-remove if clean, or force-remove if requested
+    const dirty = gitUtils.isWorktreeDirty(mapping.worktreePath);
+    if (dirty && !force) {
+      return { cleaned: false, dirty: true, path: mapping.worktreePath };
+    }
+
+    // Delete companion-managed branch if it differs from the user-selected branch
+    const branchToDelete =
+      mapping.actualBranch && mapping.actualBranch !== mapping.branch
+        ? mapping.actualBranch
+        : undefined;
+    const result = gitUtils.removeWorktree(mapping.repoRoot, mapping.worktreePath, {
+      force: dirty,
+      branchToDelete,
+    });
+    if (result.removed) {
+      worktreeTracker.removeBySession(sessionId);
+    }
+    return { cleaned: result.removed, path: mapping.worktreePath };
+  }
 
   return api;
 }
