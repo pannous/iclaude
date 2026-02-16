@@ -153,12 +153,14 @@ function notifySessionDone(sessionId: string, isError: boolean, resultText?: str
   // Only notify for background sessions (not the one the user is looking at)
   if (store.currentSessionId === sessionId) return;
   if (!("Notification" in window)) return;
-  // Only notify if there's actual result text, not generic completion messages
-  if (!resultText) return;
 
   const sdkTitle = store.sdkSessions.find((s) => s.sessionId === sessionId)?.title;
   const title = sdkTitle || store.sessionNames.get(sessionId) || sessionId.slice(0, 8);
-  const body = firstParagraph(resultText);
+  const body = resultText
+    ? firstParagraph(resultText)
+    : isError
+    ? "Session ended with an error"
+    : "Session finished successfully";
 
   const createNotification = () => {
     const notification = new Notification(title, { body, tag: `session-done-${sessionId}` });
