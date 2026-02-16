@@ -423,9 +423,6 @@ function handleParsedMessage(
       if (!document.hasFocus() && store.notificationSound) {
         playNotificationSound();
       }
-      if (!document.hasFocus() && store.notificationDesktop) {
-        sendBrowserNotification("Session completed", "Claude finished the task", sessionId);
-      }
       if (r.is_error && r.errors?.length) {
         store.appendMessage(sessionId, {
           id: nextId(),
