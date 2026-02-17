@@ -1263,6 +1263,32 @@ export function createRoutes(
 
   // ─── Skills (~/.companion/skills/) ──────────────────────────────────
 
+  // Shell exec for HTML skill panels (vibe.command() calls this)
+  api.post("/exec", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const command = body.command;
+    if (typeof command !== "string" || !command.trim()) {
+      return c.json({ success: false, error: "command is required" }, 400);
+    }
+    const cwd = typeof body.cwd === "string" ? resolve(body.cwd) : homedir();
+    try {
+      const output = execSync(command, {
+        cwd,
+        encoding: "utf-8",
+        timeout: 15_000,
+        maxBuffer: 1024 * 1024,
+      });
+      return c.json({ success: true, output });
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; message?: string };
+      return c.json({
+        success: false,
+        output: e.stdout || "",
+        error: e.stderr || e.message || "Command failed",
+      });
+    }
+  });
+
   api.get("/skills", (c) => {
     try {
       return c.json(skillManager.listSkills());
