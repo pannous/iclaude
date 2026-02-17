@@ -107,7 +107,7 @@ export function TopBar() {
                 Companion
               </span>
             ) : (
-              <div className="flex flex-col min-w-0">
+              <div className="flex flex-col min-w-0 max-w-[160px] sm:max-w-[320px]">
                 {sessionTitle && (
                   <span className="text-[13px] font-medium text-cc-fg truncate">{sessionTitle}</span>
                 )}
