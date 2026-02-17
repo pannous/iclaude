@@ -103,8 +103,25 @@ wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
   const now = Date.now();
   const cooldown = relaunchCooldowns.get(sessionId);
   if (cooldown && now < cooldown.until) return;
-  const info = launcher.getSession(sessionId);
+  let info = launcher.getSession(sessionId);
   if (info?.archived) return;
+
+  // Session exists in ws-bridge but launcher lost track of it (e.g. launcher.json deleted).
+  // Adopt it so the relaunch below can proceed.
+  if (!info) {
+    const bridgeSession = wsBridge.getSession(sessionId);
+    if (bridgeSession) {
+      launcher.adoptOrphan(sessionId, {
+        backendType: bridgeSession.backendType,
+        model: bridgeSession.state.model || undefined,
+        cwd: bridgeSession.state.cwd || undefined,
+        permissionMode: bridgeSession.state.permissionMode || undefined,
+        cliSessionId: bridgeSession.cliSessionId,
+      });
+      info = launcher.getSession(sessionId);
+    }
+  }
+
   if (info && info.state !== "starting") {
     const attempts = (cooldown?.attempts ?? 0) + 1;
     const backoff = Math.min(5_000 * 2 ** (attempts - 1), MAX_RELAUNCH_COOLDOWN);

@@ -232,6 +232,31 @@ export class CliLauncher {
   }
 
   /**
+   * Register a session that exists in the WsBridge but is unknown to the launcher
+   * (e.g. after launcher.json was lost). Marks it as "exited" so the next
+   * onCLIRelaunchNeeded call will pick it up and relaunch it.
+   */
+  adoptOrphan(
+    sessionId: string,
+    opts: { backendType?: BackendType; model?: string; cwd?: string; permissionMode?: string; cliSessionId?: string },
+  ): void {
+    if (this.sessions.has(sessionId)) return;
+    const info: SdkSessionInfo = {
+      sessionId,
+      state: "exited",
+      backendType: opts.backendType ?? "claude",
+      model: opts.model,
+      permissionMode: opts.permissionMode,
+      cwd: opts.cwd || process.cwd(),
+      createdAt: Date.now(),
+      cliSessionId: opts.cliSessionId,
+    };
+    console.log(`[cli-launcher] Adopting orphan session ${sessionId} from ws-bridge state`);
+    this.sessions.set(sessionId, info);
+    this.persistState();
+  }
+
+  /**
    * Launch a new CLI session (Claude Code or Codex).
    */
   launch(options: LaunchOptions = {}): SdkSessionInfo {
