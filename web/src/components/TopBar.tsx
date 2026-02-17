@@ -64,6 +64,14 @@ export function TopBar() {
       null
     );
   });
+  const gitBranch = useStore((s) => {
+    if (!currentSessionId) return null;
+    return (
+      s.sessions.get(currentSessionId)?.git_branch ||
+      s.sdkSessions.find((sdk) => sdk.sessionId === currentSessionId)?.gitBranch ||
+      null
+    );
+  });
   const isConnected = currentSessionId ? (cliConnected.get(currentSessionId) ?? false) : false;
   const status = currentSessionId ? (sessionStatus.get(currentSessionId) ?? null) : null;
   const isAssistant = !!(currentSessionId && assistantSessionId && currentSessionId === assistantSessionId);
@@ -123,6 +131,23 @@ export function TopBar() {
                 </button>
               )}
             </div>
+            {/* Folder + Branch */}
+            {cwd && !isAssistant && (
+              <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-cc-muted ml-1">
+                <span className="opacity-30">|</span>
+                <span title={cwd} className="truncate max-w-[120px] cursor-default">
+                  {cwd.split("/").filter(Boolean).pop() || "/"}
+                </span>
+                {gitBranch && (
+                  <>
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 shrink-0 opacity-50">
+                      <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.116.862a2.25 2.25 0 10-.862.862A4.48 4.48 0 007.25 7.5h-1.5A2.25 2.25 0 003.5 9.75v.318a2.25 2.25 0 101.5 0V9.75a.75.75 0 01.75-.75h1.5a5.98 5.98 0 003.884-1.435A2.25 2.25 0 109.634 3.362zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5z" />
+                    </svg>
+                    <span className="truncate max-w-[140px]">{gitBranch}</span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
