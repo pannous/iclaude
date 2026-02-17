@@ -213,6 +213,21 @@ describe("Composer plan mode toggle", () => {
       mode: "bypassPermissions",
     });
   });
+
+  it("pressing Shift+Tab toggles mode even when textarea is not focused", () => {
+    // Global keydown on document should still trigger toggleMode
+    render(<Composer sessionId="s1" />);
+
+    // Focus something else (document.body) so textarea is not active
+    (document.body as HTMLElement).focus();
+
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+
+    expect(mockSendToSession).toHaveBeenCalledWith("s1", {
+      type: "set_permission_mode",
+      mode: "bypassPermissions",
+    });
+  });
 });
 
 // ─── Interrupt button ────────────────────────────────────────────────────────

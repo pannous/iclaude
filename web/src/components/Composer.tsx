@@ -241,6 +241,18 @@ export function Composer({ sessionId }: { sessionId: string }) {
     store.updateSession(sessionId, { permissionMode: nextMode });
   }
 
+  // Global Shift+Tab listener so mode toggle works even when textarea is not focused
+  useEffect(() => {
+    function handleGlobalKeyDown(e: KeyboardEvent) {
+      if (e.key === "Tab" && e.shiftKey && document.activeElement !== textareaRef.current) {
+        e.preventDefault();
+        toggleMode();
+      }
+    }
+    document.addEventListener("keydown", handleGlobalKeyDown);
+    return () => document.removeEventListener("keydown", handleGlobalKeyDown);
+  });
+
   const sessionStatus = useStore((s) => s.sessionStatus);
   const isRunning = sessionStatus.get(sessionId) === "running";
   const canSend = text.trim().length > 0 && isConnected;
