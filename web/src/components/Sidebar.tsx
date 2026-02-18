@@ -114,7 +114,11 @@ export function Sidebar() {
     setShowResumePicker(true);
     try {
       const list = await api.listResumableSessions();
-      setResumableSessions(list);
+      // Filter out sessions that already appear in the active session list
+      const activeCliIds = new Set(
+        useStore.getState().sdkSessions.map((s) => s.cliSessionId).filter(Boolean)
+      );
+      setResumableSessions(list.filter((rs) => !activeCliIds.has(rs.sessionId)));
     } catch {
       setResumableSessions([]);
     }

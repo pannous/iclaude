@@ -56,6 +56,8 @@ export interface SdkSessionInfo {
   containerName?: string;
   containerImage?: string;
   name?: string;
+  /** The CLI's internal session ID, used for --resume */
+  cliSessionId?: string;
   backendType?: BackendType;
   gitBranch?: string;
   gitAhead?: number;
