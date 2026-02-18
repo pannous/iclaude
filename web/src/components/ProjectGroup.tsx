@@ -96,16 +96,17 @@ export function ProjectGroup({
             onNewSessionInFolder(group.key);
           }}
           title={`New session in ${group.label}`}
-          className="shrink-0 p-1 rounded opacity-0 group-hover/project:opacity-100 text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-all cursor-pointer"
+          className="shrink-0 p-1.5 rounded can-hover:opacity-0 can-hover:group-hover/project:opacity-100 text-cc-muted hover:text-cc-primary hover:bg-cc-hover transition-all cursor-pointer"
         >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
             <path d="M8 3v10M3 8h10" />
           </svg>
         </button>
+        <span className="flex-1" />
         <button
           onClick={(e) => onArchiveGroup(e, group.key)}
           title={`Archive all ${group.sessions.length} sessions in ${group.label}`}
-          className="shrink-0 p-1 mr-1 rounded opacity-0 group-hover/project:opacity-100 text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-all cursor-pointer"
+          className="shrink-0 p-1 mr-1 rounded can-hover:opacity-0 can-hover:group-hover/project:opacity-100 text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-all cursor-pointer"
         >
           <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
             <path d="M1.75 3A1.75 1.75 0 000 4.75v.5C0 6.216.784 7 1.75 7h12.5A1.75 1.75 0 0016 5.25v-.5A1.75 1.75 0 0014.25 3H1.75zM1.5 4.75a.25.25 0 01.25-.25h12.5a.25.25 0 01.25.25v.5a.25.25 0 01-.25.25H1.75a.25.25 0 01-.25-.25v-.5zM1.75 8.5A.75.75 0 001 9.25v4a1.75 1.75 0 001.75 1.75h10.5A1.75 1.75 0 0015 13.25v-4a.75.75 0 00-1.5 0v4a.25.25 0 01-.25.25H2.75a.25.25 0 01-.25-.25v-4a.75.75 0 00-.75-.75zM6 10.25a.75.75 0 01.75-.75h2.5a.75.75 0 010 1.5h-2.5a.75.75 0 01-.75-.75z" />
