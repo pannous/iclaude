@@ -5,6 +5,40 @@ import { CLAUDE_MODES, CODEX_MODES } from "../utils/backends.js";
 import { api, type SavedPrompt } from "../api.js";
 import type { ModeOption } from "../utils/backends.js";
 
+// Web Speech API types (not in all TS DOM libs)
+interface SpeechRecognitionResult {
+  readonly isFinal: boolean;
+  readonly length: number;
+  [index: number]: { transcript: string; confidence: number };
+}
+interface SpeechRecognitionResultList {
+  readonly length: number;
+  [index: number]: SpeechRecognitionResult;
+}
+interface SpeechRecognitionEvent extends Event {
+  readonly resultIndex: number;
+  readonly results: SpeechRecognitionResultList;
+}
+interface SpeechRecognitionInstance extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+interface SpeechRecognitionConstructor {
+  new(): SpeechRecognitionInstance;
+}
+
+const SpeechRecognitionAPI: SpeechRecognitionConstructor | undefined =
+  typeof window !== "undefined"
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? ((window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition) as SpeechRecognitionConstructor | undefined
+    : undefined;
+
 let idCounter = 0;
 
 interface ImageAttachment {
@@ -50,7 +84,11 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
   const [promptsLoading, setPromptsLoading] = useState(false);
   const [caretPos, setCaretPos] = useState(0);
+  const [isListening, setIsListening] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const baseTextRef = useRef("");
+  const finalTranscriptRef = useRef("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const mentionMenuRef = useRef<HTMLDivElement>(null);
@@ -211,6 +249,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   }, [mentionContext, text]);
 
   function handleSend() {
+    if (isListening) recognitionRef.current?.stop();
     const msg = text.trim();
     if (!msg || !isConnected) return;
 
@@ -380,6 +419,57 @@ export function Composer({ sessionId }: { sessionId: string }) {
     sendToSession(sessionId, { type: "set_permission_mode", mode: nextMode });
     store.updateSession(sessionId, { permissionMode: nextMode });
   }
+
+  function toggleListening() {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    if (!SpeechRecognitionAPI) return;
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = navigator.language || "en-US";
+
+    baseTextRef.current = text;
+    finalTranscriptRef.current = "";
+
+    recognition.onresult = (event) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscriptRef.current += transcript;
+        } else {
+          interim += transcript;
+        }
+      }
+      const base = baseTextRef.current;
+      const sep = base && !base.endsWith(" ") ? " " : "";
+      setText(base + sep + finalTranscriptRef.current + interim);
+    };
+
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  }
+
+  // Auto-resize textarea when speech recognition adds text
+  useEffect(() => {
+    if (!isListening || !textareaRef.current) return;
+    const ta = textareaRef.current;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
+  }, [text, isListening]);
+
+  // Cleanup speech recognition on unmount
+  useEffect(() => {
+    return () => { recognitionRef.current?.stop(); };
+  }, []);
 
   // Global Shift+Tab listener so mode toggle works even when textarea is not focused
   useEffect(() => {
@@ -664,6 +754,27 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   <path d="M2 11l3-3 2 2 3-4 4 5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
+
+              {SpeechRecognitionAPI && (
+                <button
+                  onClick={toggleListening}
+                  disabled={!isConnected}
+                  className={`flex items-center justify-center w-9 h-9 rounded-lg border transition-colors ${
+                    isListening
+                      ? "text-cc-error border-cc-error/40 bg-cc-error/10 hover:bg-cc-error/20 cursor-pointer animate-pulse"
+                      : isConnected
+                        ? "text-cc-muted border-cc-border hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
+                        : "text-cc-muted opacity-30 border-cc-border/60 cursor-not-allowed"
+                  }`}
+                  title={isListening ? "Stop dictation" : "Start dictation"}
+                >
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+                    <rect x="5.5" y="1.5" width="5" height="8" rx="2.5" />
+                    <path d="M3.5 7.5a4.5 4.5 0 009 0" />
+                    <path d="M8 12.5v2" />
+                  </svg>
+                </button>
+              )}
 
               {isRunning ? (
                 <button
