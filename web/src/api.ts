@@ -282,13 +282,8 @@ export interface CronJobExecution {
 }
 
 export interface SavedPrompt {
-  id: string;
   name: string;
   content: string;
-  scope: "global" | "project";
-  projectPath?: string;
-  createdAt: number;
-  updatedAt: number;
 }
 
 // ─── SSE Session Creation ────────────────────────────────────────────────────
@@ -593,18 +588,13 @@ export const api = {
   sendSessionMessage: (sessionId: string, content: string) =>
     post<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/message`, { content }),
 
-  // Saved prompts
-  listPrompts: (cwd?: string, scope?: "global" | "project" | "all") => {
-    const params = new URLSearchParams();
-    if (cwd) params.set("cwd", cwd);
-    if (scope) params.set("scope", scope);
-    const query = params.toString();
-    return get<SavedPrompt[]>(`/prompts${query ? `?${query}` : ""}`);
+  // Saved prompts ({cwd}/prompts/*.md)
+  listPrompts: (cwd?: string) => {
+    if (!cwd) return Promise.resolve([] as SavedPrompt[]);
+    return get<SavedPrompt[]>(`/prompts?cwd=${encodeURIComponent(cwd)}`);
   },
-  createPrompt: (data: { name: string; content: string; scope: "global" | "project"; cwd?: string }) =>
+  createPrompt: (data: { name: string; content: string; cwd: string }) =>
     post<SavedPrompt>("/prompts", data),
-  updatePrompt: (id: string, data: { name?: string; content?: string }) =>
-    put<SavedPrompt>(`/prompts/${encodeURIComponent(id)}`, data),
-  deletePrompt: (id: string) =>
-    del<{ ok: boolean }>(`/prompts/${encodeURIComponent(id)}`),
+  deletePrompt: (name: string, cwd: string) =>
+    del<{ ok: boolean }>(`/prompts/${encodeURIComponent(name)}?cwd=${encodeURIComponent(cwd)}`),
 };

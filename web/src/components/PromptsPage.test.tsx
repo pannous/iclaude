@@ -13,7 +13,6 @@ let mockState: MockStoreState;
 const mockApi = {
   listPrompts: vi.fn(),
   createPrompt: vi.fn(),
-  updatePrompt: vi.fn(),
   deletePrompt: vi.fn(),
 };
 
@@ -21,7 +20,6 @@ vi.mock("../api.js", () => ({
   api: {
     listPrompts: (...args: unknown[]) => mockApi.listPrompts(...args),
     createPrompt: (...args: unknown[]) => mockApi.createPrompt(...args),
-    updatePrompt: (...args: unknown[]) => mockApi.updatePrompt(...args),
     deletePrompt: (...args: unknown[]) => mockApi.deletePrompt(...args),
   },
 }));
@@ -42,38 +40,21 @@ beforeEach(() => {
     sdkSessions: [],
   };
   mockApi.listPrompts.mockResolvedValue([]);
-  mockApi.createPrompt.mockResolvedValue({
-    id: "p1",
-    name: "review-pr",
-    content: "Review this PR",
-    scope: "project",
-    projectPath: "/repo",
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  });
-  mockApi.updatePrompt.mockResolvedValue({
-    id: "p1",
-    name: "updated",
-    content: "Updated prompt content",
-    scope: "project",
-    projectPath: "/repo",
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  });
+  mockApi.createPrompt.mockResolvedValue({ name: "review-pr", content: "Review this PR" });
   mockApi.deletePrompt.mockResolvedValue({ ok: true });
 });
 
 describe("PromptsPage", () => {
   it("loads prompts on mount using current session cwd", async () => {
-    // Validates global-only prompt listing is fetched with global scope.
+    // Validates prompt listing is fetched with project cwd.
     render(<PromptsPage embedded />);
     await waitFor(() => {
-      expect(mockApi.listPrompts).toHaveBeenCalledWith("/repo", "global");
+      expect(mockApi.listPrompts).toHaveBeenCalledWith("/repo");
     });
   });
 
-  it("creates a global prompt", async () => {
-    // Validates create payload is forced to global scope.
+  it("creates a prompt with cwd", async () => {
+    // Validates create payload includes cwd for file-based storage.
     render(<PromptsPage embedded />);
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "review-pr" } });
     fireEvent.change(screen.getByLabelText("Content"), { target: { value: "Review this PR" } });
@@ -83,13 +64,13 @@ describe("PromptsPage", () => {
       expect(mockApi.createPrompt).toHaveBeenCalledWith({
         name: "review-pr",
         content: "Review this PR",
-        scope: "global",
+        cwd: "/repo",
       });
     });
   });
 
-  it("can create a global prompt without cwd", async () => {
-    // Edge case: creation should work with no active session in global-only mode.
+  it("disables create button without cwd", async () => {
+    // Edge case: without an active session, create should be disabled.
     mockState = {
       currentSessionId: null,
       sessions: new Map(),
@@ -98,87 +79,51 @@ describe("PromptsPage", () => {
     render(<PromptsPage embedded />);
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "global" } });
     fireEvent.change(screen.getByLabelText("Content"), { target: { value: "Always do X" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create Prompt" }));
-
-    await waitFor(() => {
-      expect(mockApi.createPrompt).toHaveBeenCalledWith({
-        name: "global",
-        content: "Always do X",
-        scope: "global",
-      });
-    });
+    const btn = screen.getByRole("button", { name: "Create Prompt" });
+    expect(btn).toBeDisabled();
   });
 
   it("deletes an existing prompt", async () => {
-    // Validates delete action wiring from list item to API.
+    // Validates delete action passes name and cwd to API.
     mockApi.listPrompts.mockResolvedValueOnce([
-      {
-        id: "p1",
-        name: "review-pr",
-        content: "Review this PR",
-        scope: "global",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
+      { name: "review-pr", content: "Review this PR" },
     ]);
     render(<PromptsPage embedded />);
     await screen.findByText("review-pr");
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
 
     await waitFor(() => {
-      expect(mockApi.deletePrompt).toHaveBeenCalledWith("p1");
+      expect(mockApi.deletePrompt).toHaveBeenCalledWith("review-pr", "/repo");
     });
   });
 
-  it("edits an existing prompt", async () => {
-    // Validates inline edit mode persists name and content through updatePrompt.
+  it("edits an existing prompt content", async () => {
+    // Validates inline edit saves updated content via createPrompt (overwrite).
     mockApi.listPrompts.mockResolvedValueOnce([
-      {
-        id: "p1",
-        name: "review-pr",
-        content: "Review this PR",
-        scope: "global",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
+      { name: "review-pr", content: "Review this PR" },
     ]);
     render(<PromptsPage embedded />);
     await screen.findByText("review-pr");
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
-    const nameInput = screen.getByDisplayValue("review-pr");
     const contentInput = screen.getByDisplayValue("Review this PR");
-    fireEvent.change(nameInput, { target: { value: "review-updated" } });
     fireEvent.change(contentInput, { target: { value: "Updated content" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
-      expect(mockApi.updatePrompt).toHaveBeenCalledWith("p1", {
-        name: "review-updated",
+      expect(mockApi.createPrompt).toHaveBeenCalledWith({
+        name: "review-pr",
         content: "Updated content",
+        cwd: "/repo",
       });
     });
   });
 
   it("filters prompts by search query", async () => {
-    // Validates in-page filtering over prompt name/content/scope.
+    // Validates in-page filtering over prompt name/content.
     mockApi.listPrompts.mockResolvedValueOnce([
-      {
-        id: "p1",
-        name: "review-pr",
-        content: "Review this PR",
-        scope: "global",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
-      {
-        id: "p2",
-        name: "write-tests",
-        content: "Write missing tests",
-        scope: "project",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
+      { name: "review-pr", content: "Review this PR" },
+      { name: "write-tests", content: "Write missing tests" },
     ]);
     render(<PromptsPage embedded />);
     await screen.findByText("review-pr");

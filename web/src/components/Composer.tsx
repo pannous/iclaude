@@ -107,7 +107,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const refreshPrompts = useCallback(async () => {
     setPromptsLoading(true);
     try {
-      const prompts = await api.listPrompts(sessionData?.cwd, "global");
+      const prompts = await api.listPrompts(sessionData?.cwd);
       setSavedPrompts(prompts.filter((p) => !!p.name.trim()));
     } catch {
       setSavedPrompts([]);
@@ -490,13 +490,12 @@ export function Composer({ sessionId }: { sessionId: string }) {
     const content = text.trim();
     const name = savePromptName.trim();
     if (!content || !name) return;
-    const payload: { name: string; content: string; scope: "global" | "project"; cwd?: string } = {
-      name,
-      content,
-      scope: "global",
-    };
+    if (!sessionData?.cwd) {
+      setSavePromptError("No project directory available.");
+      return;
+    }
     try {
-      await api.createPrompt(payload);
+      await api.createPrompt({ name, content, cwd: sessionData.cwd });
       await refreshPrompts();
       setSavePromptOpen(false);
       setSavePromptName("");
@@ -604,7 +603,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
               ) : filteredPrompts.length > 0 ? (
                 filteredPrompts.map((prompt, i) => (
                   <button
-                    key={prompt.id}
+                    key={prompt.name}
                     data-prompt-index={i}
                     onClick={() => selectPrompt(prompt)}
                     className={`w-full px-3 py-2 text-left flex items-center gap-2.5 transition-colors cursor-pointer ${
@@ -623,7 +622,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                       <div className="text-[13px] font-medium text-cc-fg truncate">@{prompt.name}</div>
                       <div className="text-[11px] text-cc-muted truncate">{prompt.content}</div>
                     </div>
-                    <span className="text-[10px] text-cc-muted shrink-0">{prompt.scope}</span>
+                    <span className="text-[10px] text-cc-muted shrink-0">.md</span>
                   </button>
                 ))
               ) : (

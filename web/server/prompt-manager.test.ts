@@ -5,27 +5,8 @@ import { tmpdir } from "node:os";
 let tempDir: string;
 let promptManager: typeof import("./prompt-manager.js");
 
-const mockHomedir = vi.hoisted(() => {
-  let dir = "";
-  return {
-    get: () => dir,
-    set: (d: string) => {
-      dir = d;
-    },
-  };
-});
-
-vi.mock("node:os", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:os")>();
-  return {
-    ...actual,
-    homedir: () => mockHomedir.get(),
-  };
-});
-
 beforeEach(async () => {
   tempDir = mkdtempSync(join(tmpdir(), "prompt-test-"));
-  mockHomedir.set(tempDir);
   vi.resetModules();
   promptManager = await import("./prompt-manager.js");
 });
@@ -35,56 +16,58 @@ afterEach(() => {
 });
 
 describe("createPrompt", () => {
-  it("creates a global prompt", () => {
-    // Validates global prompts persist without project path coupling.
-    const prompt = promptManager.createPrompt("Review PR", "Review this PR and summarize risks", "global");
-    expect(prompt.scope).toBe("global");
-    expect(prompt.projectPath).toBeUndefined();
-    expect(prompt.id).toBeTruthy();
+  it("creates a prompt as a .md file in {cwd}/prompts/", () => {
+    // Validates that createPrompt persists to disk and returns correct shape.
+    const prompt = promptManager.createPrompt(tempDir, "Review", "Review this PR");
+    expect(prompt).toEqual({ name: "Review", content: "Review this PR" });
+
+    // Verify it's on disk by listing
+    const all = promptManager.listPrompts(tempDir);
+    expect(all).toHaveLength(1);
+    expect(all[0].name).toBe("Review");
   });
 
-  it("creates a project prompt with normalized path", () => {
-    // Validates project scope stores a normalized project root for later cwd matching.
-    const prompt = promptManager.createPrompt("Plan", "Plan this feature", "project", "/tmp/my-repo/");
-    expect(prompt.scope).toBe("project");
-    expect(prompt.projectPath).toBe("/tmp/my-repo");
+  it("trims whitespace from name and content", () => {
+    const prompt = promptManager.createPrompt(tempDir, "  Plan  ", "  Plan feature  ");
+    expect(prompt.name).toBe("Plan");
+    expect(prompt.content).toBe("Plan feature");
   });
 
-  it("rejects project prompts without a project path", () => {
-    expect(() => promptManager.createPrompt("Plan", "x", "project")).toThrow(
-      "Project path is required for project prompts",
-    );
+  it("rejects empty name", () => {
+    expect(() => promptManager.createPrompt(tempDir, "", "content")).toThrow("Prompt name is required");
+  });
+
+  it("rejects empty content", () => {
+    expect(() => promptManager.createPrompt(tempDir, "Name", "")).toThrow("Prompt content is required");
+  });
+
+  it("rejects names with path separators", () => {
+    expect(() => promptManager.createPrompt(tempDir, "a/b", "content")).toThrow("path separators");
+    expect(() => promptManager.createPrompt(tempDir, "a\\b", "content")).toThrow("path separators");
   });
 });
 
 describe("listPrompts", () => {
-  it("returns global + matching project prompts for cwd", () => {
-    // Verifies cwd filtering includes global prompts and only project prompts in the same repo subtree.
-    const global = promptManager.createPrompt("Global", "Global text", "global");
-    const project = promptManager.createPrompt("Project", "Project text", "project", "/tmp/repo");
-    promptManager.createPrompt("Other", "Other text", "project", "/tmp/other");
+  it("returns empty array when prompts dir does not exist", () => {
+    expect(promptManager.listPrompts(tempDir)).toEqual([]);
+  });
 
-    const prompts = promptManager.listPrompts({ cwd: "/tmp/repo/packages/ui" });
-    expect(prompts.map((p) => p.id)).toContain(global.id);
-    expect(prompts.map((p) => p.id)).toContain(project.id);
-    expect(prompts.map((p) => p.name)).not.toContain("Other");
+  it("returns all prompts sorted by name", () => {
+    promptManager.createPrompt(tempDir, "Zulu", "Last");
+    promptManager.createPrompt(tempDir, "Alpha", "First");
+    const all = promptManager.listPrompts(tempDir);
+    expect(all.map((p) => p.name)).toEqual(["Alpha", "Zulu"]);
   });
 });
 
-describe("updatePrompt and deletePrompt", () => {
-  it("updates a prompt name/content", () => {
-    // Ensures edits update mutable fields while preserving prompt identity.
-    const prompt = promptManager.createPrompt("Old", "Old content", "global");
-    const updated = promptManager.updatePrompt(prompt.id, { name: "New", content: "New content" });
-    expect(updated).not.toBeNull();
-    expect(updated!.name).toBe("New");
-    expect(updated!.content).toBe("New content");
+describe("deletePrompt", () => {
+  it("deletes an existing prompt and returns true", () => {
+    promptManager.createPrompt(tempDir, "ToDelete", "temporary");
+    expect(promptManager.deletePrompt(tempDir, "ToDelete")).toBe(true);
+    expect(promptManager.listPrompts(tempDir)).toHaveLength(0);
   });
 
-  it("deletes a prompt", () => {
-    // Ensures a deleted prompt is no longer retrievable.
-    const prompt = promptManager.createPrompt("Delete me", "tmp", "global");
-    expect(promptManager.deletePrompt(prompt.id)).toBe(true);
-    expect(promptManager.getPrompt(prompt.id)).toBeNull();
+  it("returns false for non-existent prompt", () => {
+    expect(promptManager.deletePrompt(tempDir, "nope")).toBe(false);
   });
 });

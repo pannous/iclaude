@@ -21,11 +21,10 @@ vi.mock("./skill-manager.js", () => ({
 
 vi.mock("./prompt-manager.js", () => ({
   listPrompts: vi.fn(() => []),
-  getPrompt: vi.fn(() => null),
   createPrompt: vi.fn(),
-  updatePrompt: vi.fn(),
   deletePrompt: vi.fn(() => false),
 }));
+
 
 
 vi.mock("node:child_process", () => ({
@@ -1121,92 +1120,63 @@ describe("DELETE /api/envs/:slug", () => {
 });
 
 describe("Saved prompts API", () => {
-  it("lists prompts with cwd filter", async () => {
-    // Confirms route passes cwd/scope filter through to prompt manager.
-    const prompts = [
-      {
-        id: "p1",
-        name: "Review",
-        content: "Review this PR",
-        scope: "global" as const,
-        createdAt: 1,
-        updatedAt: 2,
-      },
-    ];
+  it("lists prompts with cwd", async () => {
+    // Confirms route passes cwd to prompt manager for file-based lookup.
+    const prompts = [{ name: "Review", content: "Review this PR" }];
     vi.mocked(promptManager.listPrompts).mockReturnValue(prompts);
 
     const res = await app.request("/api/prompts?cwd=%2Frepo", { method: "GET" });
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual(prompts);
-    expect(promptManager.listPrompts).toHaveBeenCalledWith({ cwd: "/repo", scope: undefined });
+    expect(promptManager.listPrompts).toHaveBeenCalledWith("/repo");
+  });
+
+  it("returns empty array without cwd", async () => {
+    const res = await app.request("/api/prompts", { method: "GET" });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual([]);
   });
 
   it("creates a prompt", async () => {
-    // Confirms payload mapping for prompt creation including project cwd.
-    const created = {
-      id: "p1",
-      name: "Review",
-      content: "Review this PR",
-      scope: "project" as const,
-      projectPath: "/repo",
-      createdAt: 1,
-      updatedAt: 1,
-    };
+    // Confirms payload mapping for file-based prompt creation.
+    const created = { name: "Review", content: "Review this PR" };
     vi.mocked(promptManager.createPrompt).mockReturnValue(created);
 
     const res = await app.request("/api/prompts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: "Review",
-        content: "Review this PR",
-        scope: "project",
-        cwd: "/repo",
-      }),
+      body: JSON.stringify({ name: "Review", content: "Review this PR", cwd: "/repo" }),
     });
 
     expect(res.status).toBe(201);
-    expect(promptManager.createPrompt).toHaveBeenCalledWith(
-      "Review",
-      "Review this PR",
-      "project",
-      "/repo",
-    );
+    expect(promptManager.createPrompt).toHaveBeenCalledWith("/repo", "Review", "Review this PR");
   });
 
-  it("updates a prompt", async () => {
-    // Confirms update fields are forwarded verbatim.
-    vi.mocked(promptManager.updatePrompt).mockReturnValue({
-      id: "p1",
-      name: "Updated",
-      content: "Updated content",
-      scope: "global",
-      createdAt: 1,
-      updatedAt: 2,
-    });
-
-    const res = await app.request("/api/prompts/p1", {
-      method: "PUT",
+  it("rejects create without cwd", async () => {
+    const res = await app.request("/api/prompts", {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Updated", content: "Updated content" }),
+      body: JSON.stringify({ name: "Review", content: "Review this PR" }),
     });
-    expect(res.status).toBe(200);
-    expect(promptManager.updatePrompt).toHaveBeenCalledWith("p1", {
-      name: "Updated",
-      content: "Updated content",
-    });
+    expect(res.status).toBe(400);
   });
 
   it("deletes a prompt", async () => {
-    // Confirms delete endpoint calls manager and returns ok shape.
+    // Confirms delete endpoint calls manager with name and cwd.
     vi.mocked(promptManager.deletePrompt).mockReturnValue(true);
 
-    const res = await app.request("/api/prompts/p1", { method: "DELETE" });
+    const res = await app.request("/api/prompts/review-pr?cwd=%2Frepo", { method: "DELETE" });
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({ ok: true });
-    expect(promptManager.deletePrompt).toHaveBeenCalledWith("p1");
+    expect(promptManager.deletePrompt).toHaveBeenCalledWith("/repo", "review-pr");
+  });
+
+  it("rejects delete without cwd", async () => {
+    const res = await app.request("/api/prompts/review-pr", { method: "DELETE" });
+    expect(res.status).toBe(400);
   });
 });
 

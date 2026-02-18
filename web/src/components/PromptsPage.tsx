@@ -14,8 +14,7 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
+  const [editingName, setEditingName] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [search, setSearch] = useState("");
 
@@ -31,7 +30,7 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
     const query = search.trim().toLowerCase();
     if (!query) return prompts;
     return prompts.filter((prompt) => {
-      const haystack = `${prompt.name}\n${prompt.content}\n${prompt.scope}`.toLowerCase();
+      const haystack = `${prompt.name}\n${prompt.content}`.toLowerCase();
       return haystack.includes(query);
     });
   }, [prompts, search]);
@@ -42,7 +41,7 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
     setLoading(true);
     setError("");
     try {
-      const items = await api.listPrompts(cwd || undefined, "global");
+      const items = await api.listPrompts(cwd || undefined);
       setPrompts(items);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -57,7 +56,7 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !content.trim()) return;
+    if (!name.trim() || !content.trim() || !cwd) return;
 
     setSaving(true);
     setError("");
@@ -65,7 +64,7 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
       await api.createPrompt({
         name: name.trim(),
         content: content.trim(),
-        scope: "global",
+        cwd,
       });
       setName("");
       setContent("");
@@ -77,9 +76,10 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
     }
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(promptName: string) {
+    if (!cwd) return;
     try {
-      await api.deletePrompt(id);
+      await api.deletePrompt(promptName, cwd);
       await loadPrompts();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -87,20 +87,22 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
   }
 
   async function handleSaveEdit() {
-    if (!editingId || !editName.trim() || !editContent.trim()) return;
+    if (!editingName || !editContent.trim() || !cwd) return;
     try {
-      await api.updatePrompt(editingId, {
-        name: editName.trim(),
+      await api.createPrompt({
+        name: editingName,
         content: editContent.trim(),
+        cwd,
       });
-      setEditingId(null);
-      setEditName("");
+      setEditingName(null);
       setEditContent("");
       await loadPrompts();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
   }
+
+  const promptsPath = cwd ? `${cwd}/prompts/` : "prompts/";
 
   return (
     <div className={`${embedded ? "h-full" : "h-[100dvh]"} bg-cc-bg text-cc-fg font-sans-ui antialiased overflow-y-auto`}>
@@ -112,7 +114,7 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
               Create reusable prompts and insert them quickly with <span className="text-cc-fg">@title</span> in the composer.
             </p>
             <p className="mt-1.5 text-xs text-cc-muted">
-              {visiblePrompts} visible / {totalPrompts} total • scope: global
+              {visiblePrompts} visible / {totalPrompts} total
             </p>
           </div>
           {!embedded && (
@@ -130,6 +132,12 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
             </button>
           )}
         </div>
+
+        {!cwd && (
+          <div className="mb-4 px-3 py-2 rounded-lg bg-cc-warning/10 border border-cc-warning/20 text-xs text-cc-warning">
+            Select a session to manage its project prompts.
+          </div>
+        )}
 
         <div className="grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
           <form onSubmit={handleCreate} className="bg-cc-card border border-cc-border rounded-xl p-4 sm:p-5 space-y-4 h-fit">
@@ -161,7 +169,7 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
               />
             </div>
 
-            <p className="text-xs text-cc-muted">Saved in <code>~/.companion/prompts.json</code></p>
+            <p className="text-xs text-cc-muted">Saved in <code>{promptsPath}</code></p>
 
             {error && (
               <div className="px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/20 text-xs text-cc-error">
@@ -172,9 +180,9 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
             <div className="flex justify-end">
               <button
                 type="submit"
-                disabled={saving || !name.trim() || !content.trim()}
+                disabled={saving || !name.trim() || !content.trim() || !cwd}
                 className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  saving || !name.trim() || !content.trim()
+                  saving || !name.trim() || !content.trim() || !cwd
                     ? "bg-cc-hover text-cc-muted cursor-not-allowed"
                     : "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
                 }`}
@@ -204,18 +212,14 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
               <div className="space-y-2">
                 {filteredPrompts.map((prompt) => (
                   <div
-                    key={prompt.id}
+                    key={prompt.name}
                     className="border border-cc-border rounded-lg px-3 py-2.5 bg-cc-input-bg/40"
                   >
                     <div className="flex items-center gap-2">
                       <div className="text-sm font-medium text-cc-fg truncate">{prompt.name}</div>
-                      <span className="text-[10px] uppercase tracking-wide text-cc-muted border border-cc-border rounded px-1.5 py-0.5">
-                        {prompt.scope}
-                      </span>
                       <button
                         onClick={() => {
-                          setEditingId(prompt.id);
-                          setEditName(prompt.name);
+                          setEditingName(prompt.name);
                           setEditContent(prompt.content);
                         }}
                         className="ml-auto text-xs text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
@@ -223,20 +227,14 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
                         Edit
                       </button>
                       <button
-                        onClick={() => void handleDelete(prompt.id)}
+                        onClick={() => void handleDelete(prompt.name)}
                         className="text-xs text-cc-muted hover:text-cc-error transition-colors cursor-pointer"
                       >
                         Delete
                       </button>
                     </div>
-                    {editingId === prompt.id ? (
+                    {editingName === prompt.name ? (
                       <div className="mt-2 space-y-2">
-                        <input
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          placeholder="Prompt title"
-                          className="w-full px-2.5 py-2 text-sm bg-cc-input-bg border border-cc-border rounded-md text-cc-fg focus:outline-none focus:border-cc-primary/60"
-                        />
                         <textarea
                           value={editContent}
                           onChange={(e) => setEditContent(e.target.value)}
@@ -246,8 +244,7 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
                         <div className="flex justify-end gap-2">
                           <button
                             onClick={() => {
-                              setEditingId(null);
-                              setEditName("");
+                              setEditingName(null);
                               setEditContent("");
                             }}
                             className="px-2.5 py-1.5 text-xs rounded-md border border-cc-border text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
@@ -256,9 +253,9 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
                           </button>
                           <button
                             onClick={() => void handleSaveEdit()}
-                            disabled={!editName.trim() || !editContent.trim()}
+                            disabled={!editContent.trim()}
                             className={`px-2.5 py-1.5 text-xs rounded-md transition-colors ${
-                              editName.trim() && editContent.trim()
+                              editContent.trim()
                                 ? "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
                                 : "bg-cc-hover text-cc-muted cursor-not-allowed"
                             }`}
