@@ -340,7 +340,9 @@ describe("Sidebar", () => {
     expect(archiveButton).toBeInTheDocument();
   });
 
-  it("archive action button is visible by default on mobile and hover-only on desktop", () => {
+  it("archive button is hidden by default and subtly revealed on hover", () => {
+    // Archive button uses opacity-0 by default, group-hover:opacity-50 for subtle reveal,
+    // and hover:!opacity-100 only when directly hovering the button itself.
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
@@ -351,12 +353,15 @@ describe("Sidebar", () => {
     render(<Sidebar />);
     const archiveButton = screen.getByTitle("Archive session");
 
-    expect(archiveButton).toHaveClass("opacity-100");
-    expect(archiveButton).toHaveClass("sm:opacity-0");
-    expect(archiveButton).toHaveClass("sm:group-hover:opacity-100");
+    // Hidden by default
+    expect(archiveButton).toHaveClass("opacity-0");
+    // Subtle reveal on row hover
+    expect(archiveButton).toHaveClass("group-hover:opacity-50");
   });
 
-  it("permission badge uses mobile-friendly positioning and hover behavior", () => {
+  it("permission badge uses touch-friendly positioning via can-hover variant", () => {
+    // On touch: badge stays at right-8 (making room for always-visible archive button at right-2)
+    // On desktop: can-hover:right-2 moves it closer, can-hover:group-hover:opacity-0 hides on hover
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
@@ -366,12 +371,14 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    const mobilePermissionBadge = screen.getAllByText("1").find((node) =>
+    const permBadge = screen.getAllByText("1").find((node) =>
       node.classList.contains("bg-cc-warning") && node.classList.contains("px-1"),
     )!;
-    expect(mobilePermissionBadge).toHaveClass("right-8");
-    expect(mobilePermissionBadge).toHaveClass("sm:right-2");
-    expect(mobilePermissionBadge).toHaveClass("sm:group-hover:opacity-0");
+    expect(permBadge).toHaveClass("right-8");
+    expect(permBadge).toHaveClass("can-hover:right-2");
+    expect(permBadge).toHaveClass("can-hover:group-hover:opacity-0");
+    // Must NOT use sm: breakpoint
+    expect(permBadge).not.toHaveClass("sm:right-2");
   });
 
   it("archived sessions section shows count", () => {
