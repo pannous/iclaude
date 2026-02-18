@@ -5,6 +5,10 @@ import { CLAUDE_MODES, CODEX_MODES } from "../utils/backends.js";
 import { api, type SavedPrompt } from "../api.js";
 import type { ModeOption } from "../utils/backends.js";
 
+function slugify(input: string): string {
+  return input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "untitled";
+}
+
 // Web Speech API types (not in all TS DOM libs)
 interface SpeechRecognitionResult {
   readonly isFinal: boolean;
@@ -645,7 +649,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 placeholder="Prompt title"
                 className="w-full px-2 py-1.5 text-sm bg-cc-input-bg border border-cc-border rounded-md text-cc-fg focus:outline-none focus:border-cc-primary/40"
               />
-              <div className="text-[11px] text-cc-muted">Scope: global • stored locally</div>
+              <div className="text-[11px] text-cc-muted">Saved as <code>{sessionData?.cwd || "."}/prompts/{slugify(savePromptName)}.md</code></div>
               {savePromptError ? (
                 <div className="text-[11px] text-cc-error">{savePromptError}</div>
               ) : null}

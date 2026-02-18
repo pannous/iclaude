@@ -18,18 +18,22 @@ afterEach(() => {
 describe("createPrompt", () => {
   it("creates a prompt as a .md file in {cwd}/prompts/", () => {
     // Validates that createPrompt persists to disk and returns correct shape.
-    const prompt = promptManager.createPrompt(tempDir, "Review", "Review this PR");
-    expect(prompt).toEqual({ name: "Review", content: "Review this PR" });
+    const prompt = promptManager.createPrompt(tempDir, "Review PR", "Review this PR");
+    expect(prompt).toEqual({ name: "review-pr", content: "Review this PR" });
 
-    // Verify it's on disk by listing
     const all = promptManager.listPrompts(tempDir);
     expect(all).toHaveLength(1);
-    expect(all[0].name).toBe("Review");
+    expect(all[0].name).toBe("review-pr");
   });
 
-  it("trims whitespace from name and content", () => {
-    const prompt = promptManager.createPrompt(tempDir, "  Plan  ", "  Plan feature  ");
-    expect(prompt.name).toBe("Plan");
+  it("slugifies the name to a filesystem-safe format", () => {
+    // Validates title → slug conversion: lowercase, hyphens, no special chars.
+    const prompt = promptManager.createPrompt(tempDir, "My Cool Prompt!", "content");
+    expect(prompt.name).toBe("my-cool-prompt");
+  });
+
+  it("trims whitespace from content", () => {
+    const prompt = promptManager.createPrompt(tempDir, "plan", "  Plan feature  ");
     expect(prompt.content).toBe("Plan feature");
   });
 
@@ -41,9 +45,8 @@ describe("createPrompt", () => {
     expect(() => promptManager.createPrompt(tempDir, "Name", "")).toThrow("Prompt content is required");
   });
 
-  it("rejects names with path separators", () => {
-    expect(() => promptManager.createPrompt(tempDir, "a/b", "content")).toThrow("path separators");
-    expect(() => promptManager.createPrompt(tempDir, "a\\b", "content")).toThrow("path separators");
+  it("rejects names that slugify to empty string", () => {
+    expect(() => promptManager.createPrompt(tempDir, "!!!", "content")).toThrow("alphanumeric");
   });
 });
 
@@ -56,14 +59,14 @@ describe("listPrompts", () => {
     promptManager.createPrompt(tempDir, "Zulu", "Last");
     promptManager.createPrompt(tempDir, "Alpha", "First");
     const all = promptManager.listPrompts(tempDir);
-    expect(all.map((p) => p.name)).toEqual(["Alpha", "Zulu"]);
+    expect(all.map((p) => p.name)).toEqual(["alpha", "zulu"]);
   });
 });
 
 describe("deletePrompt", () => {
   it("deletes an existing prompt and returns true", () => {
-    promptManager.createPrompt(tempDir, "ToDelete", "temporary");
-    expect(promptManager.deletePrompt(tempDir, "ToDelete")).toBe(true);
+    promptManager.createPrompt(tempDir, "to-delete", "temporary");
+    expect(promptManager.deletePrompt(tempDir, "to-delete")).toBe(true);
     expect(promptManager.listPrompts(tempDir)).toHaveLength(0);
   });
 

@@ -6,6 +6,13 @@ export interface SavedPrompt {
   content: string;
 }
 
+function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function promptsDir(cwd: string): string {
   return join(cwd, "prompts");
 }
@@ -30,19 +37,18 @@ export function listPrompts(cwd: string): SavedPrompt[] {
 }
 
 export function createPrompt(cwd: string, name: string, content: string): SavedPrompt {
-  const cleanName = name?.trim();
   const cleanContent = content?.trim();
-  if (!cleanName) throw new Error("Prompt name is required");
+  if (!name?.trim()) throw new Error("Prompt name is required");
   if (!cleanContent) throw new Error("Prompt content is required");
-  if (cleanName.includes("/") || cleanName.includes("\\")) {
-    throw new Error("Prompt name cannot contain path separators");
-  }
+
+  const slug = slugify(name);
+  if (!slug) throw new Error("Prompt name must contain at least one alphanumeric character");
 
   const dir = promptsDir(cwd);
   mkdirSync(dir, { recursive: true });
-  const filePath = join(dir, `${cleanName}.md`);
+  const filePath = join(dir, `${slug}.md`);
   writeFileSync(filePath, cleanContent, "utf-8");
-  return { name: cleanName, content: cleanContent };
+  return { name: slug, content: cleanContent };
 }
 
 export function deletePrompt(cwd: string, name: string): boolean {
