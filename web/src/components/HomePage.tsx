@@ -44,7 +44,14 @@ export function HomePage() {
   const [mode, setMode] = useState(() => getDefaultMode(
     (safeStorage.getItem("cc-backend") as BackendType) || "claude",
   ));
-  const [cwd, setCwd] = useState(() => getRecentDirs()[0] || "");
+  const [cwd, setCwd] = useState(() => {
+    const prefill = useStore.getState().newSessionCwd;
+    if (prefill) {
+      useStore.setState({ newSessionCwd: null });
+      return prefill;
+    }
+    return getRecentDirs()[0] || "";
+  });
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");

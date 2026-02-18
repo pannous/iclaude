@@ -366,6 +366,15 @@ export function Sidebar() {
     }
   }, [projectGroups]);
 
+  function handleNewSessionInFolder(cwd: string) {
+    useStore.getState().closeTerminal();
+    navigateHome();
+    useStore.getState().newSessionInFolder(cwd);
+    if (window.innerWidth < 768) {
+      useStore.getState().setSidebarOpen(false);
+    }
+  }
+
   // Shared props for SessionItem / ProjectGroup
   const sessionItemProps = {
     onSelect: handleSelectSession,
@@ -521,6 +530,7 @@ export function Sidebar() {
                 pendingPermissions={pendingPermissions}
                 recentlyRenamed={recentlyRenamed}
                 onArchiveGroup={handleArchiveGroup}
+                onNewSessionInFolder={handleNewSessionInFolder}
                 isFirst={i === 0}
                 {...sessionItemProps}
               />

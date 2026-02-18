@@ -16,6 +16,7 @@ interface ProjectGroupProps {
   onUnarchive: (e: React.MouseEvent, id: string) => void;
   onDelete: (e: React.MouseEvent, id: string) => void;
   onArchiveGroup: (e: React.MouseEvent, projectKey: string) => void;
+  onNewSessionInFolder: (cwd: string) => void;
   onClearRecentlyRenamed: (id: string) => void;
   editingSessionId: string | null;
   editingName: string;
@@ -40,6 +41,7 @@ export function ProjectGroup({
   onUnarchive,
   onDelete,
   onArchiveGroup,
+  onNewSessionInFolder,
   onClearRecentlyRenamed,
   editingSessionId,
   editingName,
@@ -87,6 +89,18 @@ export function ProjectGroup({
           <span className="text-[10px] text-cc-muted/60 shrink-0 ml-1">
             {group.sessions.length}
           </span>
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onNewSessionInFolder(group.key);
+          }}
+          title={`New session in ${group.label}`}
+          className="shrink-0 p-1 rounded opacity-0 group-hover/project:opacity-100 text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-all cursor-pointer"
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
+            <path d="M8 3v10M3 8h10" />
+          </svg>
         </button>
         <button
           onClick={(e) => onArchiveGroup(e, group.key)}

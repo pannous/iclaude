@@ -92,6 +92,7 @@ interface AppState {
   sidebarOpen: boolean;
   taskPanelOpen: boolean;
   homeResetKey: number;
+  newSessionCwd: string | null;
   activeTab: string; // "chat" | "diff" | "terminal" | "skill:<slug>"
   openSkills: string[];
   editorOpenFile: Map<string, string>;
@@ -111,6 +112,7 @@ interface AppState {
   setSidebarOpen: (v: boolean) => void;
   setTaskPanelOpen: (open: boolean) => void;
   newSession: () => void;
+  newSessionInFolder: (cwd: string) => void;
 
   // Session actions
   setCurrentSession: (id: string | null) => void;
@@ -326,6 +328,7 @@ export const useStore = create<AppState>((set) => ({
   sidebarOpen: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
   taskPanelOpen: typeof window !== "undefined" ? window.innerWidth >= 1024 : true,
   homeResetKey: 0,
+  newSessionCwd: null,
   activeTab: "chat",
   openSkills: [],
   editorOpenFile: new Map(),
@@ -402,6 +405,10 @@ export const useStore = create<AppState>((set) => ({
   newSession: () => {
     safeStorage.removeItem("cc-current-session");
     set((s) => ({ currentSessionId: null, homeResetKey: s.homeResetKey + 1 }));
+  },
+  newSessionInFolder: (cwd) => {
+    safeStorage.removeItem("cc-current-session");
+    set((s) => ({ currentSessionId: null, newSessionCwd: cwd, homeResetKey: s.homeResetKey + 1 }));
   },
 
   setCurrentSession: (id) => {
