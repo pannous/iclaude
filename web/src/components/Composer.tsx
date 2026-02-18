@@ -425,7 +425,11 @@ export function Composer({ sessionId }: { sessionId: string }) {
       recognitionRef.current?.stop();
       return;
     }
-    if (!SpeechRecognitionAPI) return;
+    if (!SpeechRecognitionAPI) {
+      // Fallback: focus textarea so the OS keyboard appears (with its built-in mic)
+      textareaRef.current?.focus();
+      return;
+    }
 
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
@@ -755,26 +759,24 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 </svg>
               </button>
 
-              {SpeechRecognitionAPI && (
-                <button
-                  onClick={toggleListening}
-                  disabled={!isConnected}
-                  className={`flex items-center justify-center w-9 h-9 rounded-lg border transition-colors ${
-                    isListening
-                      ? "text-cc-error border-cc-error/40 bg-cc-error/10 hover:bg-cc-error/20 cursor-pointer animate-pulse"
-                      : isConnected
-                        ? "text-cc-muted border-cc-border hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
-                        : "text-cc-muted opacity-30 border-cc-border/60 cursor-not-allowed"
-                  }`}
-                  title={isListening ? "Stop dictation" : "Start dictation"}
-                >
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
-                    <rect x="5.5" y="1.5" width="5" height="8" rx="2.5" />
-                    <path d="M3.5 7.5a4.5 4.5 0 009 0" />
-                    <path d="M8 12.5v2" />
-                  </svg>
-                </button>
-              )}
+              <button
+                onClick={toggleListening}
+                disabled={!isConnected}
+                className={`flex items-center justify-center w-9 h-9 rounded-lg border transition-colors ${
+                  isListening
+                    ? "text-cc-error border-cc-error/40 bg-cc-error/10 hover:bg-cc-error/20 cursor-pointer animate-pulse"
+                    : isConnected
+                      ? "text-cc-muted border-cc-border hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
+                      : "text-cc-muted opacity-30 border-cc-border/60 cursor-not-allowed"
+                }`}
+                title={isListening ? "Stop dictation" : "Start dictation"}
+              >
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+                  <rect x="5.5" y="1.5" width="5" height="8" rx="2.5" />
+                  <path d="M3.5 7.5a4.5 4.5 0 009 0" />
+                  <path d="M8 12.5v2" />
+                </svg>
+              </button>
 
               {isRunning ? (
                 <button

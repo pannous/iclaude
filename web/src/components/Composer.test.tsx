@@ -478,50 +478,20 @@ describe("Composer save prompt", () => {
 
 // ─── Speech recognition / dictation ─────────────────────────────────────────
 
-// Minimal SpeechRecognition mock for jsdom (which has no Web Speech API)
-function mockSpeechRecognition() {
-  const instances: Array<{
-    continuous: boolean;
-    interimResults: boolean;
-    lang: string;
-    onresult: ((e: unknown) => void) | null;
-    onend: (() => void) | null;
-    onerror: (() => void) | null;
-    start: ReturnType<typeof vi.fn>;
-    stop: ReturnType<typeof vi.fn>;
-  }> = [];
-
-  class FakeSpeechRecognition {
-    continuous = false;
-    interimResults = false;
-    lang = "";
-    onresult: ((e: unknown) => void) | null = null;
-    onend: (() => void) | null = null;
-    onerror: (() => void) | null = null;
-    start = vi.fn();
-    stop = vi.fn(() => { this.onend?.(); });
-    constructor() { instances.push(this); }
-  }
-
-  (window as any).SpeechRecognition = FakeSpeechRecognition;
-  return { instances, cleanup: () => delete (window as any).SpeechRecognition };
-}
-
 describe("Composer speech recognition", () => {
-  it("shows mic button when SpeechRecognition API is available", () => {
-    // Validates the mic button only renders when the browser supports speech recognition.
-    // We need to re-import Composer after setting up the mock, but since the module
-    // reads window.SpeechRecognition at import time, we test the current module behavior.
-    // The SpeechRecognitionAPI constant is set at module load — it reads window at import time.
-    // Since jsdom has no SpeechRecognition, the button won't appear by default.
+  it("always shows mic button regardless of SpeechRecognition support", () => {
+    // The mic button is always visible. On browsers without the Web Speech API
+    // (e.g. Safari on iPadOS) it acts as a focus shortcut to bring up the OS keyboard
+    // whose built-in dictation mic the user can then tap.
     render(<Composer sessionId="s1" />);
-    expect(screen.queryByTitle("Start dictation")).toBeNull();
+    expect(screen.getByTitle("Start dictation")).toBeTruthy();
   });
 
-  it("does not show mic button when SpeechRecognition is unavailable", () => {
-    // Validates graceful degradation — no mic button on browsers without Web Speech API.
+  it("mic button is disabled when CLI is not connected", () => {
+    // Same disabled pattern as the other Composer buttons.
+    setupMockStore({ isConnected: false });
     render(<Composer sessionId="s1" />);
-    expect(screen.queryByTitle("Start dictation")).toBeNull();
-    expect(screen.queryByTitle("Stop dictation")).toBeNull();
+    const micBtn = screen.getByTitle("Start dictation");
+    expect(micBtn.hasAttribute("disabled")).toBe(true);
   });
 });
