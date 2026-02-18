@@ -174,29 +174,21 @@ export function SessionItem({
                       Cron
                     </span>
                   )}
+                  {(s.gitAhead > 0 || s.gitBehind > 0) && (
+                    <span className="flex items-center gap-0.5 shrink-0">
+                      {s.gitAhead > 0 && <span className="text-green-500">{s.gitAhead}&#8593;</span>}
+                      {s.gitBehind > 0 && <span className="text-cc-warning">{s.gitBehind}&#8595;</span>}
+                    </span>
+                  )}
+                  {(s.linesAdded > 0 || s.linesRemoved > 0) && (
+                    <span className="flex items-center gap-1 shrink-0">
+                      <span className="text-green-500">+{s.linesAdded}</span>
+                      <span className="text-red-400">-{s.linesRemoved}</span>
+                    </span>
+                  )}
                 </>
               )}
             </div>
-
-
-
-            {/* Row 3: Git stats (conditional) */}
-            {(s.gitAhead > 0 || s.gitBehind > 0 || s.linesAdded > 0 || s.linesRemoved > 0) && (
-              <div className="flex items-center gap-1.5 text-[10px] text-cc-muted">
-                {(s.gitAhead > 0 || s.gitBehind > 0) && (
-                  <span className="flex items-center gap-0.5">
-                    {s.gitAhead > 0 && <span className="text-green-500">{s.gitAhead}&#8593;</span>}
-                    {s.gitBehind > 0 && <span className="text-cc-warning">{s.gitBehind}&#8595;</span>}
-                  </span>
-                )}
-                {(s.linesAdded > 0 || s.linesRemoved > 0) && (
-                  <span className="flex items-center gap-1 shrink-0">
-                    <span className="text-green-500">+{s.linesAdded}</span>
-                    <span className="text-red-400">-{s.linesRemoved}</span>
-                  </span>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </button>
@@ -234,7 +226,7 @@ export function SessionItem({
       ) : (
         <button
           onClick={(e) => onArchive(e, s.id)}
-          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md opacity-0 group-hover:opacity-50 hover:!opacity-100 hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md opacity-30 hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
           title="Archive session"
         >
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
