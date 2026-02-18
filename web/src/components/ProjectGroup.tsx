@@ -96,13 +96,12 @@ export function ProjectGroup({
             onNewSessionInFolder(group.key);
           }}
           title={`New session in ${group.label}`}
-          className="shrink-0 p-1.5 rounded can-hover:opacity-0 can-hover:group-hover/project:opacity-100 text-cc-muted hover:text-cc-primary hover:bg-cc-hover transition-all cursor-pointer"
+          className="shrink-0 p-1 rounded can-hover:opacity-0 can-hover:group-hover/project:opacity-100 text-cc-muted hover:text-cc-primary hover:bg-cc-hover transition-all cursor-pointer"
         >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
             <path d="M8 3v10M3 8h10" />
           </svg>
         </button>
-        <span className="flex-1" />
         <button
           onClick={(e) => onArchiveGroup(e, group.key)}
           title={`Archive all ${group.sessions.length} sessions in ${group.label}`}
