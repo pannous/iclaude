@@ -340,9 +340,9 @@ describe("Sidebar", () => {
     expect(archiveButton).toBeInTheDocument();
   });
 
-  it("archive button is hidden by default and subtly revealed on hover", () => {
-    // Archive button uses opacity-0 by default, group-hover:opacity-50 for subtle reveal,
-    // and hover:!opacity-100 only when directly hovering the button itself.
+  it("archive button is subtly visible by default and fully revealed on hover", () => {
+    // Archive button uses opacity-30 by default (always subtly visible),
+    // hover:opacity-100 for full reveal when directly hovering the button.
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
@@ -353,10 +353,10 @@ describe("Sidebar", () => {
     render(<Sidebar />);
     const archiveButton = screen.getByTitle("Archive session");
 
-    // Hidden by default
-    expect(archiveButton).toHaveClass("opacity-0");
-    // Subtle reveal on row hover
-    expect(archiveButton).toHaveClass("group-hover:opacity-50");
+    // Subtly visible by default
+    expect(archiveButton).toHaveClass("opacity-30");
+    // Full reveal on direct hover
+    expect(archiveButton).toHaveClass("hover:opacity-100");
   });
 
   it("permission badge uses touch-friendly positioning via can-hover variant", () => {
