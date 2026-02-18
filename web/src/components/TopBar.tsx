@@ -9,10 +9,9 @@ import { parseHash } from "../utils/routing.js";
 
 const EMPTY_MESSAGES: import("../types.js").ChatMessage[] = [];
 
-type WorkspaceTab = "chat" | "diff" | "terminal";
+type WorkspaceTab = "chat" | "diff" | "terminal" | "editor";
 
-function getActiveTabSurfaceColor(tab: "chat" | "diff" | "terminal"): string {
-  // Deterministic mapping to the primary surface of the active workspace pane.
+function getActiveTabSurfaceColor(tab: WorkspaceTab): string {
   if (tab === "terminal") return "var(--cc-card)";
   return "var(--cc-bg)";
 }
@@ -129,23 +128,29 @@ export function TopBar() {
   const activeTabSurfaceColor = useMemo(() => getActiveTabSurfaceColor(activeTab as WorkspaceTab), [activeTab]);
   const chatTabRef = useRef<HTMLButtonElement>(null);
   const diffTabRef = useRef<HTMLButtonElement>(null);
+  const editorTabRef = useRef<HTMLButtonElement>(null);
   const terminalTabRef = useRef<HTMLButtonElement>(null);
   const [sampledTabColors, setSampledTabColors] = useState<Partial<Record<WorkspaceTab, string>>>({});
   const sessionName = currentSessionId
-    ? (sessionNames?.get(currentSessionId) ||
+    ? (sessionTitle ||
       sdkSessions.find((s) => s.sessionId === currentSessionId)?.name ||
       `Session ${currentSessionId.slice(0, 8)}`)
     : null;
   const showWorkspaceControls = !!(currentSessionId && isSessionView);
   const showContextToggle = route.page === "session" && !!currentSessionId;
+  const editorFileCount = useStore((s) => s.editorFiles.length);
   const workspaceTabs = useMemo(() => {
-    const tabs: Array<"chat" | "diff" | "terminal"> = ["chat"];
-    tabs.push("diff");
+    const tabs: Array<WorkspaceTab> = ["chat", "diff"];
+    if (editorFileCount > 0) tabs.push("editor");
     tabs.push("terminal");
     return tabs;
-  }, []);
+  }, [editorFileCount]);
 
-  const activateWorkspaceTab = (tab: "chat" | "diff" | "terminal") => {
+  const activateWorkspaceTab = (tab: WorkspaceTab) => {
+    if (tab === "editor") {
+      setActiveTab("editor");
+      return;
+    }
     if (tab === "terminal") {
       if (!cwd) return;
       if (!quickTerminalOpen || quickTerminalTabs.length === 0) {
@@ -175,13 +180,16 @@ export function TopBar() {
         const next: Partial<Record<WorkspaceTab, string>> = {};
         const chatColor = sampleColorBelowTab(chatTabRef.current);
         const diffColor = sampleColorBelowTab(diffTabRef.current);
+        const editorColor = sampleColorBelowTab(editorTabRef.current);
         const terminalColor = sampleColorBelowTab(terminalTabRef.current);
         if (chatColor) next.chat = chatColor;
         if (diffColor) next.diff = diffColor;
+        if (editorColor) next.editor = editorColor;
         if (terminalColor) next.terminal = terminalColor;
         if (
           prev.chat === next.chat &&
           prev.diff === next.diff &&
+          prev.editor === next.editor &&
           prev.terminal === next.terminal
         ) {
           return prev;
@@ -289,6 +297,24 @@ export function TopBar() {
                   </span>
                 )}
               </button>
+              {editorFileCount > 0 && (
+                <button
+                  ref={editorTabRef}
+                  onClick={() => activateWorkspaceTab("editor")}
+                  className={`px-3.5 border text-[12px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    activeTab === "editor"
+                      ? "relative z-10 h-9 -mb-px text-cc-fg border-cc-border/80 border-b-transparent rounded-[14px_14px_0_0]"
+                      : "h-8 mb-px bg-transparent text-cc-muted border-transparent rounded-[8px_8px_0_0] hover:bg-cc-hover/70 hover:text-cc-fg"
+                  }`}
+                  style={activeTab === "editor" ? { backgroundColor: sampledTabColors.editor || activeTabSurfaceColor } : undefined}
+                  aria-label="Editor tab"
+                >
+                  Editor
+                  <span className="text-[10px] bg-cc-primary/20 text-cc-primary rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center font-semibold leading-none">
+                    {editorFileCount}
+                  </span>
+                </button>
+              )}
               <button
                 ref={terminalTabRef}
                 onClick={() => activateWorkspaceTab("terminal")}
