@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 // ---------------------------------------------------------------------------
 
 export interface ContainerConfig {
-  /** Docker image to use (e.g. "companion-dev", "node:22-slim") */
+  /** Docker image to use (e.g. "the-companion:latest", "node:22-slim") */
   image: string;
   /** Container ports to expose (e.g. [3000, 8080]) */
   ports: number[];
@@ -171,10 +171,13 @@ export class ContainerManager {
       "-w", "/workspace",
     ];
 
-    // Mount host .gitconfig so git user.name/email are available for commits
+    // Mount host .gitconfig at a staging path (not /root/.gitconfig) so the
+    // container keeps a writable global git config. seedGitAuth() copies
+    // user.name / user.email from the staged file into /root/.gitconfig and
+    // can also write container-specific overrides (e.g. gpgsign=false).
     const gitconfigPath = join(homedir, ".gitconfig");
     if (existsSync(gitconfigPath)) {
-      args.push("-v", `${gitconfigPath}:/root/.gitconfig:ro`);
+      args.push("-v", `${gitconfigPath}:/companion-host-gitconfig:ro`);
     }
 
     // Port mappings: -p 0:{containerPort}
@@ -336,15 +339,29 @@ export class ContainerManager {
       ]);
     } catch { /* best-effort */ }
 
-    // Disable GPG/SSH commit signing — host signing tools (1Password, GPG agent)
-    // aren't available inside the container and would cause git commit to fail.
-    // Also rewrite SSH git remotes to HTTPS so `gh` credential helper handles auth
-    // (containers don't have the host's SSH keys).
+    // Copy host git identity (user.name, user.email) from the staged
+    // read-only .gitconfig into the container's writable global config,
+    // then apply container-specific overrides (disable GPG signing, mark
+    // /workspace as safe, rewrite SSH remotes to HTTPS since containers
+    // lack host SSH keys).
     try {
       this.execInContainer(containerId, [
         "sh", "-lc",
         [
+          // Import user.name and user.email from host gitconfig (if mounted)
+          "if [ -f /companion-host-gitconfig ]; then " +
+            "NAME=$(git config -f /companion-host-gitconfig user.name 2>/dev/null); " +
+            "EMAIL=$(git config -f /companion-host-gitconfig user.email 2>/dev/null); " +
+            '[ -n "$NAME" ] && git config --global user.name "$NAME"; ' +
+            '[ -n "$EMAIL" ] && git config --global user.email "$EMAIL"; ' +
+          "fi",
+          // Disable GPG/SSH commit signing — host tools (1Password, GPG agent)
+          // aren't available inside the container.
           "git config --global commit.gpgsign false 2>/dev/null",
+          // Mark /workspace as safe — the workspace volume may be owned by a
+          // different uid (e.g. ubuntu) than the container user (root), which
+          // triggers git's "dubious ownership" check.
+          "git config --global safe.directory /workspace 2>/dev/null",
           // Rewrite git@github.com:org/repo → https://github.com/org/repo for all remotes
           "cd /workspace 2>/dev/null && " +
             "git remote -v 2>/dev/null | grep 'git@github.com:' | awk '{print $1}' | sort -u | " +
@@ -707,10 +724,10 @@ export class ContainerManager {
   // ---------------------------------------------------------------------------
 
   /**
-   * Build the companion-dev Docker image from the Dockerfile.dev.
+   * Build a Docker image from a provided Dockerfile path.
    * Returns the build output log. Throws on failure.
    */
-  buildImage(dockerfilePath: string, tag: string = "companion-dev:latest"): string {
+  buildImage(dockerfilePath: string, tag: string = "the-companion:latest"): string {
     const contextDir = dockerfilePath.replace(/\/[^/]+$/, "") || ".";
     try {
       const output = exec(

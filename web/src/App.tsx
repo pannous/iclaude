@@ -12,10 +12,12 @@ import { TaskPanel } from "./components/TaskPanel.js";
 import { Playground } from "./components/Playground.js";
 import { UpdateBanner } from "./components/UpdateBanner.js";
 import { SettingsPage } from "./components/SettingsPage.js";
+import { PromptsPage } from "./components/PromptsPage.js";
 import { EnvManager } from "./components/EnvManager.js";
 import { CronManager } from "./components/CronManager.js";
 import { TerminalPage } from "./components/TerminalPage.js";
 import { SessionLaunchOverlay } from "./components/SessionLaunchOverlay.js";
+import { SessionTerminalDock } from "./components/SessionTerminalDock.js";
 
 const DiffPanel = lazy(() => import("./components/DiffPanel.js").then(m => ({ default: m.DiffPanel })));
 const SkillPanel = lazy(() => import("./components/SkillPanel.js").then(m => ({ default: m.SkillPanel })));
@@ -35,7 +37,6 @@ export default function App() {
   const homeResetKey = useStore((s) => s.homeResetKey);
   const activeTab = useStore((s) => s.activeTab);
   const [showArchiveAllConfirm, setShowArchiveAllConfirm] = useState(false);
-  const assistantSessionId = useStore((s) => s.assistantSessionId);
   const sessionCreating = useStore((s) => s.sessionCreating);
   const sessionCreatingBackend = useStore((s) => s.sessionCreatingBackend);
   const creationProgress = useStore((s) => s.creationProgress);
@@ -43,6 +44,7 @@ export default function App() {
   const hash = useHash();
   const route = useMemo(() => parseHash(hash), [hash]);
   const isSettingsPage = route.page === "settings";
+  const isPromptsPage = route.page === "prompts";
   const isTerminalPage = route.page === "terminal";
   const isEnvironmentsPage = route.page === "environments";
   const isScheduledPage = route.page === "scheduled";
@@ -390,6 +392,12 @@ export default function App() {
             </div>
           )}
 
+          {isPromptsPage && (
+            <div className="absolute inset-0">
+              <PromptsPage embedded />
+            </div>
+          )}
+
           {isTerminalPage && (
             <div className="absolute inset-0">
               <TerminalPage />
@@ -410,27 +418,27 @@ export default function App() {
 
           {isSessionView && (
             <>
-              {/* Chat tab — visible when activeTab is "chat" or no session */}
-              <div className={`absolute inset-0 ${activeTab === "chat" || !currentSessionId ? "" : "hidden"}`}>
+              <div className="absolute inset-0">
                 {currentSessionId ? (
-                  <ChatView sessionId={currentSessionId} />
+                  activeTab === "terminal"
+                    ? (
+                      <SessionTerminalDock
+                        sessionId={currentSessionId}
+                        terminalOnly
+                        onClosePanel={() => useStore.getState().setActiveTab("chat")}
+                      />
+                    )
+                    : (
+                      <SessionTerminalDock sessionId={currentSessionId} suppressPanel>
+                        {activeTab === "diff"
+                          ? <DiffPanel sessionId={currentSessionId} />
+                          : <ChatView sessionId={currentSessionId} />}
+                      </SessionTerminalDock>
+                    )
                 ) : (
                   <HomePage key={homeResetKey} />
                 )}
               </div>
-
-              {/* Diffs tab — lazy-loaded, not shown for assistant session */}
-              {currentSessionId && (activeTab === "diff" || activeTab === "editor") && currentSessionId !== assistantSessionId && (
-                <div className="absolute inset-0">
-                  <Suspense fallback={
-                    <div className="h-full flex items-center justify-center">
-                      <div className="w-5 h-5 border-2 border-cc-primary border-t-transparent rounded-full animate-spin" />
-                    </div>
-                  }>
-                    <DiffPanel sessionId={currentSessionId} />
-                  </Suspense>
-                </div>
-              )}
 
               {/* Skill panels — lazy-loaded, one per open skill */}
               {activeTab.startsWith("skill:") && (
@@ -444,6 +452,7 @@ export default function App() {
                   </Suspense>
                 </div>
               )}
+
 
               {/* Session launch overlay — shown during creation */}
               {sessionCreating && creationProgress && creationProgress.length > 0 && (
@@ -462,6 +471,20 @@ export default function App() {
       {/* Task panel — overlay on mobile, inline on desktop */}
       {currentSessionId && isSessionView && (
         <>
+          {!taskPanelOpen && (
+            <button
+              type="button"
+              onClick={() => useStore.getState().setTaskPanelOpen(true)}
+              className="hidden lg:flex fixed right-0 top-1/2 -translate-y-1/2 z-30 items-center gap-1 rounded-l-lg border border-r-0 border-cc-border bg-cc-card/95 backdrop-blur px-2 py-2 text-[11px] text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+              title="Open context panel"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                <path d="M3 2.5A1.5 1.5 0 014.5 1h7A1.5 1.5 0 0113 2.5v11a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 13.5v-11zm2 .5v10h6V3H5z" />
+              </svg>
+              <span className="[writing-mode:vertical-rl] rotate-180 tracking-wide">Context</span>
+            </button>
+          )}
+
           {/* Mobile overlay backdrop */}
           {taskPanelOpen && (
             <div
@@ -474,7 +497,7 @@ export default function App() {
             className={`
               fixed lg:relative z-40 lg:z-auto right-0 top-0
               h-full shrink-0 transition-all duration-200
-              ${taskPanelOpen ? "w-[280px] translate-x-0" : "w-0 translate-x-full lg:w-0 lg:translate-x-full"}
+              ${taskPanelOpen ? "w-[320px] translate-x-0" : "w-0 translate-x-full lg:w-0 lg:translate-x-full"}
               overflow-hidden
             `}
           >

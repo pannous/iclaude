@@ -17,6 +17,8 @@ vi.mock("../api.js", () => ({
     deleteEnv: vi.fn(),
     buildEnvImage: vi.fn(),
     getEnvBuildStatus: vi.fn(),
+    getImageStatus: vi.fn().mockResolvedValue({ image: "", status: "ready", progress: [] }),
+    pullImage: vi.fn().mockResolvedValue({ ok: true, state: { image: "", status: "pulling", progress: [] } }),
   },
 }));
 
@@ -34,7 +36,7 @@ beforeEach(() => {
     },
   ]);
   mockGetContainerStatus.mockResolvedValue({ available: true, version: "27.5.1" });
-  mockGetContainerImages.mockResolvedValue(["companion-dev:latest"]);
+  mockGetContainerImages.mockResolvedValue(["the-companion:latest"]);
   mockUpdateEnv.mockResolvedValue({});
 });
 
@@ -48,14 +50,14 @@ describe("EnvManager existing env edit", () => {
     // Docker controls are visible in existing env edit mode.
     const baseImageSelect = screen.getAllByRole("combobox")[0] as HTMLSelectElement;
     expect(baseImageSelect.value).toBe("");
-    fireEvent.change(baseImageSelect, { target: { value: "companion-dev:latest" } });
+    fireEvent.change(baseImageSelect, { target: { value: "the-companion:latest" } });
 
     fireEvent.click(screen.getByText("Save"));
 
     await waitFor(() => {
       expect(mockUpdateEnv).toHaveBeenCalledWith(
         "companion",
-        expect.objectContaining({ baseImage: "companion-dev:latest" }),
+        expect.objectContaining({ baseImage: "the-companion:latest" }),
       );
     });
   });

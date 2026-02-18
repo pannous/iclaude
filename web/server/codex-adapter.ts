@@ -124,6 +124,8 @@ interface CodexMcpStatusListResponse {
 export interface CodexAdapterOptions {
   model?: string;
   cwd?: string;
+  /** Runtime cwd for Codex RPC calls. Falls back to `cwd` when omitted. */
+  executionCwd?: string;
   approvalMode?: string;
   sandbox?: "workspace-write" | "danger-full-access";
   /** If provided, resume an existing thread instead of starting a new one. */
@@ -361,6 +363,10 @@ export class CodexAdapter {
     secondary: { usedPercent: number; windowDurationMins: number; resetsAt: number } | null;
   } | null = null;
   private static readonly DYNAMIC_TOOL_CALL_TIMEOUT_MS = 120_000;
+
+  private getExecutionCwd(): string {
+    return this.options.executionCwd || this.options.cwd || "";
+  }
 
   constructor(proc: Subprocess, sessionId: string, options: CodexAdapterOptions = {}) {
     this.proc = proc;
@@ -616,7 +622,7 @@ export class CodexAdapter {
   private async startOrResumeThread(model?: string): Promise<{ thread: { id: string } }> {
     const payload = {
       model,
-      cwd: this.options.cwd,
+      cwd: this.getExecutionCwd(),
       approvalPolicy: this.mapApprovalPolicy(this.options.approvalMode),
       sandbox: this.options.sandbox || this.mapSandboxPolicy(this.options.approvalMode),
     };
@@ -675,7 +681,7 @@ export class CodexAdapter {
       const result = await this.transport.call("turn/start", {
         threadId: this.threadId,
         input,
-        cwd: this.options.cwd,
+        cwd: this.getExecutionCwd(),
       }) as { turn: { id: string } };
 
       this.currentTurnId = result.turn.id;
@@ -1048,7 +1054,7 @@ export class CodexAdapter {
       tool_name: "Bash",
       input: {
         command: commandStr,
-        cwd: params.cwd as string || this.options.cwd || "",
+        cwd: params.cwd as string || this.getExecutionCwd(),
       },
       description: params.reason as string || `Execute: ${commandStr}`,
       tool_use_id: params.itemId as string || requestId,
@@ -1258,7 +1264,7 @@ export class CodexAdapter {
 
     const command = params.command as string[] || [];
     const commandStr = command.join(" ");
-    const cwd = params.cwd as string || this.options.cwd || "";
+    const cwd = params.cwd as string || this.getExecutionCwd();
     const reason = params.reason as string | null;
 
     const perm: PermissionRequest = {
