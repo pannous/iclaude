@@ -1,6 +1,7 @@
 import { useStore } from "./store.js";
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, SdkSessionInfo, McpServerConfig } from "./types.js";
 import { resultScanner, scanContent } from "./utils/result-scanner.js";
+import { safeStorage } from "./utils/safe-storage.js";
 
 import { playNotificationSound } from "./utils/notification-sound.js";
 
@@ -213,7 +214,7 @@ function getLastSeq(sessionId: string): number {
   const cached = lastSeqBySession.get(sessionId);
   if (typeof cached === "number") return cached;
   try {
-    const raw = localStorage.getItem(getLastSeqStorageKey(sessionId));
+    const raw = safeStorage.getItem(getLastSeqStorageKey(sessionId));
     const parsed = raw ? Number(raw) : 0;
     const normalized = Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
     lastSeqBySession.set(sessionId, normalized);
@@ -227,7 +228,7 @@ function setLastSeq(sessionId: string, seq: number): void {
   const normalized = Math.max(0, Math.floor(seq));
   lastSeqBySession.set(sessionId, normalized);
   try {
-    localStorage.setItem(getLastSeqStorageKey(sessionId), String(normalized));
+    safeStorage.setItem(getLastSeqStorageKey(sessionId), String(normalized));
   } catch {
     // ignore storage errors
   }

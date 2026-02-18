@@ -268,14 +268,14 @@ function getInitialYoloMode(): boolean {
 
 function getInitialNotificationDesktop(): boolean {
   if (typeof window === "undefined") return false;
-  const stored = localStorage.getItem("cc-notification-desktop");
+  const stored = safeStorage.getItem("cc-notification-desktop");
   if (stored !== null) return stored === "true";
   return false;
 }
 
 function getInitialDismissedVersion(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("cc-update-dismissed") || null;
+  return safeStorage.getItem("cc-update-dismissed") || null;
 }
 
 function getInitialCollapsedProjects(): Set<string> {
@@ -289,14 +289,14 @@ function getInitialCollapsedProjects(): Set<string> {
 
 function getInitialQuickTerminalPlacement(): QuickTerminalPlacement {
   if (typeof window === "undefined") return "bottom";
-  const stored = window.localStorage.getItem("cc-terminal-placement");
+  const stored = safeStorage.getItem("cc-terminal-placement");
   if (stored === "top" || stored === "right" || stored === "bottom" || stored === "left") return stored;
   return "bottom";
 }
 
 function getInitialDiffBase(): DiffBase {
   if (typeof window === "undefined") return "last-commit";
-  const stored = window.localStorage.getItem("cc-diff-base");
+  const stored = safeStorage.getItem("cc-diff-base");
   if (stored === "last-commit" || stored === "default-branch") return stored;
   return "last-commit";
 }
@@ -402,13 +402,13 @@ export const useStore = create<AppState>((set) => ({
       return { yoloMode: next };
     }),
   setNotificationDesktop: (v) => {
-    localStorage.setItem("cc-notification-desktop", String(v));
+    safeStorage.setItem("cc-notification-desktop", String(v));
     set({ notificationDesktop: v });
   },
   toggleNotificationDesktop: () =>
     set((s) => {
       const next = !s.notificationDesktop;
-      localStorage.setItem("cc-notification-desktop", String(next));
+      safeStorage.setItem("cc-notification-desktop", String(next));
       return { notificationDesktop: next };
     }),
   setSidebarOpen: (v) => set({ sidebarOpen: v }),
@@ -768,7 +768,7 @@ export const useStore = create<AppState>((set) => ({
 
   setUpdateInfo: (info) => set({ updateInfo: info }),
   dismissUpdate: (version) => {
-    localStorage.setItem("cc-update-dismissed", version);
+    safeStorage.setItem("cc-update-dismissed", version);
     set({ updateDismissedVersion: version });
   },
 
@@ -901,13 +901,13 @@ export const useStore = create<AppState>((set) => ({
   setActiveQuickTerminalTabId: (tabId) => set({ activeQuickTerminalTabId: tabId }),
   setQuickTerminalPlacement: (placement) => {
     if (typeof window !== "undefined") {
-      localStorage.setItem("cc-terminal-placement", placement);
+      safeStorage.setItem("cc-terminal-placement", placement);
     }
     set({ quickTerminalPlacement: placement });
   },
   setDiffBase: (base) => {
     if (typeof window !== "undefined") {
-      localStorage.setItem("cc-diff-base", base);
+      safeStorage.setItem("cc-diff-base", base);
     }
     set({ diffBase: base });
   },
