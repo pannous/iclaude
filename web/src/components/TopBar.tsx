@@ -365,10 +365,9 @@ export function TopBar() {
             <span className="text-[13px] font-medium text-cc-fg truncate max-w-[320px]">{sessionTitle}</span>
           </div>
         )}
-      </div>
 
-      {/* Right side */}
-      <div className="mb-1 flex items-center gap-1.5 shrink-0">
+        {/* Right side */}
+        <div className="mb-1 flex items-center gap-1.5 shrink-0">
         {/* Folder + Branch info */}
         {currentSessionId && isSessionView && cwd && (
           <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-cc-muted">
@@ -435,6 +434,7 @@ export function TopBar() {
             <span className="hidden sm:inline text-[11px] font-medium">Context</span>
           </button>
         )}
+        </div>
       </div>
 
       {/* CLAUDE.md editor modal */}
