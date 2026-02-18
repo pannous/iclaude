@@ -275,6 +275,24 @@ function MarkdownContent({ text }: { text: string }) {
               );
             }
 
+            // Detect file paths in inline code and make them clickable
+            const text = typeof children === "string" ? children : "";
+            const filePathMatch = text.match(/^(\/[^\s:]+|[a-zA-Z][\w.-]*(?:\/[\w.-]+)+)(?::(\d+))?$/);
+            if (filePathMatch) {
+              const filePath = filePathMatch[1];
+              return (
+                <code
+                  className="px-1 py-0.5 rounded bg-cc-code-bg/30 text-[13px] font-mono-code text-cc-primary hover:bg-cc-primary/20 cursor-pointer transition-colors underline decoration-cc-primary/30"
+                  onClick={() => useStore.getState().openFileInEditor(filePath)}
+                  title={`Open ${filePath} in editor`}
+                  role="button"
+                  tabIndex={0}
+                >
+                  {children}
+                </code>
+              );
+            }
+
             return (
               <code className="px-1 py-0.5 rounded bg-cc-code-bg/30 text-[13px] font-mono-code text-cc-primary">
                 {children}

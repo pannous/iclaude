@@ -21,6 +21,7 @@ import { SessionTerminalDock } from "./components/SessionTerminalDock.js";
 
 const DiffPanel = lazy(() => import("./components/DiffPanel.js").then(m => ({ default: m.DiffPanel })));
 const SkillPanel = lazy(() => import("./components/SkillPanel.js").then(m => ({ default: m.SkillPanel })));
+const FileEditor = lazy(() => import("./components/FileEditor.js").then(m => ({ default: m.FileEditor })));
 
 function useHash() {
   return useSyncExternalStore(
@@ -428,6 +429,16 @@ export default function App() {
                         onClosePanel={() => useStore.getState().setActiveTab("chat")}
                       />
                     )
+                    : activeTab === "editor"
+                      ? (
+                        <Suspense fallback={
+                          <div className="h-full flex items-center justify-center">
+                            <div className="w-5 h-5 border-2 border-cc-primary border-t-transparent rounded-full animate-spin" />
+                          </div>
+                        }>
+                          <FileEditor />
+                        </Suspense>
+                      )
                     : (
                       <SessionTerminalDock sessionId={currentSessionId} suppressPanel>
                         {activeTab === "diff"

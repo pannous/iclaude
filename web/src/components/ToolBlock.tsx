@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { DiffViewer } from "./DiffViewer.js";
+import { useStore } from "../store.js";
 
 const TOOL_ICONS: Record<string, string> = {
   Bash: "terminal",
@@ -77,9 +78,7 @@ export function ToolBlock({
         <ToolIcon type={iconType} />
         <span className="text-xs font-medium text-cc-fg">{label}</span>
         {preview && (
-          <span className="text-xs text-cc-muted truncate flex-1 font-mono-code">
-            {preview}
-          </span>
+          <FilePathPreview name={name} input={input} preview={preview} />
         )}
       </button>
 
@@ -91,6 +90,27 @@ export function ToolBlock({
         </div>
       )}
     </div>
+  );
+}
+
+function FilePathPreview({ name, input, preview }: { name: string; input: Record<string, unknown>; preview: string }) {
+  const hasFilePath = (name === "Read" || name === "Write" || name === "Edit") && input.file_path;
+  if (hasFilePath) {
+    const fullPath = String(input.file_path);
+    return (
+      <span
+        className="text-xs text-cc-muted truncate flex-1 font-mono-code hover:text-cc-primary cursor-pointer underline decoration-cc-muted/30 hover:decoration-cc-primary/50 transition-colors"
+        onClick={(e) => { e.stopPropagation(); useStore.getState().openFileInEditor(fullPath); }}
+        title={`Open ${fullPath} in editor`}
+      >
+        {preview}
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs text-cc-muted truncate flex-1 font-mono-code">
+      {preview}
+    </span>
   );
 }
 
@@ -208,7 +228,11 @@ function ReadToolDetail({ input }: { input: Record<string, unknown> }) {
 
   return (
     <div className="space-y-1">
-      <div className="text-xs text-cc-muted font-mono-code">{filePath}</div>
+      <div
+        className="text-xs text-cc-muted font-mono-code hover:text-cc-primary cursor-pointer transition-colors"
+        onClick={() => filePath && useStore.getState().openFileInEditor(filePath)}
+        title={`Open ${filePath} in editor`}
+      >{filePath}</div>
       {(offset != null || limit != null) && (
         <div className="flex gap-2 text-[10px] text-cc-muted">
           {offset != null && <span>offset: {offset}</span>}

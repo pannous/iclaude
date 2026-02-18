@@ -93,12 +93,16 @@ interface AppState {
   taskPanelOpen: boolean;
   homeResetKey: number;
   newSessionCwd: string | null;
-  activeTab: string; // "chat" | "diff" | "terminal" | "skill:<slug>"
+  activeTab: string; // "chat" | "diff" | "terminal" | "editor" | "skill:<slug>"
   openSkills: string[];
   editorOpenFile: Map<string, string>;
   editorUrl: Map<string, string>;
   editorLoading: Map<string, boolean>;
   chatTabReentryTickBySession: Map<string, number>;
+
+  // File editor tab state (global, not per-session)
+  editorFiles: string[]; // open file paths
+  editorActiveFilePath: string | null;
 
   // Actions
   setDarkMode: (v: boolean) => void;
@@ -184,6 +188,11 @@ interface AppState {
   setEditorOpenFile: (sessionId: string, filePath: string | null) => void;
   setEditorUrl: (sessionId: string, url: string) => void;
   setEditorLoading: (sessionId: string, loading: boolean) => void;
+
+  // File editor tab actions
+  openFileInEditor: (filePath: string) => void;
+  closeEditorFile: (filePath: string) => void;
+  setEditorActiveFilePath: (filePath: string | null) => void;
 
   // Session quick terminal (docked in session workspace)
   quickTerminalOpen: boolean;
@@ -335,6 +344,8 @@ export const useStore = create<AppState>((set) => ({
   editorUrl: new Map(),
   editorLoading: new Map(),
   chatTabReentryTickBySession: new Map(),
+  editorFiles: [],
+  editorActiveFilePath: null,
   quickTerminalOpen: false,
   quickTerminalTabs: [],
   activeQuickTerminalTabId: null,
@@ -813,6 +824,30 @@ export const useStore = create<AppState>((set) => ({
       return { editorLoading };
     }),
 
+  openFileInEditor: (filePath) =>
+    set((s) => {
+      const files = s.editorFiles.includes(filePath)
+        ? s.editorFiles
+        : [...s.editorFiles, filePath];
+      return { editorFiles: files, editorActiveFilePath: filePath, activeTab: "editor" };
+    }),
+
+  closeEditorFile: (filePath) =>
+    set((s) => {
+      const files = s.editorFiles.filter((f) => f !== filePath);
+      const active =
+        s.editorActiveFilePath === filePath
+          ? files[Math.max(0, s.editorFiles.indexOf(filePath) - 1)] ?? null
+          : s.editorActiveFilePath;
+      return {
+        editorFiles: files,
+        editorActiveFilePath: active,
+        activeTab: files.length === 0 ? "chat" : s.activeTab,
+      };
+    }),
+
+  setEditorActiveFilePath: (filePath) => set({ editorActiveFilePath: filePath }),
+
   setQuickTerminalOpen: (open) => set({ quickTerminalOpen: open }),
   openQuickTerminal: (opts) =>
     set((s) => {
@@ -919,6 +954,8 @@ export const useStore = create<AppState>((set) => ({
       editorUrl: new Map(),
       editorLoading: new Map(),
       chatTabReentryTickBySession: new Map(),
+      editorFiles: [],
+      editorActiveFilePath: null,
       quickTerminalOpen: false,
       quickTerminalTabs: [],
       activeQuickTerminalTabId: null,

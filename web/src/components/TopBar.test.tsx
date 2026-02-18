@@ -31,6 +31,7 @@ interface MockStoreState {
   changedFiles: Map<string, Set<string>>;
   sessionNames: Map<string, string>;
   sessionSubtitles: Map<string, string>;
+  editorFiles: string[];
 }
 
 let storeState: MockStoreState;
@@ -59,6 +60,7 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     changedFiles: new Map(),
     sessionNames: new Map(),
     sessionSubtitles: new Map(),
+    editorFiles: [],
     ...overrides,
   };
 }
