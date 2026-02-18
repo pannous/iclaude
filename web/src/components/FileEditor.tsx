@@ -57,6 +57,14 @@ function FileTreeNode({
   );
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────
+
+/** Resolve a potentially relative path against the session cwd */
+function resolvePath(path: string, cwd: string | null): string {
+  if (path.startsWith("/")) return path;
+  return cwd ? `${cwd}/${path}` : path;
+}
+
 // ─── File Editor Component ────────────────────────────────────────
 
 export function FileEditor() {
@@ -77,6 +85,7 @@ export function FileEditor() {
 
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [treeLoading, setTreeLoading] = useState(false);
+  // Content maps are keyed by *resolved* (absolute) path
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
   const [editBuffers, setEditBuffers] = useState<Map<string, string>>(new Map());
   const [saving, setSaving] = useState(false);
@@ -84,8 +93,10 @@ export function FileEditor() {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const isDirty = activeFilePath
-    ? editBuffers.has(activeFilePath) && editBuffers.get(activeFilePath) !== fileContents.get(activeFilePath)
+  const resolved = activeFilePath ? resolvePath(activeFilePath, cwd) : null;
+
+  const isDirty = resolved
+    ? editBuffers.has(resolved) && editBuffers.get(resolved) !== fileContents.get(resolved)
     : false;
 
   // Load file tree when cwd changes
@@ -100,15 +111,15 @@ export function FileEditor() {
 
   // Load file content when a new file is opened
   useEffect(() => {
-    if (!activeFilePath || fileContents.has(activeFilePath)) return;
+    if (!resolved || fileContents.has(resolved)) return;
     setError(null);
-    api.readFile(activeFilePath)
+    api.readFile(resolved)
       .then((res) => {
-        setFileContents((prev) => new Map(prev).set(activeFilePath, res.content));
-        setEditBuffers((prev) => new Map(prev).set(activeFilePath, res.content));
+        setFileContents((prev) => new Map(prev).set(resolved, res.content));
+        setEditBuffers((prev) => new Map(prev).set(resolved, res.content));
       })
-      .catch((e) => setError(e.message));
-  }, [activeFilePath, fileContents]);
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, [resolved, fileContents]);
 
   // Focus textarea when switching files
   useEffect(() => {
@@ -116,19 +127,19 @@ export function FileEditor() {
   }, [activeFilePath]);
 
   const handleSave = useCallback(async () => {
-    if (!activeFilePath || !isDirty) return;
+    if (!resolved || !isDirty) return;
     setSaving(true);
     setError(null);
     try {
-      const content = editBuffers.get(activeFilePath) ?? "";
-      await api.writeFile(activeFilePath, content);
-      setFileContents((prev) => new Map(prev).set(activeFilePath, content));
+      const content = editBuffers.get(resolved) ?? "";
+      await api.writeFile(resolved, content);
+      setFileContents((prev) => new Map(prev).set(resolved, content));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
     } finally {
       setSaving(false);
     }
-  }, [activeFilePath, isDirty, editBuffers]);
+  }, [resolved, isDirty, editBuffers]);
 
   // Cmd/Ctrl+S to save
   useEffect(() => {
@@ -144,13 +155,14 @@ export function FileEditor() {
 
   const handleClose = (filePath: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const buffer = editBuffers.get(filePath);
-    const original = fileContents.get(filePath);
+    const abs = resolvePath(filePath, cwd);
+    const buffer = editBuffers.get(abs);
+    const original = fileContents.get(abs);
     if (buffer !== undefined && original !== undefined && buffer !== original) {
       if (!confirm("Discard unsaved changes?")) return;
     }
-    setFileContents((prev) => { const m = new Map(prev); m.delete(filePath); return m; });
-    setEditBuffers((prev) => { const m = new Map(prev); m.delete(filePath); return m; });
+    setFileContents((prev) => { const m = new Map(prev); m.delete(abs); return m; });
+    setEditBuffers((prev) => { const m = new Map(prev); m.delete(abs); return m; });
     closeEditorFile(filePath);
   };
 
@@ -159,8 +171,10 @@ export function FileEditor() {
 
   const fileName = (p: string) => p.split("/").pop() ?? p;
 
-  const isFileDirty = (p: string) =>
-    editBuffers.has(p) && editBuffers.get(p) !== fileContents.get(p);
+  const isFileDirty = (p: string) => {
+    const abs = resolvePath(p, cwd);
+    return editBuffers.has(abs) && editBuffers.get(abs) !== fileContents.get(abs);
+  };
 
   if (openFiles.length === 0) {
     return (
@@ -203,7 +217,7 @@ export function FileEditor() {
     );
   }
 
-  const currentContent = activeFilePath ? (editBuffers.get(activeFilePath) ?? "") : "";
+  const currentContent = resolved ? (editBuffers.get(resolved) ?? "") : "";
 
   return (
     <div className="h-full flex">
@@ -279,10 +293,10 @@ export function FileEditor() {
         </div>
 
         {/* File path + save bar */}
-        {activeFilePath && (
+        {resolved && (
           <div className="shrink-0 flex items-center justify-between px-4 py-1.5 bg-cc-card/50 border-b border-cc-border">
             <span className="text-[11px] text-cc-muted font-mono-code truncate">
-              {relPath(activeFilePath)}
+              {relPath(resolved)}
             </span>
             <div className="flex items-center gap-2">
               {isDirty && (
@@ -304,13 +318,13 @@ export function FileEditor() {
         )}
 
         {/* Textarea */}
-        {activeFilePath && (
+        {resolved && (
           <textarea
             ref={textareaRef}
             value={currentContent}
             onChange={(e) => {
-              const val = e.target.value;
-              setEditBuffers((prev) => new Map(prev).set(activeFilePath, val));
+              if (!resolved) return;
+              setEditBuffers((prev) => new Map(prev).set(resolved, e.target.value));
             }}
             spellCheck={false}
             className="flex-1 w-full p-4 bg-cc-bg text-cc-fg text-[13px] font-mono-code leading-relaxed resize-none focus:outline-none"

@@ -428,7 +428,10 @@ export const useStore = create<AppState>((set) => ({
     } else {
       safeStorage.removeItem("cc-current-session");
     }
-    set({ currentSessionId: id });
+    set((s) => ({
+      currentSessionId: id,
+      activeTab: s.activeTab === "editor" ? "chat" : s.activeTab,
+    }));
   },
 
   addSession: (session) =>
