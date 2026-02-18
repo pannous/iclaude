@@ -95,10 +95,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const pendingSelectionRef = useRef<number | null>(null);
   const cliConnected = useStore((s) => s.cliConnected);
   const sessionData = useStore((s) => s.sessions.get(sessionId));
-  const previousMode = useStore((s) => s.previousPermissionMode.get(sessionId) || "acceptEdits");
+  const previousMode = useStore((s) => s.previousPermissionMode.get(sessionId) || "bypassPermissions");
 
   const isConnected = cliConnected.get(sessionId) ?? false;
-  const currentMode = sessionData?.permissionMode || "acceptEdits";
+  const currentMode = sessionData?.permissionMode || "bypassPermissions";
   const isPlan = currentMode === "plan";
   const isCodex = sessionData?.backend_type === "codex";
   const modes: ModeOption[] = isCodex ? CODEX_MODES : CLAUDE_MODES;
@@ -410,8 +410,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
     if (!isConnected || isCodex) return;
     const store = useStore.getState();
 
-    // Cycle through: bypassPermissions -> plan -> default -> bypassPermissions
-    const modeOrder = ["bypassPermissions", "plan", "default"];
+    const modeOrder = modes.map((m) => m.value);
     const currentIndex = modeOrder.indexOf(currentMode);
     const nextIndex = (currentIndex + 1) % modeOrder.length;
     const nextMode = modeOrder[nextIndex];
