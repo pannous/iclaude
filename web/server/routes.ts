@@ -19,11 +19,13 @@ import * as promptManager from "./prompt-manager.js";
 import * as cronStore from "./cron-store.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
+import * as sessionLinearIssues from "./session-linear-issues.js";
 import { containerManager, ContainerManager, type ContainerConfig, type ContainerInfo } from "./container-manager.js";
 import type { CreationStepId } from "./session-types.js";
 import { hasContainerClaudeAuth } from "./claude-container-auth.js";
 import { hasContainerCodexAuth } from "./codex-container-auth.js";
 import { DEFAULT_OPENROUTER_MODEL, getSettings, updateSettings } from "./settings-manager.js";
+import * as linearProjectManager from "./linear-project-manager.js";
 import { getUsageLimits } from "./usage-limits.js";
 import {
   getUpdateState,
@@ -37,6 +39,16 @@ import { imagePullManager } from "./image-pull-manager.js";
 const UPDATE_CHECK_STALE_MS = 5 * 60 * 1000;
 const ROUTES_DIR = dirname(fileURLToPath(import.meta.url));
 const WEB_DIR = dirname(ROUTES_DIR);
+
+function linearIssueStateCategory(issue: { stateType?: string; stateName?: string }): 0 | 1 | 2 {
+  const stateType = (issue.stateType || "").trim().toLowerCase();
+  const stateName = (issue.stateName || "").trim().toLowerCase();
+  const isDone = stateType === "completed" || stateType === "canceled" || stateType === "cancelled"
+    || stateName === "done" || stateName === "completed" || stateName === "canceled" || stateName === "cancelled";
+  if (isDone) return 2;
+  if (stateType === "started") return 1;
+  return 0;
+}
 
 function execCaptureStdout(
   command: string,
@@ -155,7 +167,10 @@ export function createRoutes(
           }
 
           if (repoInfo.currentBranch !== body.branch) {
-            gitUtils.checkoutBranch(repoInfo.repoRoot, body.branch);
+            gitUtils.checkoutOrCreateBranch(repoInfo.repoRoot, body.branch, {
+              createBranch: body.createBranch,
+              defaultBranch: repoInfo.defaultBranch,
+            });
           }
 
           const pullResult = gitUtils.gitPull(repoInfo.repoRoot);
@@ -413,17 +428,10 @@ export function createRoutes(
 
             if (repoInfo.currentBranch !== body.branch) {
               await emitProgress(stream, "checkout_branch", `Checking out ${body.branch}...`, "in_progress");
-              try {
-                gitUtils.checkoutBranch(repoInfo.repoRoot, body.branch);
-              } catch {
-                // Branch doesn't exist locally — create it if requested
-                if (body.createBranch) {
-                  const base = repoInfo.defaultBranch;
-                  gitUtils.createAndCheckoutBranch(repoInfo.repoRoot, body.branch, base);
-                } else {
-                  throw new Error(`Branch "${body.branch}" does not exist. Enable "create branch" to create it.`);
-                }
-              }
+              gitUtils.checkoutOrCreateBranch(repoInfo.repoRoot, body.branch, {
+                createBranch: body.createBranch,
+                defaultBranch: repoInfo.defaultBranch,
+              });
               await emitProgress(stream, "checkout_branch", `On branch ${body.branch}`, "done");
             }
 
@@ -679,6 +687,9 @@ export function createRoutes(
       const bridge = bridgeMap.get(s.sessionId);
       return {
         ...s,
+        // Bridge state is the source of truth for runtime cwd updates
+        // (notably containerized sessions mapped back to host paths).
+        cwd: bridge?.cwd || s.cwd,
         name: names[s.sessionId] ?? s.name,
         gitBranch: bridge?.git_branch || "",
         gitAhead: bridge?.git_ahead || 0,
@@ -792,6 +803,7 @@ export function createRoutes(
 
     const worktreeResult = cleanupWorktree(id, true);
     prPoller?.unwatch(id);
+    sessionLinearIssues.removeLinearIssue(id);
     launcher.removeSession(id);
     wsBridge.closeSession(id);
     return c.json({ ok: true, worktree: worktreeResult });
@@ -1416,6 +1428,8 @@ export function createRoutes(
       openrouterApiKeyConfigured: !!settings.openrouterApiKey.trim(),
       openrouterModel: settings.openrouterModel || DEFAULT_OPENROUTER_MODEL,
       linearApiKeyConfigured: !!settings.linearApiKey.trim(),
+      linearAutoTransition: settings.linearAutoTransition,
+      linearAutoTransitionStateName: settings.linearAutoTransitionStateName,
     });
   });
 
@@ -1430,7 +1444,19 @@ export function createRoutes(
     if (body.linearApiKey !== undefined && typeof body.linearApiKey !== "string") {
       return c.json({ error: "linearApiKey must be a string" }, 400);
     }
-    if (body.openrouterApiKey === undefined && body.openrouterModel === undefined && body.linearApiKey === undefined) {
+    if (body.linearAutoTransition !== undefined && typeof body.linearAutoTransition !== "boolean") {
+      return c.json({ error: "linearAutoTransition must be a boolean" }, 400);
+    }
+    if (body.linearAutoTransitionStateId !== undefined && typeof body.linearAutoTransitionStateId !== "string") {
+      return c.json({ error: "linearAutoTransitionStateId must be a string" }, 400);
+    }
+    if (body.linearAutoTransitionStateName !== undefined && typeof body.linearAutoTransitionStateName !== "string") {
+      return c.json({ error: "linearAutoTransitionStateName must be a string" }, 400);
+    }
+    const hasAnyField = body.openrouterApiKey !== undefined || body.openrouterModel !== undefined
+      || body.linearApiKey !== undefined || body.linearAutoTransition !== undefined
+      || body.linearAutoTransitionStateId !== undefined || body.linearAutoTransitionStateName !== undefined;
+    if (!hasAnyField) {
       return c.json({ error: "At least one settings field is required" }, 400);
     }
 
@@ -1447,12 +1473,26 @@ export function createRoutes(
         typeof body.linearApiKey === "string"
           ? body.linearApiKey.trim()
           : undefined,
+      linearAutoTransition:
+        typeof body.linearAutoTransition === "boolean"
+          ? body.linearAutoTransition
+          : undefined,
+      linearAutoTransitionStateId:
+        typeof body.linearAutoTransitionStateId === "string"
+          ? body.linearAutoTransitionStateId.trim()
+          : undefined,
+      linearAutoTransitionStateName:
+        typeof body.linearAutoTransitionStateName === "string"
+          ? body.linearAutoTransitionStateName.trim()
+          : undefined,
     });
 
     return c.json({
       openrouterApiKeyConfigured: !!settings.openrouterApiKey.trim(),
       openrouterModel: settings.openrouterModel || DEFAULT_OPENROUTER_MODEL,
       linearApiKeyConfigured: !!settings.linearApiKey.trim(),
+      linearAutoTransition: settings.linearAutoTransition,
+      linearAutoTransitionStateName: settings.linearAutoTransitionStateName,
     });
   });
 
@@ -1489,7 +1529,7 @@ export function createRoutes(
                 branchName
                 priorityLabel
                 state { name type }
-                team { key name }
+                team { id key name }
               }
             }
           }
@@ -1512,7 +1552,7 @@ export function createRoutes(
             branchName?: string | null;
             priorityLabel?: string | null;
             state?: { name?: string | null; type?: string | null } | null;
-            team?: { key?: string | null; name?: string | null } | null;
+            team?: { id?: string | null; key?: string | null; name?: string | null } | null;
           }>;
         };
       };
@@ -1536,7 +1576,10 @@ export function createRoutes(
       stateType: issue.state?.type || "",
       teamName: issue.team?.name || "",
       teamKey: issue.team?.key || "",
-    }));
+      teamId: issue.team?.id || "",
+    }))
+      .filter((issue) => linearIssueStateCategory(issue) !== 2)
+      .sort((a, b) => linearIssueStateCategory(a) - linearIssueStateCategory(b));
 
     return c.json({ issues });
   });
@@ -1587,6 +1630,561 @@ export function createRoutes(
       teamName: firstTeam?.name || "",
       teamKey: firstTeam?.key || "",
     });
+  });
+
+  // ─── Linear issue <-> session association ───────────────────────────
+
+  api.put("/sessions/:id/linear-issue", async (c) => {
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    if (!body.id || !body.identifier || !body.title || !body.url) {
+      return c.json({ error: "id, identifier, title, and url are required" }, 400);
+    }
+    sessionLinearIssues.setLinearIssue(id, {
+      id: String(body.id),
+      identifier: String(body.identifier),
+      title: String(body.title),
+      description: String(body.description || ""),
+      url: String(body.url),
+      branchName: String(body.branchName || ""),
+      priorityLabel: String(body.priorityLabel || ""),
+      stateName: String(body.stateName || ""),
+      stateType: String(body.stateType || ""),
+      teamName: String(body.teamName || ""),
+      teamKey: String(body.teamKey || ""),
+      teamId: String(body.teamId || ""),
+      assigneeName: body.assigneeName ? String(body.assigneeName) : undefined,
+      updatedAt: body.updatedAt ? String(body.updatedAt) : undefined,
+    });
+    return c.json({ ok: true });
+  });
+
+  api.get("/sessions/:id/linear-issue", async (c) => {
+    const id = c.req.param("id");
+    const stored = sessionLinearIssues.getLinearIssue(id);
+    if (!stored) return c.json({ issue: null });
+
+    const refresh = c.req.query("refresh") === "true";
+    if (!refresh) return c.json({ issue: stored });
+
+    // Fetch fresh data from Linear API
+    const settings = getSettings();
+    const linearApiKey = settings.linearApiKey.trim();
+    if (!linearApiKey) return c.json({ issue: stored });
+
+    try {
+      const response = await fetch("https://api.linear.app/graphql", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: linearApiKey,
+        },
+        body: JSON.stringify({
+          query: `
+            query CompanionIssueFetch($id: String!) {
+              issue(id: $id) {
+                id identifier title description url branchName priorityLabel
+                state { name type }
+                team { id key name }
+                comments(last: 5) {
+                  nodes {
+                    id body createdAt
+                    user { id name displayName avatarUrl }
+                  }
+                }
+                assignee { id name displayName avatarUrl }
+                labels { nodes { id name color } }
+              }
+            }
+          `,
+          variables: { id: stored.id },
+        }),
+      });
+
+      const json = await response.json().catch(() => ({})) as {
+        data?: {
+          issue?: {
+            id: string;
+            identifier: string;
+            title: string;
+            description?: string | null;
+            url: string;
+            branchName?: string | null;
+            priorityLabel?: string | null;
+            state?: { name?: string | null; type?: string | null } | null;
+            team?: { id?: string | null; key?: string | null; name?: string | null } | null;
+            comments?: { nodes?: Array<{
+              id: string;
+              body: string;
+              createdAt: string;
+              user?: { name?: string | null; displayName?: string | null; avatarUrl?: string | null } | null;
+            }> } | null;
+            assignee?: { name?: string | null; displayName?: string | null; avatarUrl?: string | null } | null;
+            labels?: { nodes?: Array<{ id: string; name: string; color: string }> } | null;
+          } | null;
+        };
+        errors?: Array<{ message?: string }>;
+      };
+
+      const issue = json.data?.issue;
+      if (issue) {
+        const updated = {
+          id: issue.id,
+          identifier: issue.identifier,
+          title: issue.title,
+          description: issue.description || "",
+          url: issue.url,
+          branchName: issue.branchName || "",
+          priorityLabel: issue.priorityLabel || "",
+          stateName: issue.state?.name || "",
+          stateType: issue.state?.type || "",
+          teamName: issue.team?.name || "",
+          teamKey: issue.team?.key || "",
+          teamId: issue.team?.id || "",
+          assigneeName: issue.assignee?.displayName || issue.assignee?.name || "",
+          updatedAt: new Date().toISOString(),
+        };
+        sessionLinearIssues.setLinearIssue(id, updated);
+        return c.json({
+          issue: updated,
+          comments: (issue.comments?.nodes || []).map((comment) => ({
+            id: comment.id,
+            body: comment.body,
+            createdAt: comment.createdAt,
+            userName: comment.user?.displayName || comment.user?.name || "Unknown",
+            userAvatarUrl: comment.user?.avatarUrl || null,
+          })),
+          assignee: issue.assignee ? {
+            name: issue.assignee.displayName || issue.assignee.name || "",
+            avatarUrl: issue.assignee.avatarUrl || null,
+          } : null,
+          labels: (issue.labels?.nodes || []).map((l) => ({
+            id: l.id,
+            name: l.name,
+            color: l.color,
+          })),
+        });
+      }
+    } catch {
+      // Fall through to return stored data on error
+    }
+
+    return c.json({ issue: stored });
+  });
+
+  api.delete("/sessions/:id/linear-issue", (c) => {
+    const id = c.req.param("id");
+    sessionLinearIssues.removeLinearIssue(id);
+    return c.json({ ok: true });
+  });
+
+  api.post("/linear/issues/:issueId/comments", async (c) => {
+    const issueId = c.req.param("issueId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    if (typeof body.body !== "string" || !body.body.trim()) {
+      return c.json({ error: "body is required" }, 400);
+    }
+
+    const settings = getSettings();
+    const linearApiKey = settings.linearApiKey.trim();
+    if (!linearApiKey) {
+      return c.json({ error: "Linear API key is not configured" }, 400);
+    }
+
+    const response = await fetch("https://api.linear.app/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: linearApiKey,
+      },
+      body: JSON.stringify({
+        query: `
+          mutation CompanionAddComment($issueId: String!, $body: String!) {
+            commentCreate(input: { issueId: $issueId, body: $body }) {
+              success
+              comment { id body createdAt user { name displayName } }
+            }
+          }
+        `,
+        variables: { issueId, body: body.body.trim() },
+      }),
+    }).catch((e: unknown) => {
+      throw new Error(`Failed to connect to Linear: ${e instanceof Error ? e.message : String(e)}`);
+    });
+
+    const json = await response.json().catch(() => ({})) as {
+      data?: {
+        commentCreate?: {
+          success?: boolean;
+          comment?: {
+            id: string;
+            body: string;
+            createdAt: string;
+            user?: { name?: string | null; displayName?: string | null } | null;
+          };
+        };
+      };
+      errors?: Array<{ message?: string }>;
+    };
+
+    if (!response.ok || (json.errors && json.errors.length > 0)) {
+      const firstError = json.errors?.[0]?.message || response.statusText || "Comment creation failed";
+      return c.json({ error: firstError }, 502);
+    }
+
+    const result = json.data?.commentCreate;
+    if (!result?.success || !result.comment) {
+      return c.json({ error: "Comment creation failed" }, 502);
+    }
+
+    return c.json({
+      ok: true,
+      comment: {
+        id: result.comment.id,
+        body: result.comment.body,
+        createdAt: result.comment.createdAt,
+        userName: result.comment.user?.displayName || result.comment.user?.name || "You",
+        userAvatarUrl: null,
+      },
+    });
+  });
+
+  api.get("/linear/states", async (c) => {
+    const settings = getSettings();
+    const linearApiKey = settings.linearApiKey.trim();
+    if (!linearApiKey) {
+      return c.json({ error: "Linear API key is not configured" }, 400);
+    }
+
+    const response = await fetch("https://api.linear.app/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: linearApiKey,
+      },
+      body: JSON.stringify({
+        query: `
+          query CompanionWorkflowStates {
+            teams {
+              nodes {
+                id
+                key
+                name
+                states {
+                  nodes {
+                    id
+                    name
+                    type
+                  }
+                }
+              }
+            }
+          }
+        `,
+      }),
+    }).catch((e: unknown) => {
+      throw new Error(`Failed to connect to Linear: ${e instanceof Error ? e.message : String(e)}`);
+    });
+
+    const json = await response.json().catch(() => ({})) as {
+      data?: {
+        teams?: {
+          nodes?: Array<{
+            id?: string;
+            key?: string | null;
+            name?: string | null;
+            states?: {
+              nodes?: Array<{
+                id?: string;
+                name?: string | null;
+                type?: string | null;
+              }>;
+            };
+          }>;
+        };
+      };
+      errors?: Array<{ message?: string }>;
+    };
+
+    if (!response.ok || (json.errors && json.errors.length > 0)) {
+      const firstError = json.errors?.[0]?.message || response.statusText || "Linear request failed";
+      return c.json({ error: firstError }, 502);
+    }
+
+    const teams = (json.data?.teams?.nodes || []).map((team) => ({
+      id: team.id || "",
+      key: team.key || "",
+      name: team.name || "",
+      states: (team.states?.nodes || []).map((state) => ({
+        id: state.id || "",
+        name: state.name || "",
+        type: state.type || "",
+      })),
+    }));
+
+    return c.json({ teams });
+  });
+
+  // ─── Linear projects ────────────────────────────────────────────────
+
+  api.get("/linear/projects", async (c) => {
+    const settings = getSettings();
+    const linearApiKey = settings.linearApiKey.trim();
+    if (!linearApiKey) {
+      return c.json({ error: "Linear API key is not configured" }, 400);
+    }
+
+    const response = await fetch("https://api.linear.app/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: linearApiKey,
+      },
+      body: JSON.stringify({
+        query: `
+          query CompanionListProjects {
+            projects(first: 50, orderBy: updatedAt) {
+              nodes { id name state }
+            }
+          }
+        `,
+      }),
+    }).catch((e: unknown) => {
+      throw new Error(`Failed to connect to Linear: ${e instanceof Error ? e.message : String(e)}`);
+    });
+
+    const json = await response.json().catch(() => ({})) as {
+      data?: {
+        projects?: { nodes?: Array<{ id?: string; name?: string | null; state?: string | null }> } | null;
+      };
+      errors?: Array<{ message?: string }>;
+    };
+
+    if (!response.ok || (json.errors && json.errors.length > 0)) {
+      const firstError = json.errors?.[0]?.message || response.statusText || "Linear request failed";
+      return c.json({ error: firstError }, 502);
+    }
+
+    const projects = (json.data?.projects?.nodes || []).map((p) => ({
+      id: p.id || "",
+      name: p.name || "",
+      state: p.state || "",
+    }));
+
+    return c.json({ projects });
+  });
+
+  // ─── Linear project issues (recent, non-done) ─────────────────────
+
+  api.get("/linear/project-issues", async (c) => {
+    const projectId = (c.req.query("projectId") || "").trim();
+    const limitRaw = Number(c.req.query("limit") || "15");
+    const limit = Math.min(50, Math.max(1, Number.isFinite(limitRaw) ? Math.floor(limitRaw) : 15));
+    if (!projectId) return c.json({ error: "projectId is required" }, 400);
+
+    const settings = getSettings();
+    const linearApiKey = settings.linearApiKey.trim();
+    if (!linearApiKey) {
+      return c.json({ error: "Linear API key is not configured" }, 400);
+    }
+
+    const response = await fetch("https://api.linear.app/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: linearApiKey,
+      },
+      body: JSON.stringify({
+        query: `
+          query CompanionProjectIssues($projectId: ID!, $first: Int!) {
+            issues(
+              filter: {
+                project: { id: { eq: $projectId } }
+                state: { type: { nin: ["completed", "cancelled"] } }
+              }
+              orderBy: updatedAt
+              first: $first
+            ) {
+              nodes {
+                id
+                identifier
+                title
+                description
+                url
+                priorityLabel
+                state { name type }
+                team { key name }
+                assignee { name }
+                updatedAt
+              }
+            }
+          }
+        `,
+        variables: { projectId, first: limit },
+      }),
+    }).catch((e: unknown) => {
+      throw new Error(`Failed to connect to Linear: ${e instanceof Error ? e.message : String(e)}`);
+    });
+
+    const json = await response.json().catch(() => ({})) as {
+      data?: {
+        issues?: {
+          nodes?: Array<{
+            id: string;
+            identifier: string;
+            title: string;
+            description?: string | null;
+            url: string;
+            priorityLabel?: string | null;
+            state?: { name?: string | null; type?: string | null } | null;
+            team?: { key?: string | null; name?: string | null } | null;
+            assignee?: { name?: string | null } | null;
+            updatedAt?: string | null;
+          }>;
+        };
+      };
+      errors?: Array<{ message?: string }>;
+    };
+
+    if (!response.ok || (json.errors && json.errors.length > 0)) {
+      const firstError = json.errors?.[0]?.message || response.statusText || "Linear request failed";
+      return c.json({ error: firstError }, 502);
+    }
+
+    const issues = (json.data?.issues?.nodes || []).map((issue) => ({
+      id: issue.id,
+      identifier: issue.identifier,
+      title: issue.title,
+      description: issue.description || "",
+      url: issue.url,
+      priorityLabel: issue.priorityLabel || "",
+      stateName: issue.state?.name || "",
+      stateType: issue.state?.type || "",
+      teamName: issue.team?.name || "",
+      teamKey: issue.team?.key || "",
+      assigneeName: issue.assignee?.name || "",
+      updatedAt: issue.updatedAt || "",
+    }))
+      .filter((issue) => linearIssueStateCategory(issue) !== 2)
+      .sort((a, b) => linearIssueStateCategory(a) - linearIssueStateCategory(b));
+
+    return c.json({ issues });
+  });
+
+  // ─── Linear project mappings ──────────────────────────────────────
+
+  api.get("/linear/project-mappings", (c) => {
+    const repoRoot = c.req.query("repoRoot");
+    if (repoRoot) {
+      const mapping = linearProjectManager.getMapping(repoRoot);
+      return c.json({ mapping: mapping || null });
+    }
+    return c.json({ mappings: linearProjectManager.listMappings() });
+  });
+
+  api.put("/linear/project-mappings", async (c) => {
+    const body = await c.req.json().catch(() => ({})) as {
+      repoRoot?: string;
+      projectId?: string;
+      projectName?: string;
+    };
+    if (!body.repoRoot || !body.projectId || !body.projectName) {
+      return c.json({ error: "repoRoot, projectId, and projectName are required" }, 400);
+    }
+    const mapping = linearProjectManager.upsertMapping(body.repoRoot, {
+      projectId: body.projectId,
+      projectName: body.projectName,
+    });
+    return c.json({ mapping });
+  });
+
+  api.delete("/linear/project-mappings", async (c) => {
+    const body = await c.req.json().catch(() => ({})) as { repoRoot?: string };
+    if (!body.repoRoot) return c.json({ error: "repoRoot is required" }, 400);
+    const removed = linearProjectManager.removeMapping(body.repoRoot);
+    if (!removed) return c.json({ error: "Mapping not found" }, 404);
+    return c.json({ ok: true });
+  });
+
+  api.post("/linear/issues/:id/transition", async (c) => {
+    const issueId = c.req.param("id");
+    if (!issueId) {
+      return c.json({ error: "Issue ID is required" }, 400);
+    }
+
+    const settings = getSettings();
+    const linearApiKey = settings.linearApiKey.trim();
+    if (!linearApiKey) {
+      return c.json({ error: "Linear API key is not configured" }, 400);
+    }
+
+    if (!settings.linearAutoTransition) {
+      return c.json({ ok: true, skipped: true, reason: "auto_transition_disabled" });
+    }
+
+    const stateId = settings.linearAutoTransitionStateId.trim();
+    if (!stateId) {
+      return c.json({ ok: true, skipped: true, reason: "no_target_state_configured" });
+    }
+
+    try {
+      const updateResponse = await fetch("https://api.linear.app/graphql", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: linearApiKey,
+        },
+        body: JSON.stringify({
+          query: `
+            mutation CompanionTransitionIssue($issueId: String!, $stateId: String!) {
+              issueUpdate(id: $issueId, input: { stateId: $stateId }) {
+                success
+                issue {
+                  id
+                  identifier
+                  state { name type }
+                }
+              }
+            }
+          `,
+          variables: { issueId, stateId },
+        }),
+      });
+
+      const updateJson = await updateResponse.json().catch(() => ({})) as {
+        data?: {
+          issueUpdate?: {
+            success?: boolean;
+            issue?: {
+              id?: string;
+              identifier?: string;
+              state?: { name?: string; type?: string };
+            };
+          };
+        };
+        errors?: Array<{ message?: string }>;
+      };
+
+      if (!updateResponse.ok || (updateJson.errors && updateJson.errors.length > 0)) {
+        const errMsg = updateJson.errors?.[0]?.message || updateResponse.statusText || "Failed to update issue state";
+        return c.json({ error: errMsg }, 502);
+      }
+
+      const updatedIssue = updateJson.data?.issueUpdate?.issue;
+      return c.json({
+        ok: true,
+        skipped: false,
+        issue: {
+          id: updatedIssue?.id || issueId,
+          identifier: updatedIssue?.identifier || "",
+          stateName: updatedIssue?.state?.name || "",
+          stateType: updatedIssue?.state?.type || "",
+        },
+      });
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      return c.json({ error: `Linear transition failed: ${errMsg}` }, 502);
+    }
   });
 
   // ─── Git operations ─────────────────────────────────────────────────

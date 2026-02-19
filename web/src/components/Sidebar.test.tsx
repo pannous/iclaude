@@ -63,7 +63,7 @@ interface MockStoreState {
 function makeSession(id: string, overrides: Partial<SessionState> = {}): SessionState {
   return {
     session_id: id,
-    model: "claude-sonnet-4-5-20250929",
+    model: "claude-sonnet-4-6",
     cwd: "/home/user/projects/myapp",
     tools: [],
     permissionMode: "default",
@@ -297,7 +297,7 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    const sessionButton = screen.getByText("Session s1").closest("button")!;
+    const sessionButton = screen.getByText("Session s1").closest("button")!
     fireEvent.click(sessionButton);
 
     expect(window.location.hash).toBe("#/session/s1");
@@ -319,7 +319,7 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    const sessionButton = screen.getByText("Session s1").closest("button")!;
+    const sessionButton = screen.getByText("Session s1").closest("button")!
     fireEvent.doubleClick(sessionButton);
 
     // After double-click, an input should appear for renaming

@@ -1,5 +1,59 @@
 # Changelog
 
+## [0.55.2](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.55.1...the-companion-v0.55.2) (2026-02-19)
+
+
+### Bug Fixes
+
+* **server:** map container repo root to host path ([#348](https://github.com/The-Vibe-Company/companion/issues/348)) ([c29f967](https://github.com/The-Vibe-Company/companion/commit/c29f9671d4dcdda876a999906f0e6fd63da8bd27))
+
+## [0.55.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.55.0...the-companion-v0.55.1) (2026-02-19)
+
+
+### Bug Fixes
+
+* **linear:** show only active issues and prioritize backlog ([#346](https://github.com/The-Vibe-Company/companion/issues/346)) ([c2a6e1a](https://github.com/The-Vibe-Company/companion/commit/c2a6e1a0b8d22d032b516a186d5e23db906fdfc2))
+
+## [0.55.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.54.1...the-companion-v0.55.0) (2026-02-19)
+
+
+### Features
+
+* **ui:** make right sidebar modular with inline configuration ([#345](https://github.com/The-Vibe-Company/companion/issues/345)) ([a9a7905](https://github.com/The-Vibe-Company/companion/commit/a9a7905374e2dcf0c173b3fa9f04a7f209f75a6f))
+
+
+### Bug Fixes
+
+* **homepage:** restore linear issue branch auto-selection ([#342](https://github.com/The-Vibe-Company/companion/issues/342)) ([01936e4](https://github.com/The-Vibe-Company/companion/commit/01936e4de89bd925c71d13034c91c95560b5e517))
+
+## [0.54.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.54.0...the-companion-v0.54.1) (2026-02-19)
+
+
+### Bug Fixes
+
+* **server:** resolve branch from containerized session git state ([#340](https://github.com/The-Vibe-Company/companion/issues/340)) ([304092d](https://github.com/The-Vibe-Company/companion/commit/304092df1c2e3ce8eceaa3c2c39917beb94b2cdb))
+
+## [0.54.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.53.1...the-companion-v0.54.0) (2026-02-19)
+
+
+### Features
+
+* **integrations:** associate Linear ticket with session in TaskPanel ([#333](https://github.com/The-Vibe-Company/companion/issues/333)) ([943bf36](https://github.com/The-Vibe-Company/companion/commit/943bf36cd3f8fbdfc3f73fa48e7d9cd76fd12ea4))
+* **integrations:** attach Linear project to git repo and show recent issues on homepage ([#331](https://github.com/The-Vibe-Company/companion/issues/331)) ([54239d7](https://github.com/The-Vibe-Company/companion/commit/54239d76f12cc7fea06f76ecd4957b8c06a50f05))
+* **integrations:** auto-transition Linear issue to In Progress on session launch ([#332](https://github.com/The-Vibe-Company/companion/issues/332)) ([1df0c8c](https://github.com/The-Vibe-Company/companion/commit/1df0c8cb1d9c82f2756047af661611640de42836))
+
+
+### Bug Fixes
+
+* **ui:** hide Linear context bar when Linear is not configured ([#339](https://github.com/The-Vibe-Company/companion/issues/339)) ([cd4f55f](https://github.com/The-Vibe-Company/companion/commit/cd4f55f83d9ca166368680c6303c93c3b354f782))
+
+## [0.53.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.53.0...the-companion-v0.53.1) (2026-02-19)
+
+
+### Bug Fixes
+
+* **server:** base new branches on origin/{defaultBranch} instead of stale local ref ([#334](https://github.com/The-Vibe-Company/companion/issues/334)) ([0a736f4](https://github.com/The-Vibe-Company/companion/commit/0a736f4f224db0a79aaca329a70f24f7b7e1b5e7))
+
 ## [0.53.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.52.0...the-companion-v0.53.0) (2026-02-19)
 
 

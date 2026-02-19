@@ -228,6 +228,21 @@ export interface AppSettings {
   openrouterApiKeyConfigured: boolean;
   openrouterModel: string;
   linearApiKeyConfigured: boolean;
+  linearAutoTransition: boolean;
+  linearAutoTransitionStateName: string;
+}
+
+export interface LinearWorkflowState {
+  id: string;
+  name: string;
+  type: string;
+}
+
+export interface LinearTeamStates {
+  id: string;
+  key: string;
+  name: string;
+  states: LinearWorkflowState[];
 }
 
 export interface LinearIssue {
@@ -242,6 +257,9 @@ export interface LinearIssue {
   stateType: string;
   teamName: string;
   teamKey: string;
+  teamId: string;
+  assigneeName?: string;
+  updatedAt?: string;
 }
 
 export interface LinearConnectionInfo {
@@ -250,6 +268,35 @@ export interface LinearConnectionInfo {
   viewerEmail: string;
   teamName: string;
   teamKey: string;
+}
+
+export interface LinearComment {
+  id: string;
+  body: string;
+  createdAt: string;
+  userName: string;
+  userAvatarUrl?: string | null;
+}
+
+export interface LinearIssueDetail {
+  issue: LinearIssue | null;
+  comments?: LinearComment[];
+  assignee?: { name: string; avatarUrl?: string | null } | null;
+  labels?: { id: string; name: string; color: string }[];
+}
+
+export interface LinearProject {
+  id: string;
+  name: string;
+  state: string;
+}
+
+export interface LinearProjectMapping {
+  repoRoot: string;
+  projectId: string;
+  projectName: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface GitHubPRInfo {
@@ -474,13 +521,56 @@ export const api = {
 
   // Settings
   getSettings: () => get<AppSettings>("/settings"),
-  updateSettings: (data: { openrouterApiKey?: string; openrouterModel?: string; linearApiKey?: string }) =>
-    put<AppSettings>("/settings", data),
+  updateSettings: (data: {
+    openrouterApiKey?: string;
+    openrouterModel?: string;
+    linearApiKey?: string;
+    linearAutoTransition?: boolean;
+    linearAutoTransitionStateId?: string;
+    linearAutoTransitionStateName?: string;
+  }) => put<AppSettings>("/settings", data),
   searchLinearIssues: (query: string, limit = 8) =>
     get<{ issues: LinearIssue[] }>(
       `/linear/issues?query=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}`,
     ),
   getLinearConnection: () => get<LinearConnectionInfo>("/linear/connection"),
+  getLinearStates: () => get<{ teams: LinearTeamStates[] }>("/linear/states"),
+  transitionLinearIssue: (issueId: string) =>
+    post<{ ok: boolean; skipped: boolean }>(
+      `/linear/issues/${encodeURIComponent(issueId)}/transition`,
+      {},
+    ),
+  listLinearProjects: () => get<{ projects: LinearProject[] }>("/linear/projects"),
+  getLinearProjectIssues: (projectId: string, limit = 15) =>
+    get<{ issues: LinearIssue[] }>(
+      `/linear/project-issues?projectId=${encodeURIComponent(projectId)}&limit=${encodeURIComponent(String(limit))}`,
+    ),
+  getLinearProjectMapping: (repoRoot: string) =>
+    get<{ mapping: LinearProjectMapping | null }>(
+      `/linear/project-mappings?repoRoot=${encodeURIComponent(repoRoot)}`,
+    ),
+  upsertLinearProjectMapping: (data: {
+    repoRoot: string;
+    projectId: string;
+    projectName: string;
+  }) => put<{ mapping: LinearProjectMapping }>("/linear/project-mappings", data),
+  removeLinearProjectMapping: (repoRoot: string) =>
+    del<{ ok: boolean }>("/linear/project-mappings", { repoRoot }),
+
+  // Linear issue <-> session association
+  linkLinearIssue: (sessionId: string, issue: LinearIssue) =>
+    put<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/linear-issue`, issue),
+  unlinkLinearIssue: (sessionId: string) =>
+    del<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/linear-issue`),
+  getLinkedLinearIssue: (sessionId: string, refresh = false) =>
+    get<LinearIssueDetail>(
+      `/sessions/${encodeURIComponent(sessionId)}/linear-issue${refresh ? "?refresh=true" : ""}`,
+    ),
+  addLinearComment: (issueId: string, body: string) =>
+    post<{ ok: boolean; comment: LinearComment }>(
+      `/linear/issues/${encodeURIComponent(issueId)}/comments`,
+      { body },
+    ),
 
   // Git operations
   getRepoInfo: (path: string) =>

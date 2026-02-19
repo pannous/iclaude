@@ -29,6 +29,7 @@ import type {
 import type { SessionStore } from "./session-store.js";
 import type { CodexAdapter } from "./codex-adapter.js";
 import type { RecorderManager } from "./recorder.js";
+import { containerManager } from "./container-manager.js";
 
 /** Truncate a message to use as a session title (max ~50 chars at word boundary). */
 function truncateTitle(message: string): string {
@@ -134,20 +135,58 @@ function makeDefaultState(sessionId: string, backendType: BackendType = "claude"
 
 // ─── Git info helper ─────────────────────────────────────────────────────────
 
-function resolveGitInfo(state: SessionState): void {
+function shellEscapeSingle(value: string): string {
+  return value.replace(/'/g, "'\\''");
+}
+
+function runGitCommand(sessionId: string, state: SessionState, command: string): string {
+  if (state.is_containerized) {
+    const container = containerManager.getContainer(sessionId);
+    if (container?.containerId) {
+      const containerCwd = container.containerCwd || "/workspace";
+      const inner = `cd '${shellEscapeSingle(containerCwd)}' && ${command}`;
+      const dockerCmd = `docker exec ${container.containerId} sh -lc ${JSON.stringify(inner)}`;
+      return execSync(dockerCmd, { encoding: "utf-8", timeout: 3000 }).trim();
+    }
+    // Containerized session without a tracked container: preserve previous git state.
+    throw new Error("container not tracked");
+  }
+
+  return execSync(command, {
+    cwd: state.cwd, encoding: "utf-8", timeout: 3000,
+  }).trim();
+}
+
+function mapContainerPathToHost(sessionId: string, state: SessionState, pathValue: string): string {
+  if (!state.is_containerized || !pathValue) return pathValue;
+  const container = containerManager.getContainer(sessionId);
+  const containerCwd = (container?.containerCwd || "/workspace").replace(/\/+$/, "") || "/";
+  const hostCwd = (container?.hostCwd || state.cwd || "").replace(/\/+$/, "") || "/";
+
+  if (pathValue === containerCwd) return hostCwd;
+  if (containerCwd !== "/" && pathValue.startsWith(`${containerCwd}/`)) {
+    return `${hostCwd}${pathValue.slice(containerCwd.length)}`;
+  }
+  return pathValue;
+}
+
+function resolveGitInfo(sessionId: string, state: SessionState): void {
   if (!state.cwd) return;
   // Preserve is_containerized — it's set during session launch, not derived from git
   const wasContainerized = state.is_containerized;
+  const previous = {
+    git_branch: state.git_branch,
+    is_worktree: state.is_worktree,
+    repo_root: state.repo_root,
+    git_ahead: state.git_ahead,
+    git_behind: state.git_behind,
+  };
   try {
-    state.git_branch = execSync("git rev-parse --abbrev-ref HEAD 2>/dev/null", {
-      cwd: state.cwd, encoding: "utf-8", timeout: 3000,
-    }).trim();
+    state.git_branch = runGitCommand(sessionId, state, "git rev-parse --abbrev-ref HEAD 2>/dev/null");
 
     // Detect if this is a linked worktree
     try {
-      const gitDir = execSync("git rev-parse --git-dir 2>/dev/null", {
-        cwd: state.cwd, encoding: "utf-8", timeout: 3000,
-      }).trim();
+      const gitDir = runGitCommand(sessionId, state, "git rev-parse --git-dir 2>/dev/null");
       state.is_worktree = gitDir.includes("/worktrees/");
     } catch {
       state.is_worktree = false;
@@ -157,23 +196,21 @@ function resolveGitInfo(state: SessionState): void {
       // For worktrees, --show-toplevel gives the worktree root, not the main repo.
       // Use --git-common-dir to find the real repo root.
       if (state.is_worktree) {
-        const commonDir = execSync("git rev-parse --git-common-dir 2>/dev/null", {
-          cwd: state.cwd, encoding: "utf-8", timeout: 3000,
-        }).trim();
+        const commonDir = runGitCommand(sessionId, state, "git rev-parse --git-common-dir 2>/dev/null");
         // commonDir is e.g. /path/to/repo/.git — parent is the repo root
         state.repo_root = resolve(state.cwd, commonDir, "..");
       } else {
-        state.repo_root = execSync("git rev-parse --show-toplevel 2>/dev/null", {
-          cwd: state.cwd, encoding: "utf-8", timeout: 3000,
-        }).trim();
+        state.repo_root = runGitCommand(sessionId, state, "git rev-parse --show-toplevel 2>/dev/null");
       }
+      state.repo_root = mapContainerPathToHost(sessionId, state, state.repo_root);
     } catch { /* ignore */ }
 
     try {
-      const counts = execSync(
+      const counts = runGitCommand(
+        sessionId,
+        state,
         "git rev-list --left-right --count @{upstream}...HEAD 2>/dev/null",
-        { cwd: state.cwd, encoding: "utf-8", timeout: 3000 },
-      ).trim();
+      );
       const [behind, ahead] = counts.split(/\s+/).map(Number);
       state.git_ahead = ahead || 0;
       state.git_behind = behind || 0;
@@ -181,7 +218,17 @@ function resolveGitInfo(state: SessionState): void {
       state.git_ahead = 0;
       state.git_behind = 0;
     }
-  } catch {
+  } catch (error) {
+    if (state.is_containerized && error instanceof Error && error.message === "container not tracked") {
+      // Container metadata can be restored slightly after session state; keep prior git info.
+      state.git_branch = previous.git_branch;
+      state.is_worktree = previous.is_worktree;
+      state.repo_root = previous.repo_root;
+      state.git_ahead = previous.git_ahead;
+      state.git_behind = previous.git_behind;
+      state.is_containerized = wasContainerized;
+      return;
+    }
     // Not a git repo or git not available
     state.git_branch = "";
     state.is_worktree = false;
@@ -323,7 +370,7 @@ export class WsBridge {
       };
       session.state.backend_type = session.backendType;
       // Resolve git info for restored sessions (may have been persisted without it)
-      resolveGitInfo(session.state);
+      resolveGitInfo(session.id, session.state);
       this.sessions.set(p.id, session);
       // Restored sessions with completed turns don't need auto-naming re-triggered
       if (session.state.num_turns > 0) {
@@ -391,7 +438,7 @@ export class WsBridge {
       git_behind: session.state.git_behind,
     };
 
-    resolveGitInfo(session.state);
+    resolveGitInfo(session.id, session.state);
 
     let changed = false;
     for (const key of WsBridge.GIT_SESSION_KEYS) {

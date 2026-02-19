@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem, McpServerDetail } from "./types.js";
-import type { UpdateInfo, PRStatusResponse, CreationProgressEvent } from "./api.js";
+import type { UpdateInfo, PRStatusResponse, CreationProgressEvent, LinearIssue } from "./api.js";
 import { safeStorage } from "./utils/safe-storage.js";
+import { type TaskPanelConfig, getInitialTaskPanelConfig, getDefaultConfig, persistTaskPanelConfig, SECTION_DEFINITIONS } from "./components/task-panel-sections.js";
 
 export interface QuickTerminalTab {
   id: string;
@@ -58,6 +59,9 @@ interface AppState {
   // PR status per session (pushed by server via WebSocket)
   prStatus: Map<string, PRStatusResponse>;
 
+  // Linear issues linked to sessions
+  linkedLinearIssues: Map<string, LinearIssue>;
+
   // MCP servers per session
   mcpServers: Map<string, McpServerDetail[]>;
 
@@ -73,6 +77,7 @@ interface AppState {
   // Update banner
   updateInfo: UpdateInfo | null;
   updateDismissedVersion: string | null;
+  updateOverlayActive: boolean;
 
   // Session creation progress (SSE streaming)
   creationProgress: CreationProgressEvent[] | null;
@@ -91,6 +96,8 @@ interface AppState {
   notificationDesktop: boolean;
   sidebarOpen: boolean;
   taskPanelOpen: boolean;
+  taskPanelConfig: TaskPanelConfig;
+  taskPanelConfigMode: boolean;
   homeResetKey: number;
   newSessionCwd: string | null;
   activeTab: string; // "chat" | "diff" | "terminal" | "editor" | "skill:<slug>"
@@ -115,6 +122,11 @@ interface AppState {
   toggleNotificationDesktop: () => void;
   setSidebarOpen: (v: boolean) => void;
   setTaskPanelOpen: (open: boolean) => void;
+  setTaskPanelConfigMode: (open: boolean) => void;
+  toggleSectionEnabled: (sectionId: string) => void;
+  moveSectionUp: (sectionId: string) => void;
+  moveSectionDown: (sectionId: string) => void;
+  resetTaskPanelConfig: () => void;
   newSession: () => void;
   newSessionInFolder: (cwd: string) => void;
 
@@ -154,6 +166,9 @@ interface AppState {
   // PR status action
   setPRStatus: (sessionId: string, status: PRStatusResponse) => void;
 
+  // Linear issue actions
+  setLinkedLinearIssue: (sessionId: string, issue: LinearIssue | null) => void;
+
   // MCP actions
   setMcpServers: (sessionId: string, servers: McpServerDetail[]) => void;
 
@@ -179,6 +194,7 @@ interface AppState {
   // Update banner actions
   setUpdateInfo: (info: UpdateInfo | null) => void;
   dismissUpdate: (version: string) => void;
+  setUpdateOverlayActive: (active: boolean) => void;
 
   // Editor / Skill actions
   setActiveTab: (tab: string) => void;
@@ -321,6 +337,7 @@ export const useStore = create<AppState>((set) => ({
   sessionSubtitles: new Map(),
   recentlyRenamed: new Set(),
   prStatus: new Map(),
+  linkedLinearIssues: new Map(),
   mcpServers: new Map(),
   toolProgress: new Map(),
   collapsedProjects: getInitialCollapsedProjects(),
@@ -330,12 +347,15 @@ export const useStore = create<AppState>((set) => ({
   sessionCreatingBackend: null,
   updateInfo: null,
   updateDismissedVersion: getInitialDismissedVersion(),
+  updateOverlayActive: false,
   darkMode: getInitialDarkMode(),
   notificationSound: getInitialNotificationSound(),
   yoloMode: getInitialYoloMode(),
   notificationDesktop: getInitialNotificationDesktop(),
   sidebarOpen: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
   taskPanelOpen: typeof window !== "undefined" ? window.innerWidth >= 1024 : true,
+  taskPanelConfig: getInitialTaskPanelConfig(),
+  taskPanelConfigMode: false,
   homeResetKey: 0,
   newSessionCwd: null,
   activeTab: "chat",
@@ -413,6 +433,41 @@ export const useStore = create<AppState>((set) => ({
     }),
   setSidebarOpen: (v) => set({ sidebarOpen: v }),
   setTaskPanelOpen: (open) => set({ taskPanelOpen: open }),
+  setTaskPanelConfigMode: (open) => set({ taskPanelConfigMode: open }),
+  toggleSectionEnabled: (sectionId) =>
+    set((s) => {
+      const config: TaskPanelConfig = {
+        order: [...s.taskPanelConfig.order],
+        enabled: { ...s.taskPanelConfig.enabled, [sectionId]: !s.taskPanelConfig.enabled[sectionId] },
+      };
+      persistTaskPanelConfig(config);
+      return { taskPanelConfig: config };
+    }),
+  moveSectionUp: (sectionId) =>
+    set((s) => {
+      const order = [...s.taskPanelConfig.order];
+      const idx = order.indexOf(sectionId);
+      if (idx <= 0) return s;
+      [order[idx - 1], order[idx]] = [order[idx], order[idx - 1]];
+      const config: TaskPanelConfig = { ...s.taskPanelConfig, order };
+      persistTaskPanelConfig(config);
+      return { taskPanelConfig: config };
+    }),
+  moveSectionDown: (sectionId) =>
+    set((s) => {
+      const order = [...s.taskPanelConfig.order];
+      const idx = order.indexOf(sectionId);
+      if (idx < 0 || idx >= order.length - 1) return s;
+      [order[idx], order[idx + 1]] = [order[idx + 1], order[idx]];
+      const config: TaskPanelConfig = { ...s.taskPanelConfig, order };
+      persistTaskPanelConfig(config);
+      return { taskPanelConfig: config };
+    }),
+  resetTaskPanelConfig: () => {
+    const config = getDefaultConfig();
+    persistTaskPanelConfig(config);
+    set({ taskPanelConfig: config });
+  },
   newSession: () => {
     safeStorage.removeItem("cc-current-session");
     set((s) => ({ currentSessionId: null, homeResetKey: s.homeResetKey + 1 }));
@@ -495,6 +550,8 @@ export const useStore = create<AppState>((set) => ({
       toolProgress.delete(sessionId);
       const prStatus = new Map(s.prStatus);
       prStatus.delete(sessionId);
+      const linkedLinearIssues = new Map(s.linkedLinearIssues);
+      linkedLinearIssues.delete(sessionId);
       safeStorage.setItem("cc-session-names", JSON.stringify(Array.from(sessionNames.entries())));
       if (s.currentSessionId === sessionId) {
         safeStorage.removeItem("cc-current-session");
@@ -521,6 +578,7 @@ export const useStore = create<AppState>((set) => ({
         mcpServers,
         toolProgress,
         prStatus,
+        linkedLinearIssues,
         sdkSessions: s.sdkSessions.filter((sdk) => sdk.sessionId !== sessionId),
         currentSessionId: s.currentSessionId === sessionId ? null : s.currentSessionId,
       };
@@ -687,6 +745,17 @@ export const useStore = create<AppState>((set) => ({
       return { prStatus };
     }),
 
+  setLinkedLinearIssue: (sessionId, issue) =>
+    set((s) => {
+      const linkedLinearIssues = new Map(s.linkedLinearIssues);
+      if (issue) {
+        linkedLinearIssues.set(sessionId, issue);
+      } else {
+        linkedLinearIssues.delete(sessionId);
+      }
+      return { linkedLinearIssues };
+    }),
+
   setMcpServers: (sessionId, servers) =>
     set((s) => {
       const mcpServers = new Map(s.mcpServers);
@@ -771,6 +840,7 @@ export const useStore = create<AppState>((set) => ({
     safeStorage.setItem("cc-update-dismissed", version);
     set({ updateDismissedVersion: version });
   },
+  setUpdateOverlayActive: (active) => set({ updateOverlayActive: active }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   markChatTabReentry: (sessionId) =>
@@ -952,6 +1022,8 @@ export const useStore = create<AppState>((set) => ({
       mcpServers: new Map(),
       toolProgress: new Map(),
       prStatus: new Map(),
+      linkedLinearIssues: new Map(),
+      taskPanelConfigMode: false,
       activeTab: "chat" as const,
       editorOpenFile: new Map(),
       editorUrl: new Map(),
