@@ -627,6 +627,32 @@ function handleParsedMessage(
               content: `Error: ${r.errors.join(", ")}`,
               timestamp: Date.now(),
             });
+          } else if (r.result && typeof r.result === "string") {
+            // The result text is the final response shown to the user during live streaming.
+            // It may not exist in any assistant message's text blocks (the CLI sends individual
+            // content blocks as separate assistant messages, and text was only delivered via
+            // stream_event deltas). Add it only if not already covered by a preceding assistant.
+            const resultText = r.result.trim();
+            let coveredByAssistant = false;
+            for (let j = chatMessages.length - 1; j >= 0; j--) {
+              const prev = chatMessages[j];
+              if (prev.role === "user") break;
+              if (prev.role === "assistant" && prev.content.includes(resultText)) {
+                coveredByAssistant = true;
+                break;
+              }
+            }
+            if (!coveredByAssistant) {
+              const scanned = scanForImagesAndHtml(resultText);
+              chatMessages.push({
+                id: `hist-result-${i}`,
+                role: "assistant",
+                content: resultText,
+                scannedImages: scanned.images,
+                scannedHtml: scanned.html,
+                timestamp: Date.now(),
+              });
+            }
           }
         }
       }

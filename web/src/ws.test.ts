@@ -976,6 +976,104 @@ describe("handleMessage: message_history", () => {
     expect(useStore.getState().messages.get("s1")).toHaveLength(2);
   });
 
+  it("includes successful result text when not covered by assistant text blocks", () => {
+    // When the CLI sends assistant messages with only thinking/tool_use blocks,
+    // the response text is only in the result message and must be shown.
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    fireMessage({
+      type: "message_history",
+      messages: [
+        { type: "user_message", content: "Hello", timestamp: 1000 },
+        {
+          type: "assistant",
+          message: {
+            id: "msg-thinking",
+            type: "message",
+            role: "assistant",
+            model: "claude-opus-4-20250514",
+            content: [{ type: "thinking", thinking: "Let me think about this..." }],
+            stop_reason: null,
+            usage: { input_tokens: 5, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          },
+          parent_tool_use_id: null,
+        },
+        {
+          type: "result",
+          data: {
+            type: "result",
+            subtype: "success",
+            is_error: false,
+            result: "Hi there! How can I help you?",
+            duration_ms: 100,
+            duration_api_ms: 50,
+            num_turns: 1,
+            total_cost_usd: 0.01,
+            stop_reason: "end_turn",
+            usage: { input_tokens: 5, output_tokens: 10, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+            uuid: "u1",
+            session_id: "s1",
+          },
+        },
+      ],
+    });
+
+    const msgs = useStore.getState().messages.get("s1")!;
+    expect(msgs).toHaveLength(3);
+    expect(msgs[0].role).toBe("user");
+    expect(msgs[2].role).toBe("assistant");
+    expect(msgs[2].content).toBe("Hi there! How can I help you?");
+  });
+
+  it("does not duplicate result text when already in assistant text block", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    fireMessage({
+      type: "message_history",
+      messages: [
+        { type: "user_message", content: "What is 2+2?", timestamp: 1000 },
+        {
+          type: "assistant",
+          message: {
+            id: "msg-with-text",
+            type: "message",
+            role: "assistant",
+            model: "claude-opus-4-20250514",
+            content: [{ type: "text", text: "The answer is 4." }],
+            stop_reason: "end_turn",
+            usage: { input_tokens: 5, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          },
+          parent_tool_use_id: null,
+        },
+        {
+          type: "result",
+          data: {
+            type: "result",
+            subtype: "success",
+            is_error: false,
+            result: "The answer is 4.",
+            duration_ms: 100,
+            duration_api_ms: 50,
+            num_turns: 1,
+            total_cost_usd: 0.01,
+            stop_reason: "end_turn",
+            usage: { input_tokens: 5, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+            uuid: "u1",
+            session_id: "s1",
+          },
+        },
+      ],
+    });
+
+    const msgs = useStore.getState().messages.get("s1")!;
+    // Should have 2 messages: user + assistant (result not duplicated)
+    expect(msgs).toHaveLength(2);
+    expect(msgs[1].role).toBe("assistant");
+    expect(msgs[1].content).toBe("The answer is 4.");
+  });
+
   it("preserves original timestamps from history instead of using Date.now()", () => {
     wsModule.connectSession("s1");
     fireMessage({ type: "session_init", session: makeSession("s1") });
