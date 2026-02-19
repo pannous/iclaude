@@ -423,7 +423,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   }
 
   function toggleMode() {
-    if (!isConnected || isCodex) return;
+    if (!isConnected) return;
     const store = useStore.getState();
 
     const modeOrder = modes.map((m) => m.value);
@@ -695,15 +695,15 @@ export function Composer({ sessionId }: { sessionId: string }) {
             {/* Mode toggle — order-2: sits bottom-left below the textarea */}
             <button
               onClick={toggleMode}
-              disabled={!isConnected || isCodex}
+              disabled={!isConnected}
               className={`order-2 mb-0.5 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-semibold transition-all border select-none shrink-0 ${
-                !isConnected || isCodex
+                !isConnected
                   ? "opacity-30 cursor-not-allowed text-cc-muted border-transparent"
                   : isPlan
                     ? "text-cc-primary border-cc-primary/30 bg-cc-primary/8 hover:bg-cc-primary/12 cursor-pointer"
                     : "text-cc-muted border-cc-border hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
               }`}
-              title={isCodex ? "Mode is fixed for Codex sessions" : "Toggle mode (Shift+Tab)"}
+              title="Toggle mode (Shift+Tab)"
             >
               {isPlan ? (
                 <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
