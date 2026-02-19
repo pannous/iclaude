@@ -299,6 +299,7 @@ export function createRoutes(
         containerName,
         containerImage,
         containerCwd: containerInfo?.containerCwd,
+        prewarm: body.prewarm,
       });
 
       // Re-track container with real session ID and mark session as containerized
@@ -613,6 +614,7 @@ export function createRoutes(
           containerName,
           containerImage,
           containerCwd: containerInfo?.containerCwd,
+          prewarm: body.prewarm,
         });
 
         // Re-track container and mark session as containerized
@@ -656,7 +658,7 @@ export function createRoutes(
   });
 
   api.get("/sessions", (c) => {
-    const sessions = launcher.listSessions();
+    const sessions = launcher.listSessions().filter((s) => !s.prewarm);
     const names = sessionNames.getAllNames();
     const bridgeStates = wsBridge.getAllSessions();
     const bridgeMap = new Map(bridgeStates.map((s) => [s.session_id, s]));
