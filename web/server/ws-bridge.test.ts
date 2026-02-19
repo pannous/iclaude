@@ -942,6 +942,68 @@ describe("CLI message routing", () => {
     expect(permBroadcast.request.tool_name).toBe("Bash");
   });
 
+  it("control_request (can_use_tool): auto-approves in bypassPermissions mode", () => {
+    // Set session to bypassPermissions (Agent mode)
+    const session = bridge.getSession("s1")!;
+    session.state.permissionMode = "bypassPermissions";
+
+    browser.send.mockClear();
+
+    bridge.handleCLIMessage(cli, JSON.stringify({
+      type: "control_request",
+      request_id: "req-bypass",
+      request: {
+        subtype: "can_use_tool",
+        tool_name: "Bash",
+        input: { command: "rm -rf /tmp/test" },
+        tool_use_id: "tu-bypass",
+      },
+    }));
+
+    // Should NOT add to pending or broadcast to browser
+    expect(session.pendingPermissions.size).toBe(0);
+    const browserCalls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    expect(browserCalls.find((c: any) => c.type === "permission_request")).toBeUndefined();
+
+    // Should send auto-allow response to CLI
+    const cliCalls = cli.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    const response = cliCalls.find((c: any) => c.type === "control_response");
+    expect(response).toBeDefined();
+    expect(response.response.request_id).toBe("req-bypass");
+    expect(response.response.response.behavior).toBe("allow");
+  });
+
+  it("control_request (can_use_tool): auto-denies in dontAsk mode", () => {
+    // dontAsk means "deny if not pre-approved" per SDK spec
+    const session = bridge.getSession("s1")!;
+    session.state.permissionMode = "dontAsk";
+
+    browser.send.mockClear();
+
+    bridge.handleCLIMessage(cli, JSON.stringify({
+      type: "control_request",
+      request_id: "req-dontask",
+      request: {
+        subtype: "can_use_tool",
+        tool_name: "Bash",
+        input: { command: "echo hi" },
+        tool_use_id: "tu-dontask",
+      },
+    }));
+
+    // Should NOT broadcast to browser
+    expect(session.pendingPermissions.size).toBe(0);
+    const browserCalls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    expect(browserCalls.find((c: any) => c.type === "permission_request")).toBeUndefined();
+
+    // Should send auto-deny response to CLI
+    const cliCalls = cli.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    const response = cliCalls.find((c: any) => c.type === "control_response");
+    expect(response).toBeDefined();
+    expect(response.response.request_id).toBe("req-dontask");
+    expect(response.response.response.behavior).toBe("deny");
+  });
+
   it("tool_progress: broadcasts", () => {
     const msg = JSON.stringify({
       type: "tool_progress",

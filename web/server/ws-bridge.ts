@@ -1187,15 +1187,18 @@ export class WsBridge {
 
   private handleControlRequest(session: Session, msg: CLIControlRequestMessage) {
     if (msg.request.subtype === "can_use_tool") {
-      // Auto-approve if in dontAsk mode
-      if (session.state.permissionMode === "dontAsk") {
+      // Auto-approve in bypassPermissions (agent) mode — the CLI handles most
+      // permissions internally but some tool calls still reach the server.
+      // Auto-deny in dontAsk mode — per SDK: "deny if not pre-approved".
+      if (session.state.permissionMode === "bypassPermissions" || session.state.permissionMode === "dontAsk") {
+        const shouldAllow = session.state.permissionMode === "bypassPermissions";
         const ndjson = JSON.stringify({
           type: "control_response",
           response: {
             subtype: "success",
             request_id: msg.request_id,
             response: {
-              behavior: "allow",
+              behavior: shouldAllow ? "allow" : "deny",
               updatedInput: msg.request.input ?? {},
             },
           },
