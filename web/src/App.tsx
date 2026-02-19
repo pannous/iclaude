@@ -3,7 +3,7 @@ import { useStore } from "./store.js";
 import { connectSession } from "./ws.js";
 import { disconnectSession } from "./ws.js";
 import { api } from "./api.js";
-import { parseHash, navigateToSession } from "./utils/routing.js";
+import { parseHash, navigateToSession, navigateHome } from "./utils/routing.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
@@ -75,6 +75,14 @@ export default function App() {
         store.setCurrentSession(route.sessionId);
       }
       connectSession(route.sessionId);
+      // Validate session exists — redirect home if orphaned or unknown
+      api.listSessions().then((list) => {
+        if (!list.some((s: { sessionId: string }) => s.sessionId === route.sessionId)) {
+          disconnectSession(route.sessionId);
+          useStore.getState().newSession();
+          navigateHome(true);
+        }
+      }).catch(() => {});
     } else if (route.page === "home") {
       const store = useStore.getState();
       if (store.currentSessionId !== null) {

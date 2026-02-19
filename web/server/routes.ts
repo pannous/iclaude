@@ -658,10 +658,20 @@ export function createRoutes(
   });
 
   api.get("/sessions", (c) => {
-    const sessions = launcher.listSessions().filter((s) => !s.prewarm);
+    const allSessions = launcher.listSessions();
     const names = sessionNames.getAllNames();
     const bridgeStates = wsBridge.getAllSessions();
     const bridgeMap = new Map(bridgeStates.map((s) => [s.session_id, s]));
+    const now = Date.now();
+    // Filter out prewarm sessions and orphaned sessions (connected, 0 turns, no name, age > 2min)
+    const sessions = allSessions.filter((s) => {
+      if (s.prewarm) return false;
+      if (s.state === "connected" && !s.name && !names[s.sessionId]) {
+        const bridge = bridgeMap.get(s.sessionId);
+        if ((bridge?.num_turns ?? 0) === 0 && now - s.createdAt > 120_000) return false;
+      }
+      return true;
+    });
     const enriched = sessions.map((s) => {
       const bridge = bridgeMap.get(s.sessionId);
       return {
