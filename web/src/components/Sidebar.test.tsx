@@ -20,6 +20,9 @@ const mockApi = {
   deleteSession: vi.fn().mockResolvedValue({}),
   archiveSession: vi.fn().mockResolvedValue({}),
   unarchiveSession: vi.fn().mockResolvedValue({}),
+  getHome: vi.fn().mockResolvedValue({ home: "/home/user", cwd: "/home/user/projects/myapp" }),
+  createSession: vi.fn().mockResolvedValue({ sessionId: "prewarm-session-id" }),
+  adoptPrewarm: vi.fn().mockResolvedValue({ ok: true }),
 };
 
 vi.mock("../api.js", () => ({
@@ -28,6 +31,9 @@ vi.mock("../api.js", () => ({
     deleteSession: (...args: unknown[]) => mockApi.deleteSession(...args),
     archiveSession: (...args: unknown[]) => mockApi.archiveSession(...args),
     unarchiveSession: (...args: unknown[]) => mockApi.unarchiveSession(...args),
+    getHome: (...args: unknown[]) => mockApi.getHome(...args),
+    createSession: (...args: unknown[]) => mockApi.createSession(...args),
+    adoptPrewarm: (...args: unknown[]) => mockApi.adoptPrewarm(...args),
   },
 }));
 
@@ -57,6 +63,7 @@ interface MockStoreState {
   clearRecentlyRenamed: ReturnType<typeof vi.fn>;
   setSdkSessions: ReturnType<typeof vi.fn>;
   closeTerminal: ReturnType<typeof vi.fn>;
+  setAllProjectsCollapsed: ReturnType<typeof vi.fn>;
 }
 
 function makeSession(id: string, overrides: Partial<SessionState> = {}): SessionState {
@@ -123,6 +130,7 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     clearRecentlyRenamed: vi.fn(),
     setSdkSessions: vi.fn(),
     closeTerminal: vi.fn(),
+    setAllProjectsCollapsed: vi.fn(),
     ...overrides,
   };
 }
