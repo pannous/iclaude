@@ -690,11 +690,13 @@ export function Composer({ sessionId }: { sessionId: string }) {
             </div>
           )}
 
-          <div className="flex items-end gap-2 px-2.5 py-2">
+          {/* Textarea full-width on top, buttons row below. */}
+          <div className="flex flex-wrap items-end gap-x-2 gap-y-1.5 px-2.5 py-2">
+            {/* Mode toggle — order-2: sits bottom-left below the textarea */}
             <button
               onClick={toggleMode}
               disabled={!isConnected || isCodex}
-              className={`mb-0.5 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-semibold transition-all border select-none shrink-0 ${
+              className={`order-2 mb-0.5 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-semibold transition-all border select-none shrink-0 ${
                 !isConnected || isCodex
                   ? "opacity-30 cursor-not-allowed text-cc-muted border-transparent"
                   : isPlan
@@ -717,6 +719,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
               <span>{modeLabel}</span>
             </button>
 
+            {/* Textarea — order-1: full-width top row */}
             <textarea
               ref={textareaRef}
               value={text}
@@ -730,12 +733,12 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 : "Waiting for CLI connection..."}
               disabled={!isConnected}
               rows={1}
-              className="flex-1 min-w-0 px-2 py-1.5 text-base sm:text-sm bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted disabled:opacity-50 overflow-y-auto"
-              style={{ minHeight: "36px", maxHeight: "200px" }}
+              className="order-1 w-full px-2 py-2 text-sm bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted disabled:opacity-50 overflow-y-auto min-h-[72px]"
+              style={{ maxHeight: "200px" }}
             />
 
-            {/* Right: image + send/stop */}
-            <div className="mb-0.5 flex items-center gap-1.5 shrink-0">
+            {/* Action buttons — order-3: bottom-right via ml-auto */}
+            <div className="order-3 mb-0.5 flex items-center gap-1.5 shrink-0 ml-auto">
               <button
                 onClick={() => {
                   const defaultName = text.trim().slice(0, 32);
