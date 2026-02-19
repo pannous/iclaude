@@ -89,7 +89,6 @@ wsBridge.onSessionGitInfoReadyCallback((sessionId, cwd, branch) => {
 });
 
 // Auto-relaunch CLI when a browser connects to a session with no CLI
-const relaunchingSet = new Set<string>();
 wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
   const now = Date.now();
   const cooldown = relaunchCooldowns.get(sessionId);

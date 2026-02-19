@@ -208,6 +208,9 @@ export class WsBridge {
     "mcp_reconnect",
     "mcp_set_servers",
   ]);
+  /** Grace period (ms) before requesting a relaunch when browser connects and CLI is dead.
+   *  Gives CLIs time to reconnect their WS after a server restart. */
+  private static readonly RELAUNCH_GRACE_MS = Number(process.env.COMPANION_RELAUNCH_GRACE_MS || "2000");
   private sessions = new Map<string, Session>();
   private store: SessionStore | null = null;
   private recorder: RecorderManager | null = null;
@@ -216,6 +219,8 @@ export class WsBridge {
   private onTitleGenerated: ((sessionId: string, title: string) => void) | null = null;
   private onFirstTurnCompleted: ((sessionId: string, firstUserMessage: string) => void) | null = null;
   private autoNamingAttempted = new Set<string>();
+  /** Per-session timers for deferred relaunch requests (cancelled if CLI reconnects in time). */
+  private pendingRelaunches = new Map<string, ReturnType<typeof setTimeout>>();
   private userMsgCounter = 0;
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
   private static readonly GIT_SESSION_KEYS: GitSessionKey[] = [
@@ -649,6 +654,11 @@ export class WsBridge {
   }
 
   removeSession(sessionId: string) {
+    const timer = this.pendingRelaunches.get(sessionId);
+    if (timer) {
+      clearTimeout(timer);
+      this.pendingRelaunches.delete(sessionId);
+    }
     this.sessions.delete(sessionId);
     this.autoNamingAttempted.delete(sessionId);
     this.store?.remove(sessionId);
@@ -687,6 +697,11 @@ export class WsBridge {
     }
     session.browserSockets.clear();
 
+    const pendingTimer = this.pendingRelaunches.get(sessionId);
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      this.pendingRelaunches.delete(sessionId);
+    }
     this.sessions.delete(sessionId);
     this.autoNamingAttempted.delete(sessionId);
     this.store?.remove(sessionId);
@@ -809,6 +824,12 @@ export class WsBridge {
   handleCLIOpen(ws: ServerWebSocket<SocketData>, sessionId: string, opts?: { cliSessionId?: string; cwd?: string }) {
     const session = this.getOrCreateSession(sessionId);
     session.cliSocket = ws;
+    // Cancel any pending relaunch — CLI reconnected before the grace period expired.
+    const pendingTimer = this.pendingRelaunches.get(sessionId);
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      this.pendingRelaunches.delete(sessionId);
+    }
     console.log(`[ws-bridge] CLI connected for session ${sessionId}`);
     this.broadcastToBrowsers(session, { type: "cli_connected" });
 
@@ -925,9 +946,20 @@ export class WsBridge {
 
     if (!backendConnected) {
       this.sendToBrowser(ws, { type: "cli_disconnected" });
-      if (this.onCLIRelaunchNeeded) {
-        console.log(`[ws-bridge] Browser connected but backend is dead for session ${sessionId}, requesting relaunch`);
-        this.onCLIRelaunchNeeded(sessionId);
+      // Defer the relaunch request by a short grace period. If the CLI reconnects
+      // its WS within that window (e.g. after a server hot-reload), we cancel the
+      // timer and skip the relaunch entirely — eliminating false-alarm spam.
+      if (this.onCLIRelaunchNeeded && !this.pendingRelaunches.has(sessionId)) {
+        const timer = setTimeout(() => {
+          this.pendingRelaunches.delete(sessionId);
+          const s = this.sessions.get(sessionId);
+          const stillDead = s && (s.backendType === "codex" ? !s.codexAdapter : !s.cliSocket);
+          if (stillDead && this.onCLIRelaunchNeeded) {
+            console.log(`[ws-bridge] Backend still dead for session ${sessionId}, requesting relaunch`);
+            this.onCLIRelaunchNeeded(sessionId);
+          }
+        }, WsBridge.RELAUNCH_GRACE_MS);
+        this.pendingRelaunches.set(sessionId, timer);
       }
     }
   }
@@ -970,6 +1002,16 @@ export class WsBridge {
 
     session.browserSockets.delete(ws);
     console.log(`[ws-bridge] Browser disconnected for session ${sessionId} (${session.browserSockets.size} browsers)`);
+
+    // If nobody is watching anymore, cancel any pending relaunch — pointless to relaunch
+    // only to immediately go idle with no browser. The next browser connect will re-arm it.
+    if (session.browserSockets.size === 0) {
+      const timer = this.pendingRelaunches.get(sessionId);
+      if (timer) {
+        clearTimeout(timer);
+        this.pendingRelaunches.delete(sessionId);
+      }
+    }
   }
 
   // ── CLI message routing ─────────────────────────────────────────────────

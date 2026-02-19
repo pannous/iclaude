@@ -584,7 +584,8 @@ describe("Browser handlers", () => {
     expect(permMsg.request.request_id).toBe("req-1");
   });
 
-  it("handleBrowserOpen: triggers relaunch callback when CLI is dead", () => {
+  it("handleBrowserOpen: triggers relaunch callback when CLI is dead (after grace period)", () => {
+    vi.useFakeTimers();
     const relaunchCb = vi.fn();
     bridge.onCLIRelaunchNeededCallback(relaunchCb);
 
@@ -592,12 +593,39 @@ describe("Browser handlers", () => {
     const browser = makeBrowserSocket("s1");
     bridge.handleBrowserOpen(browser, "s1");
 
+    // Not called immediately — deferred by grace period
+    expect(relaunchCb).not.toHaveBeenCalled();
+
+    // After grace period fires, callback is invoked
+    vi.runAllTimers();
     expect(relaunchCb).toHaveBeenCalledWith("s1");
 
-    // Also sends cli_disconnected
+    // Also sends cli_disconnected immediately (not deferred)
     const calls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
     const disconnectedMsg = calls.find((c: any) => c.type === "cli_disconnected");
     expect(disconnectedMsg).toBeDefined();
+
+    vi.useRealTimers();
+  });
+
+  it("handleBrowserOpen: cancels relaunch if CLI reconnects within grace period", () => {
+    vi.useFakeTimers();
+    const relaunchCb = vi.fn();
+    bridge.onCLIRelaunchNeededCallback(relaunchCb);
+
+    bridge.getOrCreateSession("s1");
+    const browser = makeBrowserSocket("s1");
+    bridge.handleBrowserOpen(browser, "s1");
+
+    // CLI reconnects before grace period expires
+    const cli = makeCliSocket("s1");
+    bridge.handleCLIOpen(cli, "s1");
+
+    // Advance past grace period — callback should NOT fire
+    vi.runAllTimers();
+    expect(relaunchCb).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
   });
 
   it("handleBrowserOpen: does NOT relaunch when Codex adapter is attached but still initializing", () => {
