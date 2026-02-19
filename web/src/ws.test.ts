@@ -1106,6 +1106,212 @@ describe("handleMessage: message_history", () => {
 });
 
 // ===========================================================================
+// Regression: session with thinking+tool_use blocks followed by event_replay
+// Simulates real session d371fbb5 where messages weren't rendering
+// ===========================================================================
+describe("handleMessage: message_history + event_replay (full session)", () => {
+  it("renders user and assistant messages from a session with mixed blocks", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    // Simulate the exact message_history the server sends for this session
+    fireMessage({
+      type: "message_history",
+      messages: [
+        { type: "user_message", content: "How does agent mode work?", timestamp: 1000, id: "user-1" },
+        {
+          type: "assistant",
+          message: {
+            id: "msg-think-1",
+            type: "message",
+            role: "assistant",
+            model: "claude-opus-4-20250514",
+            content: [{ type: "thinking", thinking: "Let me investigate agent mode..." }],
+            stop_reason: null,
+            usage: { input_tokens: 5, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          },
+          parent_tool_use_id: null,
+        },
+        {
+          type: "assistant",
+          message: {
+            id: "msg-tool-1",
+            type: "message",
+            role: "assistant",
+            model: "claude-opus-4-20250514",
+            content: [{ type: "tool_use", id: "tu-1", name: "Read", input: { file_path: "/test.ts" } }],
+            stop_reason: null,
+            usage: { input_tokens: 5, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          },
+          parent_tool_use_id: null,
+        },
+        {
+          type: "assistant",
+          message: {
+            id: "msg-tool-2",
+            type: "message",
+            role: "assistant",
+            model: "claude-opus-4-20250514",
+            content: [{ type: "tool_use", id: "tu-2", name: "Grep", input: { pattern: "agent" } }],
+            stop_reason: null,
+            usage: { input_tokens: 5, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          },
+          parent_tool_use_id: null,
+        },
+        {
+          type: "assistant",
+          message: {
+            id: "msg-think-2",
+            type: "message",
+            role: "assistant",
+            model: "claude-opus-4-20250514",
+            content: [{ type: "thinking", thinking: "I see how it works now..." }],
+            stop_reason: null,
+            usage: { input_tokens: 5, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          },
+          parent_tool_use_id: null,
+        },
+        {
+          type: "assistant",
+          message: {
+            id: "msg-text-1",
+            type: "message",
+            role: "assistant",
+            model: "claude-opus-4-20250514",
+            content: [{ type: "text", text: "Agent mode works by..." }],
+            stop_reason: null,
+            usage: { input_tokens: 5, output_tokens: 10, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          },
+          parent_tool_use_id: null,
+        },
+        {
+          type: "result",
+          data: {
+            type: "result",
+            subtype: "success",
+            is_error: false,
+            result: "Agent mode works by delegating tasks to subagents.",
+            duration_ms: 5000,
+            duration_api_ms: 4500,
+            num_turns: 3,
+            total_cost_usd: 0.05,
+            stop_reason: "end_turn",
+            usage: { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+            uuid: "u1",
+            session_id: "s1",
+          },
+        },
+      ],
+    });
+
+    const msgs = useStore.getState().messages.get("s1")!;
+    expect(msgs.length).toBeGreaterThanOrEqual(6);
+
+    // User message must be present
+    const userMsgs = msgs.filter((m) => m.role === "user");
+    expect(userMsgs).toHaveLength(1);
+    expect(userMsgs[0].content).toBe("How does agent mode work?");
+
+    // Assistant messages with thinking blocks should have thinking content
+    const thinkingMsgs = msgs.filter((m) => m.role === "assistant" && m.content.includes("investigate agent mode"));
+    expect(thinkingMsgs.length).toBeGreaterThanOrEqual(1);
+
+    // Assistant message with text block should have text content
+    const textMsgs = msgs.filter((m) => m.role === "assistant" && m.content.includes("Agent mode works by"));
+    expect(textMsgs.length).toBeGreaterThanOrEqual(1);
+
+    // Tool use messages should have contentBlocks
+    const toolMsgs = msgs.filter((m) => m.role === "assistant" && m.contentBlocks?.some((b: any) => b.type === "tool_use"));
+    expect(toolMsgs.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("correctly handles event_replay after message_history without duplicates", () => {
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    // message_history first
+    fireMessage({
+      type: "message_history",
+      messages: [
+        { type: "user_message", content: "Hello", timestamp: 1000, id: "user-1" },
+        {
+          type: "assistant",
+          message: {
+            id: "msg-1",
+            type: "message",
+            role: "assistant",
+            model: "claude-opus-4-20250514",
+            content: [{ type: "thinking", thinking: "thinking..." }],
+            stop_reason: null,
+            usage: { input_tokens: 5, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          },
+          parent_tool_use_id: null,
+        },
+        {
+          type: "assistant",
+          message: {
+            id: "msg-2",
+            type: "message",
+            role: "assistant",
+            model: "claude-opus-4-20250514",
+            content: [{ type: "text", text: "Hi there!" }],
+            stop_reason: "end_turn",
+            usage: { input_tokens: 5, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          },
+          parent_tool_use_id: null,
+        },
+      ],
+    });
+
+    const beforeReplay = useStore.getState().messages.get("s1")!;
+    expect(beforeReplay).toHaveLength(3);
+
+    // event_replay with same assistant messages (should be deduped)
+    fireMessage({
+      type: "event_replay",
+      events: [
+        {
+          seq: 1,
+          message: {
+            type: "assistant",
+            message: {
+              id: "msg-1",
+              type: "message",
+              role: "assistant",
+              model: "claude-opus-4-20250514",
+              content: [{ type: "thinking", thinking: "thinking..." }],
+              stop_reason: null,
+              usage: { input_tokens: 5, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+            },
+            parent_tool_use_id: null,
+          },
+        },
+        {
+          seq: 2,
+          message: {
+            type: "assistant",
+            message: {
+              id: "msg-2",
+              type: "message",
+              role: "assistant",
+              model: "claude-opus-4-20250514",
+              content: [{ type: "text", text: "Hi there!" }],
+              stop_reason: "end_turn",
+              usage: { input_tokens: 5, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+            },
+            parent_tool_use_id: null,
+          },
+        },
+      ],
+    });
+
+    const afterReplay = useStore.getState().messages.get("s1")!;
+    // No duplicates — same 3 messages
+    expect(afterReplay).toHaveLength(3);
+  });
+});
+
+// ===========================================================================
 // handleMessage: auth_status error
 // ===========================================================================
 describe("handleMessage: auth_status", () => {

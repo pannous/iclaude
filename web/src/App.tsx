@@ -79,6 +79,7 @@ export default function App() {
       // Validate session exists — redirect home if orphaned or unknown
       api.listSessions().then((list) => {
         if (!list.some((s: { sessionId: string }) => s.sessionId === route.sessionId)) {
+          console.warn(`[app] Session ${route.sessionId} not in API list (${list.length} sessions), redirecting home`);
           disconnectSession(route.sessionId);
           useStore.getState().newSession();
           navigateHome(true);

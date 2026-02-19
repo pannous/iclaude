@@ -577,6 +577,7 @@ function handleParsedMessage(
     }
 
     case "message_history": {
+      console.debug(`[ws] message_history for ${sessionId}: ${data.messages.length} messages`);
       const chatMessages: ChatMessage[] = [];
       const seenIds = new Set<string>();
 
@@ -656,11 +657,13 @@ function handleParsedMessage(
           }
         }
       }
+      console.debug(`[ws] message_history: created ${chatMessages.length} ChatMessages (user: ${chatMessages.filter(m => m.role === "user").length}, assistant: ${chatMessages.filter(m => m.role === "assistant").length})`);
       if (chatMessages.length > 0) {
         const existing = store.messages.get(sessionId) || [];
         if (existing.length === 0) {
           // Initial connect: history is the full truth
           store.setMessages(sessionId, chatMessages);
+          console.debug(`[ws] message_history: set ${chatMessages.length} messages (initial connect)`);
         } else {
           // Reconnect: merge history with live messages, dedup by ID
           const existingIds = new Set(existing.map((m) => m.id));
@@ -699,7 +702,11 @@ function handleParsedMessage(
 }
 
 export function connectSession(sessionId: string) {
-  if (sockets.has(sessionId)) return;
+  if (sockets.has(sessionId)) {
+    console.debug(`[ws] connectSession(${sessionId}): already connected, skipping`);
+    return;
+  }
+  console.debug(`[ws] connectSession(${sessionId}): opening WebSocket`);
 
   const store = useStore.getState();
   store.setConnectionStatus(sessionId, "connecting");
@@ -711,6 +718,7 @@ export function connectSession(sessionId: string) {
     useStore.getState().setConnectionStatus(sessionId, "connected");
     reconnectAttempts.delete(sessionId);
     const lastSeq = getLastSeq(sessionId);
+    console.debug(`[ws] session_subscribe for ${sessionId} with last_seq=${lastSeq}`);
     ws.send(JSON.stringify({ type: "session_subscribe", last_seq: lastSeq }));
     // Clear any reconnect timer
     const timer = reconnectTimers.get(sessionId);
