@@ -78,13 +78,21 @@ export default function App() {
         store.setCurrentSession(route.sessionId);
       }
       connectSession(route.sessionId);
-      // Validate session exists — redirect home if orphaned or unknown
+      // Validate session exists — try to relaunch if not in active list
       api.listSessions().then((list) => {
         if (!list.some((s: { sessionId: string }) => s.sessionId === route.sessionId)) {
-          console.warn(`[app] Session ${route.sessionId} not in API list (${list.length} sessions), redirecting home`);
-          disconnectSession(route.sessionId);
-          useStore.getState().newSession();
-          navigateHome(true);
+          console.warn(`[app] Session ${route.sessionId} not in API list (${list.length} sessions), attempting relaunch`);
+          api.relaunchSession(route.sessionId).then(() => {
+            // Relaunch succeeded — reconnect WebSocket
+            disconnectSession(route.sessionId);
+            connectSession(route.sessionId);
+          }).catch(() => {
+            // Relaunch failed — session is truly gone, redirect home
+            console.warn(`[app] Relaunch failed for ${route.sessionId}, redirecting home`);
+            disconnectSession(route.sessionId);
+            useStore.getState().newSession();
+            navigateHome(true);
+          });
         }
       }).catch(() => {});
     } else if (route.page === "home") {
