@@ -76,8 +76,6 @@ export interface SdkSessionInfo {
   codexInternetAccess?: boolean;
   /** Sandbox mode selected for Codex sessions */
   codexSandbox?: "workspace-write" | "danger-full-access";
-  /** Pre-warmed standby session, hidden from session lists until adopted */
-  prewarm?: boolean;
   /** If this session was spawned by a cron job */
   cronJobId?: string;
   /** Human-readable name of the cron job that spawned this session */
@@ -109,8 +107,6 @@ export interface LaunchOptions {
   codexSandbox?: "workspace-write" | "danger-full-access";
   /** Whether Codex internet/web search should be enabled for this session. */
   codexInternetAccess?: boolean;
-  /** Pre-warmed standby session (hidden from lists until adopted) */
-  prewarm?: boolean;
   /** Optional override for CODEX_HOME used by Codex sessions. */
   codexHome?: string;
   /** Docker container ID — when set, CLI runs inside container via docker exec */
@@ -281,10 +277,6 @@ export class CliLauncher {
     // Pre-set cliSessionId so subsequent relaunches use --resume
     if (options.resumeSessionId) {
       info.cliSessionId = options.resumeSessionId;
-    }
-
-    if (options.prewarm) {
-      info.prewarm = true;
     }
 
     if (backendType === "codex") {
@@ -857,17 +849,6 @@ export class CliLauncher {
   isAlive(sessionId: string): boolean {
     const session = this.sessions.get(sessionId);
     return !!session && session.state !== "exited";
-  }
-
-  /**
-   * Adopt a pre-warmed session: clear the prewarm flag so it appears in listings.
-   */
-  adoptPrewarm(sessionId: string): boolean {
-    const info = this.sessions.get(sessionId);
-    if (!info?.prewarm) return false;
-    info.prewarm = false;
-    this.persistState();
-    return true;
   }
 
   /**

@@ -6,7 +6,6 @@ import { navigateToSession, navigateHome, parseHash } from "../utils/routing.js"
 import { ProjectGroup } from "./ProjectGroup.js";
 import { SessionItem } from "./SessionItem.js";
 import { groupSessionsByProject, type SessionItem as SessionItemType } from "../utils/project-grouping.js";
-import { getDefaultModel, getDefaultMode } from "../utils/backends.js";
 
 function formatTimeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -50,43 +49,6 @@ export function Sidebar() {
   const isTerminalPage = route.page === "terminal";
   const isEnvironmentsPage = route.page === "environments";
   const isScheduledPage = route.page === "scheduled";
-
-  // ── Pre-warm: eagerly spawn a Claude CLI so "New" is instant ────────────
-  const prewarmRef = useRef<{ sessionId: string; cwd: string } | null>(null);
-  const prewarmingRef = useRef(false);
-  const serverCwdRef = useRef<string>("");
-
-  const doPrewarm = useCallback(async (cwd: string) => {
-    if (prewarmingRef.current || prewarmRef.current) return;
-    prewarmingRef.current = true;
-    try {
-      const result = await api.createSession({
-        model: getDefaultModel("claude"),
-        permissionMode: getDefaultMode("claude"),
-        cwd: cwd || undefined,
-        backend: "claude",
-        prewarm: true,
-      });
-      prewarmRef.current = { sessionId: result.sessionId, cwd };
-    } catch {
-      // silently fail — normal creation is the fallback
-    } finally {
-      prewarmingRef.current = false;
-    }
-  }, []);
-
-  // Seed serverCwd and kick off first prewarm on mount
-  useEffect(() => {
-    api.getHome().then(({ home, cwd }) => {
-      serverCwdRef.current = cwd || home;
-      doPrewarm(serverCwdRef.current);
-    }).catch(() => {});
-    return () => {
-      // Kill dangling prewarm when Sidebar unmounts
-      const pw = prewarmRef.current;
-      if (pw) api.deleteSession(pw.sessionId).catch(() => {});
-    };
-  }, [doPrewarm]);
 
   // Poll for SDK sessions on mount
   useEffect(() => {
@@ -134,41 +96,10 @@ export function Sidebar() {
     }
   }
 
-  async function handleNewSession() {
+  function handleNewSession() {
     useStore.getState().closeTerminal();
-
-    const pw = prewarmRef.current;
-    if (pw) {
-      prewarmRef.current = null;
-
-      // Adopt: removes prewarm flag so it counts as a real session on the server
-      api.adoptPrewarm(pw.sessionId).catch(() => {});
-
-      // Add to local sdkSessions immediately so it appears in the sidebar
-      const store = useStore.getState();
-      store.setSdkSessions([
-        { sessionId: pw.sessionId, cwd: pw.cwd, state: "starting", createdAt: Date.now(), backendType: "claude" },
-        ...store.sdkSessions,
-      ]);
-
-      // Set placeholder name and connect browser WS
-      store.setSessionName(pw.sessionId, "New Session");
-      connectSession(pw.sessionId);
-      store.setCurrentSession(pw.sessionId);
-      navigateToSession(pw.sessionId);
-
-      // Enter rename mode immediately
-      setEditingSessionId(pw.sessionId);
-      setEditingName("New Session");
-
-      // Kick off next prewarm for the subsequent click
-      doPrewarm(pw.cwd || serverCwdRef.current);
-    } else {
-      // Fallback: no prewarm ready, go to home page
-      navigateHome();
-      useStore.getState().newSession();
-    }
-
+    navigateHome();
+    useStore.getState().newSession();
     if (window.innerWidth < 768) {
       useStore.getState().setSidebarOpen(false);
     }

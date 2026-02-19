@@ -103,41 +103,6 @@ export function HomePage() {
   const setCurrentSession = useStore((s) => s.setCurrentSession);
   const currentSessionId = useStore((s) => s.currentSessionId);
 
-  // ── Pre-warm: eagerly spawn a Claude CLI so sessions start instantly ───
-  const prewarmRef = useRef<{ sessionId: string; cwd: string; envSlug: string } | null>(null);
-  const prewarmingRef = useRef(false);
-
-  const doPrewarm = useCallback(async (targetCwd: string, targetEnvSlug: string) => {
-    if (prewarmingRef.current) return;
-    prewarmingRef.current = true;
-    try {
-      const result = await api.createSession({
-        model: getDefaultModel("claude"),
-        permissionMode: getDefaultMode("claude"),
-        cwd: targetCwd || undefined,
-        envSlug: targetEnvSlug || undefined,
-        backend: "claude",
-        prewarm: true,
-      });
-      // Don't connect browser WS yet — that would add it to the sidebar.
-      // The CLI process starts connecting to the server in the background.
-      // We'll connect the browser WS when the user actually sends a message.
-      prewarmRef.current = { sessionId: result.sessionId, cwd: targetCwd, envSlug: targetEnvSlug };
-    } catch {
-      // Pre-warm failed silently — normal session creation will be used as fallback
-    } finally {
-      prewarmingRef.current = false;
-    }
-  }, []);
-
-  const killPrewarm = useCallback(() => {
-    const pw = prewarmRef.current;
-    if (pw) {
-      api.deleteSession(pw.sessionId).catch(() => {});
-      prewarmRef.current = null;
-    }
-  }, []);
-
   // Auto-focus textarea (desktop only — on mobile it triggers the keyboard immediately)
   useEffect(() => {
     const isDesktop = window.matchMedia("(min-width: 640px)").matches;
@@ -156,27 +121,6 @@ export function HomePage() {
     api.listEnvs().then(setEnvs).catch(() => {});
     api.getBackends().then(setBackends).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Pre-warm a Claude session when cwd is known and backend is Claude
-  useEffect(() => {
-    if (backend !== "claude" || !cwd) return;
-    // If we already have a prewarm for this cwd+env, skip
-    if (prewarmRef.current?.cwd === cwd && prewarmRef.current?.envSlug === selectedEnv) return;
-    // Kill stale prewarm if cwd/env changed
-    killPrewarm();
-    // Small delay to let cwd settle (avoids multiple prewarms during init)
-    const timer = setTimeout(() => doPrewarm(cwd, selectedEnv), 300);
-    return () => clearTimeout(timer);
-  }, [backend, cwd, selectedEnv, doPrewarm, killPrewarm]);
-
-  // Kill prewarm when switching away from Claude or unmounting
-  useEffect(() => {
-    if (backend !== "claude") killPrewarm();
-  }, [backend, killPrewarm]);
-
-  useEffect(() => {
-    return () => killPrewarm();
-  }, [killPrewarm]);
 
   // When backend changes, reset model and mode to defaults
   function switchBackend(newBackend: BackendType) {
@@ -400,47 +344,19 @@ export function HomePage() {
 
       const branchName = selectedBranch.trim() || undefined;
 
-      // Try to use pre-warmed session for simple Claude sessions
-      // (no worktree, no branch switching, matching cwd)
-      const pw = prewarmRef.current;
-      const canUsePrewarm = pw
-        && backend === "claude"
-        && pw.cwd === (cwd || "")
-        && pw.envSlug === selectedEnv
-        && !useWorktree
-        && !branchName;
-
-      let sessionId: string;
-
-      let usePrewarm = false;
-      if (canUsePrewarm) {
-        sessionId = pw.sessionId;
-        prewarmRef.current = null;
-        usePrewarm = true;
-
-        // Adopt the pre-warmed session (makes it visible in session list)
-        api.adoptPrewarm(sessionId).catch(() => {});
-
-        // Connect browser WS (wasn't connected during pre-warm to avoid sidebar pollution)
-        connectSession(sessionId);
-      } else {
-        // Kill any stale prewarm — we're creating a fresh session
-        killPrewarm();
-
-        const result = await api.createSession({
-          model,
-          permissionMode: mode,
-          cwd: cwd || undefined,
-          envSlug: selectedEnv || undefined,
-          branch: branchName,
-          createBranch: branchName && isNewBranch ? true : undefined,
-          useWorktree: useWorktree || undefined,
-          backend,
-          codexInternetAccess: backend === "codex" ? codexInternetAccess : undefined,
-        });
-        sessionId = result.sessionId;
-        connectSession(sessionId);
-      }
+      const result = await api.createSession({
+        model,
+        permissionMode: mode,
+        cwd: cwd || undefined,
+        envSlug: selectedEnv || undefined,
+        branch: branchName,
+        createBranch: branchName && isNewBranch ? true : undefined,
+        useWorktree: useWorktree || undefined,
+        backend,
+        codexInternetAccess: backend === "codex" ? codexInternetAccess : undefined,
+      });
+      const sessionId = result.sessionId;
+      connectSession(sessionId);
 
       // Save cwd to recent dirs
       if (cwd) addRecentDir(cwd);
@@ -456,18 +372,6 @@ export function HomePage() {
 
       // Wait for browser WebSocket to open
       await waitForConnection(sessionId);
-
-      // For pre-warmed sessions, update model/mode if they differ from defaults
-      if (usePrewarm) {
-        const defaultModel = getDefaultModel("claude");
-        const defaultMode = getDefaultMode("claude");
-        if (model !== defaultModel) {
-          sendToSession(sessionId, { type: "set_model", model });
-        }
-        if (mode !== defaultMode) {
-          sendToSession(sessionId, { type: "set_permission_mode", mode });
-        }
-      }
 
       // Send message
       sendToSession(sessionId, {
@@ -488,11 +392,6 @@ export function HomePage() {
 
       // Clear progress on success
       useStore.getState().clearCreation();
-
-      // Start pre-warming a new session for next time
-      if (backend === "claude" && cwd) {
-        setTimeout(() => doPrewarm(cwd, selectedEnv), 500);
-      }
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e);
       setError(errMsg);

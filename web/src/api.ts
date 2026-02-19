@@ -97,7 +97,6 @@ export interface CreateSessionOpts {
   useWorktree?: boolean;
   resumeSessionId?: string;
   backend?: "claude" | "codex";
-  prewarm?: boolean;
   container?: ContainerCreateOpts;
 }
 
@@ -370,9 +369,6 @@ export const api = {
     ),
 
   listSessions: () => get<SdkSessionInfo[]>("/sessions"),
-
-  adoptPrewarm: (sessionId: string) =>
-    post<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/adopt`),
 
   cleanupSessions: () =>
     post<{ success: boolean }>("/sessions/cleanup"),

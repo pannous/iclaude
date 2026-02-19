@@ -299,7 +299,6 @@ export function createRoutes(
         containerName,
         containerImage,
         containerCwd: containerInfo?.containerCwd,
-        prewarm: body.prewarm,
       });
 
       // Re-track container with real session ID and mark session as containerized
@@ -614,7 +613,6 @@ export function createRoutes(
           containerName,
           containerImage,
           containerCwd: containerInfo?.containerCwd,
-          prewarm: body.prewarm,
         });
 
         // Re-track container and mark session as containerized
@@ -663,9 +661,8 @@ export function createRoutes(
     const bridgeStates = wsBridge.getAllSessions();
     const bridgeMap = new Map(bridgeStates.map((s) => [s.session_id, s]));
     const now = Date.now();
-    // Filter out prewarm sessions and orphaned sessions (connected, 0 turns, no name, age > 2min)
+    // Filter out orphaned sessions (connected, 0 turns, no name, age > 2min)
     const sessions = allSessions.filter((s) => {
-      if (s.prewarm) return false;
       if (s.state === "connected" && !s.name && !names[s.sessionId]) {
         const bridge = bridgeMap.get(s.sessionId);
         if ((bridge?.num_turns ?? 0) === 0 && now - s.createdAt > 120_000) return false;
