@@ -413,7 +413,17 @@ export function createRoutes(
 
             if (repoInfo.currentBranch !== body.branch) {
               await emitProgress(stream, "checkout_branch", `Checking out ${body.branch}...`, "in_progress");
-              gitUtils.checkoutBranch(repoInfo.repoRoot, body.branch);
+              try {
+                gitUtils.checkoutBranch(repoInfo.repoRoot, body.branch);
+              } catch {
+                // Branch doesn't exist locally — create it if requested
+                if (body.createBranch) {
+                  const base = repoInfo.defaultBranch;
+                  gitUtils.createAndCheckoutBranch(repoInfo.repoRoot, body.branch, base);
+                } else {
+                  throw new Error(`Branch "${body.branch}" does not exist. Enable "create branch" to create it.`);
+                }
+              }
               await emitProgress(stream, "checkout_branch", `On branch ${body.branch}`, "done");
             }
 
@@ -1468,14 +1478,15 @@ export function createRoutes(
       },
       body: JSON.stringify({
         query: `
-          query CompanionIssueSearch($query: String!, $first: Int!) {
-            issueSearch(query: $query, first: $first) {
+          query CompanionIssueSearch($term: String!, $first: Int!) {
+            searchIssues(term: $term, first: $first) {
               nodes {
                 id
                 identifier
                 title
                 description
                 url
+                branchName
                 priorityLabel
                 state { name type }
                 team { key name }
@@ -1483,7 +1494,7 @@ export function createRoutes(
             }
           }
         `,
-        variables: { query, first: limit },
+        variables: { term: query, first: limit },
       }),
     }).catch((e: unknown) => {
       throw new Error(`Failed to connect to Linear: ${e instanceof Error ? e.message : String(e)}`);
@@ -1491,13 +1502,14 @@ export function createRoutes(
 
     const json = await response.json().catch(() => ({})) as {
       data?: {
-        issueSearch?: {
+        searchIssues?: {
           nodes?: Array<{
             id: string;
             identifier: string;
             title: string;
             description?: string | null;
             url: string;
+            branchName?: string | null;
             priorityLabel?: string | null;
             state?: { name?: string | null; type?: string | null } | null;
             team?: { key?: string | null; name?: string | null } | null;
@@ -1512,12 +1524,13 @@ export function createRoutes(
       return c.json({ error: firstError }, 502);
     }
 
-    const issues = (json.data?.issueSearch?.nodes || []).map((issue) => ({
+    const issues = (json.data?.searchIssues?.nodes || []).map((issue) => ({
       id: issue.id,
       identifier: issue.identifier,
       title: issue.title,
       description: issue.description || "",
       url: issue.url,
+      branchName: issue.branchName || "",
       priorityLabel: issue.priorityLabel || "",
       stateName: issue.state?.name || "",
       stateType: issue.state?.type || "",

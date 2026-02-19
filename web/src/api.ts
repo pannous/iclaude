@@ -18,7 +18,8 @@ async function post<T = unknown>(path: string, body?: object): Promise<T> {
 async function get<T = unknown>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
   if (!res.ok) {
-    throw new Error(res.statusText);
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
   }
   return res.json();
 }
@@ -235,6 +236,7 @@ export interface LinearIssue {
   title: string;
   description: string;
   url: string;
+  branchName: string;
   priorityLabel: string;
   stateName: string;
   stateType: string;
