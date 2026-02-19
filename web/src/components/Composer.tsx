@@ -195,6 +195,18 @@ export function Composer({ sessionId }: { sessionId: string }) {
     }
   }, [slashMenuOpen, mentionContext, mentionMenuOpen]);
 
+  // Receive speech input injected from native iOS app via WKWebView.evaluateJavaScript
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const text = (e as CustomEvent<{ text: string }>).detail?.text;
+      if (!text) return;
+      setText((prev) => (prev ? prev + " " + text : text));
+      textareaRef.current?.focus();
+    };
+    window.addEventListener("speech-input", handler);
+    return () => window.removeEventListener("speech-input", handler);
+  }, []);
+
   // Keep selected index in bounds
   useEffect(() => {
     if (slashMenuIndex >= filteredCommands.length) {
