@@ -40,6 +40,20 @@ function prefix(name: string, color: string, stream: ReadableStream<Uint8Array>)
   })();
 }
 
+// ── Port cleanup ─────────────────────────────────────────────────────
+
+async function killPortIfUsed(port: number) {
+  const result = await spawn(["lsof", "-ti", `:${port}`], { stdout: "pipe", stderr: "pipe" }).stdout
+    .text()
+    .catch(() => "");
+  const pids = result.trim().split("\n").filter(Boolean);
+  if (pids.length === 0) return;
+  log("warn", `Port ${port} in use by PID(s) ${pids.join(", ")} — killing...`);
+  await spawn(["kill", ...pids]).exited.catch(() => {});
+  // Give them a moment to release the port
+  await new Promise((r) => setTimeout(r, 300));
+}
+
 // ── Backend process management ───────────────────────────────────────
 
 let backend: Subprocess | null = null;
@@ -126,20 +140,23 @@ prefix("vite", "\x1b[31m", vite.stderr);
 
 // ── Startup ──────────────────────────────────────────────────────────
 
+await killPortIfUsed(3457);
 backend = startBackend();
 startWatcher();
 log("info", "Watching server/ for changes (typecheck-gated restarts)");
 
 // ── Cleanup ──────────────────────────────────────────────────────────
 
-function cleanup() {
-  if (backend) backend.kill();
-  vite.kill();
+async function cleanup() {
+  const waits: Promise<unknown>[] = [];
+  if (backend) { backend.kill(); waits.push(backend.exited); }
+  vite.kill(); waits.push(vite.exited);
+  await Promise.race([Promise.all(waits), new Promise((r) => setTimeout(r, 2000))]);
   process.exit(0);
 }
 
-process.on("SIGINT", cleanup);
-process.on("SIGTERM", cleanup);
+process.on("SIGINT", () => { cleanup(); });
+process.on("SIGTERM", () => { cleanup(); });
 
 // Only Vite crashing kills the dev server — backend restarts are managed by the watcher
 vite.exited.then((code) => {
