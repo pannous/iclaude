@@ -798,6 +798,67 @@ describe("POST /api/sessions/create", () => {
   });
 });
 
+// ─── Resume session ───────────────────────────────────────────────────────────
+//
+// Regression test: resumeSessionId from the request body was previously dropped
+// and never forwarded to launcher.launch(). This caused the CLI to spawn without
+// --resume, the cliSessionId to never be set, and loadCLIHistory to never be
+// called — so resumed sessions showed an empty chat.
+
+describe("POST /api/sessions/create — resume", () => {
+  it("forwards resumeSessionId to the launcher so the CLI spawns with --resume", async () => {
+    const CLI_SESSION_ID = "4d98bb8e-4aeb-4b21-8d94-328482b38f61";
+
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: TEST_CWD, resumeSessionId: CLI_SESSION_ID }),
+    });
+
+    expect(res.status).toBe(200);
+    // The launcher must receive resumeSessionId so it can set info.cliSessionId
+    // and pass --resume <id> to the CLI process.
+    expect(launcher.launch).toHaveBeenCalledWith(
+      expect.objectContaining({ resumeSessionId: CLI_SESSION_ID, cwd: TEST_CWD }),
+    );
+  });
+
+  it("does not pass resumeSessionId when omitted (new session)", async () => {
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: TEST_CWD }),
+    });
+
+    expect(res.status).toBe(200);
+    // resumeSessionId must be undefined/absent so the CLI starts a fresh session
+    const call = launcher.launch.mock.calls[0][0];
+    expect(call.resumeSessionId).toBeUndefined();
+  });
+});
+
+describe("POST /api/sessions/create-stream — resume", () => {
+  it("forwards resumeSessionId to the launcher via the streaming route", async () => {
+    const CLI_SESSION_ID = "4d98bb8e-0000-0000-0000-000000000001";
+
+    const res = await app.request("/api/sessions/create-stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: TEST_CWD, resumeSessionId: CLI_SESSION_ID }),
+    });
+
+    expect(res.status).toBe(200);
+    const events = await parseSSE(res);
+    // Session must be created successfully
+    const doneEvent = events.find((e) => e.event === "done");
+    expect(doneEvent).toBeDefined();
+
+    expect(launcher.launch).toHaveBeenCalledWith(
+      expect.objectContaining({ resumeSessionId: CLI_SESSION_ID, cwd: TEST_CWD }),
+    );
+  });
+});
+
 describe("GET /api/sessions", () => {
   it("returns the list of sessions enriched with names", async () => {
     const sessions = [
