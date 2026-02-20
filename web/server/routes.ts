@@ -308,7 +308,7 @@ export function createRoutes(
         }
       }
 
-      const session = await launcher.launch({
+      const session = launcher.launch({
         model: body.model,
         permissionMode: body.permissionMode,
         cwd,
@@ -627,7 +627,7 @@ export function createRoutes(
         // --- Step: Launch CLI ---
         await emitProgress(stream, "launching_cli", "Launching Claude Code...", "in_progress");
 
-        const session = await launcher.launch({
+        const session = launcher.launch({
           model: body.model,
           permissionMode: body.permissionMode,
           cwd,

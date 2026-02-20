@@ -82,8 +82,6 @@ export interface SdkSessionInfo {
   cronJobName?: string;
 
   // Container fields
-  /** Whether a --resume attempt failed immediately (next relaunch should start fresh) */
-  resumeFailed?: boolean;
   /** Docker container ID when session runs inside a container */
   containerId?: string;
   /** Docker container name */
@@ -125,16 +123,11 @@ export interface LaunchOptions {
  * Manages CLI backend processes (Claude Code via --sdk-url WebSocket,
  * or Codex via app-server stdio).
  */
-/** Prefix for temporary routing tokens used before the CLI reports its real session ID. */
-const TEMP_TOKEN_PREFIX = "_tmp_";
-
 export class CliLauncher {
   private sessions = new Map<string, SdkSessionInfo>();
   private processes = new Map<string, Subprocess>();
   /** Runtime-only env vars per session (kept out of persisted launcher state). */
   private sessionEnvs = new Map<string, Record<string, string>>();
-  /** Pending resolvers for new sessions waiting for the CLI to report its real session ID. */
-  private pendingSessionResolvers = new Map<string, { resolve: (info: SdkSessionInfo) => void; reject: (err: Error) => void; timeout: ReturnType<typeof setTimeout> }>();
   private port: number;
   private store: SessionStore | null = null;
   private recorder: RecorderManager | null = null;
@@ -199,12 +192,11 @@ export class CliLauncher {
           info.exitCode = -1;
           this.sessions.set(info.sessionId, info);
         }
-      } else if (!this.isTempToken(info.sessionId) || info.title || info.archived) {
-        // Restore exited sessions with real CLI session IDs (resumable), named, or archived.
-        // Drop sessions still using temp tokens (never fully initialized).
+      } else if (info.cliSessionId || info.title || info.archived) {
+        // Only restore exited sessions that are resumable, named, or archived
         this.sessions.set(info.sessionId, info);
       } else {
-        // Drop ghost sessions (temp token, no title, not archived)
+        // Drop ghost sessions (exited, no cliSessionId, no title, not archived)
         pruned++;
       }
     }
@@ -246,7 +238,7 @@ export class CliLauncher {
    */
   adoptOrphan(
     sessionId: string,
-    opts: { backendType?: BackendType; model?: string; cwd?: string; permissionMode?: string },
+    opts: { backendType?: BackendType; model?: string; cwd?: string; permissionMode?: string; cliSessionId?: string },
   ): void {
     if (this.sessions.has(sessionId)) return;
     const info: SdkSessionInfo = {
@@ -257,6 +249,7 @@ export class CliLauncher {
       permissionMode: opts.permissionMode,
       cwd: opts.cwd || process.cwd(),
       createdAt: Date.now(),
+      cliSessionId: opts.cliSessionId,
     };
     console.log(`[cli-launcher] Adopting orphan session ${sessionId} from ws-bridge state`);
     this.sessions.set(sessionId, info);
@@ -265,19 +258,11 @@ export class CliLauncher {
 
   /**
    * Launch a new CLI session (Claude Code or Codex).
-   * For resumed sessions, uses the known CLI session ID as the canonical ID.
-   * For new sessions, uses a temp routing token and waits for the CLI to
-   * report its real session ID via system/init (Claude) or thread start (Codex).
    */
-  async launch(options: LaunchOptions = {}): Promise<SdkSessionInfo> {
+  launch(options: LaunchOptions = {}): SdkSessionInfo {
+    const sessionId = randomUUID();
     const cwd = options.cwd || process.cwd();
     const backendType = options.backendType || "claude";
-
-    // For resumed sessions, use the known CLI session ID directly
-    const isResume = !!options.resumeSessionId;
-    const sessionId = isResume
-      ? options.resumeSessionId!
-      : `${TEMP_TOKEN_PREFIX}${randomUUID()}`;
 
     const info: SdkSessionInfo = {
       sessionId,
@@ -288,6 +273,11 @@ export class CliLauncher {
       createdAt: Date.now(),
       backendType,
     };
+
+    // Pre-set cliSessionId so subsequent relaunches use --resume
+    if (options.resumeSessionId) {
+      info.cliSessionId = options.resumeSessionId;
+    }
 
     if (backendType === "codex") {
       info.codexInternetAccess = options.codexInternetAccess === true;
@@ -312,25 +302,7 @@ export class CliLauncher {
     } else {
       this.spawnCLI(sessionId, info, options);
     }
-
-    // For resumed sessions, we already have the real ID — return immediately
-    if (isResume) {
-      return info;
-    }
-
-    // For new sessions, wait for the CLI to report its real session ID
-    return new Promise<SdkSessionInfo>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingSessionResolvers.delete(sessionId);
-        reject(new Error(`CLI did not report session ID within 30s (temp token: ${sessionId})`));
-      }, 30_000);
-      this.pendingSessionResolvers.set(sessionId, { resolve, reject, timeout });
-    });
-  }
-
-  /** Check if a session ID is a temporary routing token (not yet resolved to a real CLI session ID). */
-  isTempToken(sessionId: string): boolean {
-    return sessionId.startsWith(TEMP_TOKEN_PREFIX);
+    return info;
   }
 
   /**
@@ -421,16 +393,11 @@ export class CliLauncher {
         env: runtimeEnv,
       });
     } else {
-      // If a previous --resume failed immediately, don't try to resume again
-      const shouldResume = !info.resumeFailed && !this.isTempToken(sessionId);
-      if (info.resumeFailed) {
-        info.resumeFailed = false;
-      }
       this.spawnCLI(sessionId, info, {
         model: info.model,
         permissionMode: info.permissionMode,
         cwd: info.cwd,
-        resumeSessionId: shouldResume ? sessionId : undefined,
+        resumeSessionId: info.cliSessionId,
         containerId: info.containerId,
         containerName: info.containerName,
         containerImage: info.containerImage,
@@ -579,26 +546,27 @@ export class CliLauncher {
     // Stream stdout/stderr for debugging
     this.pipeOutput(sessionId, proc);
 
-    // Monitor process exit.
-    // Use info.sessionId (not the closure sessionId) because re-keying may have updated it.
+    // Monitor process exit
     const spawnedAt = Date.now();
     proc.exited.then((exitCode) => {
-      const currentId = info.sessionId;
-      console.log(`[cli-launcher] Session ${currentId} exited (code=${exitCode})`);
-      info.state = "exited";
-      info.exitCode = exitCode;
+      console.log(`[cli-launcher] Session ${sessionId} exited (code=${exitCode})`);
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.state = "exited";
+        session.exitCode = exitCode;
 
-      // If the process exited almost immediately with --resume, the resume likely failed.
-      // Mark the session so the next relaunch can decide to start fresh.
-      const uptime = Date.now() - spawnedAt;
-      if (uptime < 5000 && options.resumeSessionId) {
-        console.error(`[cli-launcher] Session ${currentId} exited immediately after --resume (${uptime}ms). Next relaunch will start fresh.`);
-        info.resumeFailed = true;
+        // If the process exited almost immediately with --resume, the resume likely failed.
+        // Clear cliSessionId so the next relaunch starts fresh.
+        const uptime = Date.now() - spawnedAt;
+        if (uptime < 5000 && options.resumeSessionId) {
+          console.error(`[cli-launcher] Session ${sessionId} exited immediately after --resume (${uptime}ms). Clearing cliSessionId for fresh start.`);
+          session.cliSessionId = undefined;
+        }
       }
-      this.processes.delete(currentId);
+      this.processes.delete(sessionId);
       this.persistState();
       for (const handler of this.exitHandlers) {
-        try { handler(currentId, exitCode); } catch {}
+        try { handler(sessionId, exitCode); } catch {}
       }
     });
 
@@ -755,24 +723,26 @@ export class CliLauncher {
 
     // Create the CodexAdapter which handles JSON-RPC and message translation
     // Pass the raw permission mode — the adapter maps it to Codex's approval policy
-    // For resumed sessions, sessionId IS the threadId; for new sessions, no threadId yet
     const adapter = new CodexAdapter(proc, sessionId, {
       model: options.model,
       cwd: info.cwd,
       executionCwd: options.containerId ? (info.containerCwd || "/workspace") : info.cwd,
       approvalMode: options.permissionMode,
-      threadId: this.isTempToken(sessionId) ? undefined : sessionId,
+      threadId: info.cliSessionId,
       sandbox: options.codexSandbox,
       recorder: this.recorder ?? undefined,
     });
 
-    // Handle init errors — mark session as exited so UI shows failure
+    // Handle init errors — mark session as exited so UI shows failure.
+    // Also clear cliSessionId so the next relaunch starts a fresh thread
+    // instead of trying to resume one whose rollout may be missing.
     adapter.onInitError((error) => {
       console.error(`[cli-launcher] Codex session ${sessionId} init failed: ${error}`);
       const session = this.sessions.get(sessionId);
       if (session) {
         session.state = "exited";
         session.exitCode = 1;
+        session.cliSessionId = undefined;
       }
       this.persistState();
     });
@@ -785,17 +755,19 @@ export class CliLauncher {
     // Mark as connected immediately (no WS handshake needed for stdio)
     info.state = "connected";
 
-    // Monitor process exit.
-    // Use info.sessionId (not the closure sessionId) because re-keying may have updated it.
+    // Monitor process exit
+    const spawnedAt = Date.now();
     proc.exited.then((exitCode) => {
-      const currentId = info.sessionId;
-      console.log(`[cli-launcher] Codex session ${currentId} exited (code=${exitCode})`);
-      info.state = "exited";
-      info.exitCode = exitCode;
-      this.processes.delete(currentId);
+      console.log(`[cli-launcher] Codex session ${sessionId} exited (code=${exitCode})`);
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.state = "exited";
+        session.exitCode = exitCode;
+      }
+      this.processes.delete(sessionId);
       this.persistState();
       for (const handler of this.exitHandlers) {
-        try { handler(currentId, exitCode); } catch {}
+        try { handler(sessionId, exitCode); } catch {}
       }
     });
 
@@ -816,65 +788,15 @@ export class CliLauncher {
   }
 
   /**
-   * Called when the CLI reports its real session ID (from system/init or Codex thread start).
-   * For temp-token sessions, re-keys the session to use the real ID and resolves the pending Promise.
-   * For already-resolved sessions (resumed), just stores the CLI session ID.
+   * Store the CLI's internal session ID (from system.init message).
+   * This is needed for --resume on relaunch.
    */
   setCLISessionId(sessionId: string, cliSessionId: string): void {
     const session = this.sessions.get(sessionId);
-    if (!session) return;
-
-    if (this.isTempToken(sessionId)) {
-      // Re-key from temp token to real CLI session ID
-      this.sessions.delete(sessionId);
-      session.sessionId = cliSessionId;
-      this.sessions.set(cliSessionId, session);
-
-      // Move env vars
-      const env = this.sessionEnvs.get(sessionId);
-      if (env) {
-        this.sessionEnvs.delete(sessionId);
-        this.sessionEnvs.set(cliSessionId, env);
-      }
-
-      // Move process reference
-      const proc = this.processes.get(sessionId);
-      if (proc) {
-        this.processes.delete(sessionId);
-        this.processes.set(cliSessionId, proc);
-      }
-
-      // Resolve the pending launch() Promise
-      const resolver = this.pendingSessionResolvers.get(sessionId);
-      if (resolver) {
-        clearTimeout(resolver.timeout);
-        this.pendingSessionResolvers.delete(sessionId);
-        resolver.resolve(session);
-      }
-
-      console.log(`[cli-launcher] Re-keyed session ${sessionId} → ${cliSessionId}`);
-    } else {
-      // For resumed sessions where the CLI may report a different session ID
-      // (e.g., resume failed and a fresh session was created)
-      if (cliSessionId !== sessionId) {
-        console.warn(`[cli-launcher] Resumed session ${sessionId} got different CLI ID ${cliSessionId}, re-keying`);
-        this.sessions.delete(sessionId);
-        session.sessionId = cliSessionId;
-        this.sessions.set(cliSessionId, session);
-
-        const env = this.sessionEnvs.get(sessionId);
-        if (env) {
-          this.sessionEnvs.delete(sessionId);
-          this.sessionEnvs.set(cliSessionId, env);
-        }
-        const proc = this.processes.get(sessionId);
-        if (proc) {
-          this.processes.delete(sessionId);
-          this.processes.set(cliSessionId, proc);
-        }
-      }
+    if (session) {
+      session.cliSessionId = cliSessionId;
+      this.persistState();
     }
-    this.persistState();
   }
 
   /**

@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync, renameSync, existsSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type {
@@ -100,29 +100,6 @@ export class SessionStore {
     session.archived = archived;
     this.saveSync(session);
     return true;
-  }
-
-  /** Rename a session file on disk (used when re-keying from temp token to real CLI session ID). */
-  rename(oldId: string, newId: string): void {
-    const oldTimer = this.debounceTimers.get(oldId);
-    if (oldTimer) {
-      clearTimeout(oldTimer);
-      this.debounceTimers.delete(oldId);
-    }
-    const oldPath = this.filePath(oldId);
-    const newPath = this.filePath(newId);
-    try {
-      if (existsSync(oldPath)) {
-        const raw = readFileSync(oldPath, "utf-8");
-        const session = JSON.parse(raw) as PersistedSession;
-        session.id = newId;
-        session.state.session_id = newId;
-        writeFileSync(newPath, JSON.stringify(session), "utf-8");
-        unlinkSync(oldPath);
-      }
-    } catch (err) {
-      console.error(`[session-store] Failed to rename session ${oldId} → ${newId}:`, err);
-    }
   }
 
   /** Remove a session file from disk. */
