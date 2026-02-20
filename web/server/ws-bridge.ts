@@ -667,6 +667,51 @@ export class WsBridge {
     return this.sessions.get(sessionId);
   }
 
+  /**
+   * Re-key a session from a temporary routing token to the real CLI session ID.
+   * Moves the session in all internal maps and updates persisted state.
+   */
+  rekeySession(oldId: string, newId: string): boolean {
+    const session = this.sessions.get(oldId);
+    if (!session) return false;
+    if (this.sessions.has(newId)) {
+      console.warn(`[ws-bridge] Cannot rekey ${oldId} → ${newId}: target already exists`);
+      return false;
+    }
+
+    // Update session identity
+    session.id = newId;
+    session.state.session_id = newId;
+
+    // Move in sessions map
+    this.sessions.delete(oldId);
+    this.sessions.set(newId, session);
+
+    // Update CLI socket routing data (Bun WS data is mutable)
+    if (session.cliSocket) {
+      (session.cliSocket.data as CLISocketData).sessionId = newId;
+    }
+
+    // Move pending relaunch timer
+    const timer = this.pendingRelaunches.get(oldId);
+    if (timer) {
+      this.pendingRelaunches.delete(oldId);
+      this.pendingRelaunches.set(newId, timer);
+    }
+
+    // Move auto-naming tracking
+    if (this.autoNamingAttempted.has(oldId)) {
+      this.autoNamingAttempted.delete(oldId);
+      this.autoNamingAttempted.add(newId);
+    }
+
+    // Rename persisted session file
+    this.store?.rename(oldId, newId);
+
+    console.log(`[ws-bridge] Re-keyed session ${oldId} → ${newId}`);
+    return true;
+  }
+
   getAllSessions(): SessionState[] {
     return Array.from(this.sessions.values()).map((s) => s.state);
   }
@@ -1152,11 +1197,8 @@ export class WsBridge {
 
   private handleSystemMessage(session: Session, msg: CLISystemInitMessage | CLISystemStatusMessage) {
     if (msg.subtype === "init") {
-      // Keep the launcher-assigned session_id as the canonical ID.
-      // The CLI may report its own internal session_id which differs
-      // from the launcher UUID, causing duplicate entries in the sidebar.
-
-      // Store the CLI's internal session_id so we can --resume on relaunch
+      // The CLI's session_id becomes the canonical session ID.
+      // For temp-token sessions, the onCLISessionId callback triggers re-keying.
       if (msg.session_id) {
         session.cliSessionId = msg.session_id;
         if (this.onCLISessionId) {

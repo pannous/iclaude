@@ -66,11 +66,21 @@ containerManager.restoreState(CONTAINER_STATE_PATH);
 const relaunchCooldowns = new Map<string, { until: number; attempts: number }>();
 const MAX_RELAUNCH_COOLDOWN = 60_000;
 
-// When the CLI reports its internal session_id, store it for --resume on relaunch
-// and reset any relaunch backoff since the CLI is now healthy
+// When the CLI reports its real session_id, re-key the session from temp token
+// to the real CLI session ID and reset any relaunch backoff
 wsBridge.onCLISessionIdReceived((sessionId, cliSessionId) => {
+  // Re-key ws-bridge session if this is a temp token
+  if (launcher.isTempToken(sessionId) || sessionId !== cliSessionId) {
+    wsBridge.rekeySession(sessionId, cliSessionId);
+  }
+  // Re-key launcher session and resolve pending launch() Promise
   launcher.setCLISessionId(sessionId, cliSessionId);
+  // Update cooldown map key
+  const cooldown = relaunchCooldowns.get(sessionId);
   relaunchCooldowns.delete(sessionId);
+  if (cooldown && cliSessionId !== sessionId) {
+    relaunchCooldowns.set(cliSessionId, cooldown);
+  }
 });
 
 // When a title is auto-generated from the first user message, update the session
@@ -115,7 +125,6 @@ wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
         model: bridgeSession.state.model || undefined,
         cwd: bridgeSession.state.cwd || undefined,
         permissionMode: bridgeSession.state.permissionMode || undefined,
-        cliSessionId: bridgeSession.cliSessionId,
       });
       info = launcher.getSession(sessionId);
     }
