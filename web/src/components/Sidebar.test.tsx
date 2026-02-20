@@ -211,7 +211,9 @@ describe("Sidebar", () => {
     expect(screen.getByText("myapp")).toBeInTheDocument();
   });
 
-  it("session items show git branch when available", () => {
+  it("session items do not show git branch (removed in redesign)", () => {
+    // Git branch was intentionally removed from session items in the sidebar redesign.
+    // The data is still in the store but no longer rendered in the session row.
     const session = makeSession("s1", { git_branch: "feature/awesome" });
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
@@ -220,7 +222,7 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    expect(screen.getByText("feature/awesome")).toBeInTheDocument();
+    expect(screen.queryByText("feature/awesome")).not.toBeInTheDocument();
   });
 
   it("session items show container badge when is_containerized is true", () => {
@@ -235,28 +237,13 @@ describe("Sidebar", () => {
     expect(screen.getByTitle("Docker")).toBeInTheDocument();
   });
 
-  it("session items show ahead/behind counts", () => {
+  it("session items do not show git stats (removed in redesign)", () => {
+    // Git ahead/behind and lines added/removed were intentionally removed
+    // from session items in the sidebar redesign.
     const session = makeSession("s1", {
       git_branch: "main",
       git_ahead: 3,
       git_behind: 2,
-    });
-    const sdk = makeSdkSession("s1");
-    mockState = createMockState({
-      sessions: new Map([["s1", session]]),
-      sdkSessions: [sdk],
-    });
-
-    render(<Sidebar />);
-    // The component renders "3↑" and "2↓" using HTML entities in a stats row
-    const sessionButton = screen.getByText("main").closest("button")!;
-    expect(sessionButton.textContent).toContain("3");
-    expect(sessionButton.textContent).toContain("2");
-  });
-
-  it("session items show lines added/removed", () => {
-    const session = makeSession("s1", {
-      git_branch: "main",
       total_lines_added: 42,
       total_lines_removed: 7,
     });
@@ -267,8 +254,8 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    expect(screen.getByText("+42")).toBeInTheDocument();
-    expect(screen.getByText("-7")).toBeInTheDocument();
+    expect(screen.queryByText("+42")).not.toBeInTheDocument();
+    expect(screen.queryByText("-7")).not.toBeInTheDocument();
   });
 
   it("active session has highlighted styling (bg-cc-active class)", () => {
@@ -329,7 +316,7 @@ describe("Sidebar", () => {
     expect(input.tagName).toBe("INPUT");
   });
 
-  it("archive button exists directly on active session items", () => {
+  it("archive button exists as hover-reveal on active session items", () => {
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
@@ -338,12 +325,12 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    // Archive button is a direct icon button (no dropdown menu needed)
-    const archiveButton = screen.getByTitle("Archive session");
+    // Archive button is a hover-revealed icon button
+    const archiveButton = screen.getByTitle("Archive");
     expect(archiveButton).toBeInTheDocument();
   });
 
-  it("archive button is directly visible on active sessions without clicking a menu", () => {
+  it("three-dot menu button exists for session actions", () => {
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
@@ -352,14 +339,12 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    // Archive is a direct button — no menu click required
-    const archiveButton = screen.getByTitle("Archive session");
-    expect(archiveButton).toBeInTheDocument();
-    // Rename is available via double-click on the session item, not a menu button
-    expect(screen.queryByTitle("Session actions")).not.toBeInTheDocument();
+    // Three-dot menu provides rename/archive actions
+    const menuButton = screen.getByTitle("Session actions");
+    expect(menuButton).toBeInTheDocument();
   });
 
-  it("archive button is dimmed by default and brightens on hover", () => {
+  it("archive button is hidden by default and appears on hover", () => {
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
@@ -368,30 +353,26 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    const archiveButton = screen.getByTitle("Archive session");
+    const archiveButton = screen.getByTitle("Archive");
 
-    // Dimmed by default, full opacity on hover
-    expect(archiveButton).toHaveClass("opacity-30");
-    expect(archiveButton).toHaveClass("hover:opacity-100");
+    // Hidden by default, revealed on group hover
+    expect(archiveButton).toHaveClass("opacity-0");
+    expect(archiveButton).toHaveClass("sm:group-hover:opacity-100");
   });
 
-  it("permission badge uses consistent positioning", () => {
+  it("pending permissions render a yellow awaiting status dot", () => {
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
       sessions: new Map([["s1", session]]),
       sdkSessions: [sdk],
       pendingPermissions: new Map([["s1", new Map([["p1", {}]])]]),
+      cliConnected: new Map([["s1", true]]),
     });
 
     render(<Sidebar />);
-    const permissionBadge = screen.getAllByText("1").find((node) =>
-      node.classList.contains("bg-cc-warning") && node.classList.contains("px-1"),
-    )!;
-    // On touch devices badge sits at right-8; on hover-capable devices it shifts to right-2
-    expect(permissionBadge).toHaveClass("right-8");
-    expect(permissionBadge).toHaveClass("can-hover:right-2");
-    expect(permissionBadge).toHaveClass("can-hover:group-hover:opacity-0");
+    const awaitingDot = document.querySelector(".bg-cc-warning.animate-\\[ring-pulse_1\\.5s_ease-out_infinite\\]");
+    expect(awaitingDot).toBeTruthy();
   });
 
   it("archived sessions section shows count", () => {
@@ -555,7 +536,7 @@ describe("Sidebar", () => {
     expect(otherElement.closest(".animate-name-appear")).toBeFalsy();
   });
 
-  it("permission badge shows count for sessions with pending permissions", () => {
+  it("session keeps awaiting state with multiple pending permissions", () => {
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
     const permMap = new Map<string, unknown>([
@@ -570,12 +551,30 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    // The permission count badge shows "2"
-    expect(screen.getByText("2")).toBeInTheDocument();
+    const awaitingDot = document.querySelector(".bg-cc-warning.animate-\\[ring-pulse_1\\.5s_ease-out_infinite\\]");
+    expect(awaitingDot).toBeTruthy();
   });
 
-  it("session shows git branch from sdkInfo when bridgeState is unavailable", () => {
-    // No bridgeState — only sdkInfo (REST API) data available
+  it("archived session row is clickable after opening archived section", () => {
+    const sdk = makeSdkSession("s1", { archived: true, title: "archived-clickable" });
+    mockState = createMockState({
+      sdkSessions: [sdk],
+    });
+
+    render(<Sidebar />);
+    fireEvent.click(screen.getByText(/Archived \(1\)/));
+
+    const archivedRowButton = screen.getByText("archived-clickable").closest("button");
+    expect(archivedRowButton).toBeInTheDocument();
+    if (!archivedRowButton) throw new Error("Archived row button not found");
+
+    fireEvent.click(archivedRowButton);
+    expect(window.location.hash).toBe("#/session/s1");
+  });
+
+  it("session does not render git data from sdkInfo (redesign removes git display)", () => {
+    // Git branch and stats are no longer rendered in the session row.
+    // The data still flows through the store but is not displayed.
     const sdk = makeSdkSession("s1", {
       gitBranch: "feature/from-rest",
       gitAhead: 5,
@@ -584,53 +583,33 @@ describe("Sidebar", () => {
       totalLinesRemoved: 20,
     });
     mockState = createMockState({
-      sessions: new Map(), // no bridge state
+      sessions: new Map(),
       sdkSessions: [sdk],
     });
 
     render(<Sidebar />);
-    expect(screen.getByText("feature/from-rest")).toBeInTheDocument();
-    const sessionButton = screen.getByText("feature/from-rest").closest("button")!;
-    expect(sessionButton.textContent).toContain("5");
-    expect(sessionButton.textContent).toContain("2");
-    expect(sessionButton.textContent).toContain("+100");
-    expect(sessionButton.textContent).toContain("-20");
+    expect(screen.queryByText("feature/from-rest")).not.toBeInTheDocument();
+    expect(screen.queryByText("+100")).not.toBeInTheDocument();
+    expect(screen.queryByText("-20")).not.toBeInTheDocument();
   });
 
-  it("session prefers bridgeState git data over sdkInfo", () => {
-    const session = makeSession("s1", {
-      git_branch: "from-bridge",
-      git_ahead: 1,
-    });
-    const sdk = makeSdkSession("s1", {
-      gitBranch: "from-rest",
-      gitAhead: 99,
-    });
-    mockState = createMockState({
-      sessions: new Map([["s1", session]]),
-      sdkSessions: [sdk],
-    });
-
-    render(<Sidebar />);
-    // Bridge data should win over REST API data
-    expect(screen.getByText("from-bridge")).toBeInTheDocument();
-    expect(screen.queryByText("from-rest")).not.toBeInTheDocument();
-  });
-
-  it("codex session shows Codex indicator when bridgeState is missing", () => {
-    // Only sdkInfo available (no WS session_init received yet)
+  it("codex session shows CX badge when bridgeState is missing", () => {
+    // Only sdkInfo available (no WS session_init received yet).
+    // The redesigned session item uses text badges ("CC" / "CX") instead
+    // of colored dots with title attributes.
     const sdk = makeSdkSession("s1", { backendType: "codex" });
     mockState = createMockState({
-      sessions: new Map(), // no bridge state
+      sessions: new Map(),
       sdkSessions: [sdk],
     });
 
     render(<Sidebar />);
-    // Should show "Codex" as backend dot title
-    expect(screen.getByTitle("Codex")).toBeInTheDocument();
+    expect(screen.getByText("CX")).toBeInTheDocument();
   });
 
-  it("session shows correct backend indicator based on backendType", () => {
+  it("session shows correct backend badge based on backendType", () => {
+    // The redesigned session item uses "CC" for Claude and "CX" for Codex
+    // as small pill badges instead of colored dots.
     const session1 = makeSession("s1", { backend_type: "claude" });
     const session2 = makeSession("s2", { backend_type: "codex" });
     const sdk1 = makeSdkSession("s1", { backendType: "claude" });
@@ -641,11 +620,8 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    // Both backend dots should be present (title attributes)
-    const claudeDots = screen.getAllByTitle("Claude");
-    const codexDots = screen.getAllByTitle("Codex");
-    expect(claudeDots.length).toBeGreaterThanOrEqual(1);
-    expect(codexDots.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("CC").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("CX").length).toBeGreaterThanOrEqual(1);
   });
 
   it("sessions are grouped by project directory", () => {
@@ -709,8 +685,8 @@ describe("Sidebar", () => {
   });
 
   it("context menu shows restore and delete for archived sessions", () => {
-    const sdk1 = makeSdkSession("s1", { archived: false, model: "active-model" });
-    const sdk2 = makeSdkSession("s2", { archived: true, model: "archived-model" });
+    const sdk1 = makeSdkSession("s1", { archived: false, title: "active-model" });
+    const sdk2 = makeSdkSession("s2", { archived: true, title: "archived-model" });
 
     mockState = createMockState({
       sdkSessions: [sdk1, sdk2],
@@ -722,15 +698,19 @@ describe("Sidebar", () => {
     const toggleButton = screen.getByText(/Archived \(1\)/);
     fireEvent.click(toggleButton);
 
-    // Archived sessions show direct Restore and Delete icon buttons (no menu needed)
-    expect(screen.getByTitle("Restore session")).toBeInTheDocument();
-    expect(screen.getByTitle("Delete permanently")).toBeInTheDocument();
-    // The active session has an Archive button; the archived one does not
-    expect(screen.getByTitle("Archive session")).toBeInTheDocument();
-    expect(screen.queryByTitle("Session actions")).not.toBeInTheDocument();
+    // Both sessions have a three-dot menu button
+    const menuButtons = screen.getAllByTitle("Session actions");
+    expect(menuButtons.length).toBe(2);
+
+    // Click the archived session's menu to reveal Restore and Delete
+    fireEvent.click(menuButtons[1]);
+    expect(screen.getByText("Restore")).toBeInTheDocument();
+    expect(screen.getByText("Delete")).toBeInTheDocument();
   });
 
-  it("session item shows relative timestamp", () => {
+  it("session item does not show timestamp (removed in redesign)", () => {
+    // Timestamps were intentionally removed from session items in the sidebar
+    // redesign to reduce visual clutter.
     const now = Date.now();
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1", { createdAt: now - 3600000 }); // 1 hour ago
@@ -740,8 +720,7 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    // Should show "1h ago" for a session created 1 hour ago
-    expect(screen.getByText("1h ago")).toBeInTheDocument();
+    expect(screen.queryByText("1h ago")).not.toBeInTheDocument();
   });
 
   it("footer nav uses a 3x2 grid layout with short labels", () => {
