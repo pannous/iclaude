@@ -381,7 +381,7 @@ export function Sidebar() {
     };
   }).sort((a, b) => b.createdAt - a.createdAt);
 
-  // Filter out ghost sessions: no cwd/title, or sessions whose only label is the model name
+  // LOCAL: filter out ghost sessions — upstream has no such filter
   const validSessions = allSessionList.filter((s) => {
     if (!s.cwd && !s.title) return false;
     const name = sessionNames.get(s.id);

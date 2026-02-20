@@ -74,6 +74,7 @@ export function SessionItem({
   editInputRef,
 }: SessionItemProps) {
   const shortId = s.id.slice(0, 8);
+  // LOCAL: s.title takes priority — upstream only uses sessionName || s.model || shortId
   const label = s.title || sessionName || s.model || shortId;
   const isEditing = editingSessionId === s.id;
 
@@ -130,7 +131,7 @@ export function SessionItem({
           </span>
         )}
 
-        {/* Badges: Docker + Cron */}
+        {/* LOCAL: removed CC/CX BackendBadge — upstream shows backend type here */}
         {!isEditing && (s.isContainerized || s.cronJobId) && (
           <span className="flex items-center gap-1 shrink-0">
             {s.isContainerized && (
@@ -158,7 +159,7 @@ export function SessionItem({
         </span>
       )}
 
-      {/* Action buttons */}
+      {/* LOCAL: direct action buttons instead of upstream's three-dot context menu */}
       {archived ? (
         <>
           <button
