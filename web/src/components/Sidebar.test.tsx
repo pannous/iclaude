@@ -316,7 +316,7 @@ describe("Sidebar", () => {
     expect(input.tagName).toBe("INPUT");
   });
 
-  it("archive button exists as hover-reveal on active session items", () => {
+  it("archive button exists directly on active session items", () => {
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
@@ -325,12 +325,11 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    // Archive button is a hover-revealed icon button
-    const archiveButton = screen.getByTitle("Archive");
+    const archiveButton = screen.getByTitle("Archive session");
     expect(archiveButton).toBeInTheDocument();
   });
 
-  it("three-dot menu button exists for session actions", () => {
+  it("archive button is directly visible on active sessions without clicking a menu", () => {
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
@@ -339,12 +338,12 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    // Three-dot menu provides rename/archive actions
-    const menuButton = screen.getByTitle("Session actions");
-    expect(menuButton).toBeInTheDocument();
+    const archiveButton = screen.getByTitle("Archive session");
+    expect(archiveButton).toBeInTheDocument();
+    expect(screen.queryByTitle("Session actions")).not.toBeInTheDocument();
   });
 
-  it("archive button is hidden by default and appears on hover", () => {
+  it("archive button is dimmed by default and brightens on hover", () => {
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
@@ -353,11 +352,10 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    const archiveButton = screen.getByTitle("Archive");
+    const archiveButton = screen.getByTitle("Archive session");
 
-    // Hidden by default, revealed on group hover
-    expect(archiveButton).toHaveClass("opacity-0");
-    expect(archiveButton).toHaveClass("sm:group-hover:opacity-100");
+    expect(archiveButton).toHaveClass("opacity-30");
+    expect(archiveButton).toHaveClass("hover:opacity-100");
   });
 
   it("pending permissions render a yellow awaiting status dot", () => {
@@ -593,10 +591,7 @@ describe("Sidebar", () => {
     expect(screen.queryByText("-20")).not.toBeInTheDocument();
   });
 
-  it("codex session shows CX badge when bridgeState is missing", () => {
-    // Only sdkInfo available (no WS session_init received yet).
-    // The redesigned session item uses text badges ("CC" / "CX") instead
-    // of colored dots with title attributes.
+  it("codex session renders without backend badge", () => {
     const sdk = makeSdkSession("s1", { backendType: "codex" });
     mockState = createMockState({
       sessions: new Map(),
@@ -604,12 +599,14 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    expect(screen.getByText("CX")).toBeInTheDocument();
+    // Backend badges (CC/CX) were removed — session items show status dot + name only
+    expect(screen.queryByText("CX")).not.toBeInTheDocument();
+    expect(screen.queryByText("CC")).not.toBeInTheDocument();
   });
 
   it("session shows correct backend badge based on backendType", () => {
-    // The redesigned session item uses "CC" for Claude and "CX" for Codex
-    // as small pill badges instead of colored dots.
+    // Backend badges were removed in favour of a cleaner layout.
+    // Docker and Cron badges still render.
     const session1 = makeSession("s1", { backend_type: "claude" });
     const session2 = makeSession("s2", { backend_type: "codex" });
     const sdk1 = makeSdkSession("s1", { backendType: "claude" });
@@ -620,8 +617,8 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    expect(screen.getAllByText("CC").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("CX").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("CC")).not.toBeInTheDocument();
+    expect(screen.queryByText("CX")).not.toBeInTheDocument();
   });
 
   it("sessions are grouped by project directory", () => {
@@ -698,14 +695,12 @@ describe("Sidebar", () => {
     const toggleButton = screen.getByText(/Archived \(1\)/);
     fireEvent.click(toggleButton);
 
-    // Both sessions have a three-dot menu button
-    const menuButtons = screen.getAllByTitle("Session actions");
-    expect(menuButtons.length).toBe(2);
-
-    // Click the archived session's menu to reveal Restore and Delete
-    fireEvent.click(menuButtons[1]);
-    expect(screen.getByText("Restore")).toBeInTheDocument();
-    expect(screen.getByText("Delete")).toBeInTheDocument();
+    // Archived sessions show direct Restore and Delete icon buttons (no menu needed)
+    expect(screen.getByTitle("Restore session")).toBeInTheDocument();
+    expect(screen.getByTitle("Delete permanently")).toBeInTheDocument();
+    // The active session has an Archive button; the archived one does not
+    expect(screen.getByTitle("Archive session")).toBeInTheDocument();
+    expect(screen.queryByTitle("Session actions")).not.toBeInTheDocument();
   });
 
   it("session item does not show timestamp (removed in redesign)", () => {

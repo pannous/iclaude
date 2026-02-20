@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type RefObject } from "react";
+import type { RefObject } from "react";
 import type { SessionItem as SessionItemType } from "../utils/project-grouping.js";
 
 interface SessionItemProps {
@@ -53,21 +53,6 @@ function StatusDot({ status }: { status: DerivedStatus }) {
   }
 }
 
-function BackendBadge({ type }: { type: "claude" | "codex" }) {
-  if (type === "codex") {
-    return (
-      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-500 leading-none">
-        CX
-      </span>
-    );
-  }
-  return (
-    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#5BA8A0]/15 text-[#5BA8A0] leading-none">
-      CC
-    </span>
-  );
-}
-
 export function SessionItem({
   session: s,
   isActive,
@@ -91,40 +76,9 @@ export function SessionItem({
   const shortId = s.id.slice(0, 8);
   const label = s.title || sessionName || s.model || shortId;
   const isEditing = editingSessionId === s.id;
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const menuBtnRef = useRef<HTMLButtonElement>(null);
 
   const derivedStatus = archived ? ("exited" as DerivedStatus) : deriveStatus(s);
 
-  // Close menu on click outside or Escape
-  useEffect(() => {
-    if (!menuOpen) return;
-    function handleClickOutside(e: MouseEvent | TouchEvent) {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        menuBtnRef.current && !menuBtnRef.current.contains(e.target as Node)
-      ) {
-        setMenuOpen(false);
-      }
-    }
-    function handleEscape(e: KeyboardEvent) {
-      if (e.key === "Escape") setMenuOpen(false);
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("touchstart", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("touchstart", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [menuOpen]);
-
-  const handleMenuAction = useCallback((action: () => void) => {
-    setMenuOpen(false);
-    action();
-  }, []);
   return (
     <div className={`relative group ${archived ? "opacity-50" : ""}`}>
       <button
@@ -176,10 +130,9 @@ export function SessionItem({
           </span>
         )}
 
-        {/* Badges: backend type + Docker + Cron */}
-        {!isEditing && (
+        {/* Badges: Docker + Cron */}
+        {!isEditing && (s.isContainerized || s.cronJobId) && (
           <span className="flex items-center gap-1 shrink-0">
-            <BackendBadge type={s.backendType} />
             {s.isContainerized && (
               <span className="flex items-center px-1 py-0.5 rounded bg-blue-400/10" title="Docker">
                 <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 text-blue-400">
@@ -198,79 +151,47 @@ export function SessionItem({
         )}
       </button>
 
-      {/* Archive button — hover reveal (desktop), always visible (mobile) */}
-      {!archived && !isEditing && !menuOpen && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onArchive(e, s.id);
-          }}
-          className="absolute right-7 top-1/2 -translate-y-1/2 p-1 rounded-md opacity-0 pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
-          title="Archive"
-          aria-label="Archive session"
-        >
-          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-            <path d="M2 4a1 1 0 011-1h10a1 1 0 011 1v1H2V4zm1 2h10v6a1 1 0 01-1 1H4a1 1 0 01-1-1V6zm3 2a.5.5 0 000 1h4a.5.5 0 000-1H6z" />
-          </svg>
-        </button>
+      {/* Permission badge — hidden on hover to reveal action buttons */}
+      {!archived && permCount > 0 && (
+        <span className="absolute right-8 can-hover:right-2 top-1/2 -translate-y-1/2 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-cc-warning text-white text-[10px] font-bold leading-none px-1 can-hover:group-hover:opacity-0 transition-opacity pointer-events-none">
+          {permCount}
+        </span>
       )}
 
-      {/* Three-dot menu button */}
-      <button
-        ref={menuBtnRef}
-        onClick={(e) => {
-          e.stopPropagation();
-          setMenuOpen(!menuOpen);
-        }}
-        className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-md opacity-100 pointer-events-auto sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
-        title="Session actions"
-        aria-label="Session actions"
-      >
-        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-          <circle cx="8" cy="3" r="1.5" />
-          <circle cx="8" cy="8" r="1.5" />
-          <circle cx="8" cy="13" r="1.5" />
-        </svg>
-      </button>
-
-      {/* Context menu */}
-      {menuOpen && (
-        <div
-          ref={menuRef}
-          className="absolute right-0 top-full mt-1 w-36 py-1 bg-cc-card border border-cc-border rounded-lg shadow-lg z-10 animate-[menu-appear_150ms_ease-out]"
+      {/* Action buttons */}
+      {archived ? (
+        <>
+          <button
+            onClick={(e) => onUnarchive(e, s.id)}
+            className="absolute right-8 top-1/2 -translate-y-1/2 p-1 rounded-md can-hover:opacity-0 can-hover:group-hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
+            title="Restore session"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+              <path d="M8 10V3M5 5l3-3 3 3" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M3 13h10" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => onDelete(e, s.id)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md can-hover:opacity-0 can-hover:group-hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-red-400 transition-all cursor-pointer"
+            title="Delete permanently"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={(e) => onArchive(e, s.id)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md opacity-30 hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
+          title="Archive session"
         >
-          {!archived && (
-            <button
-              onClick={() => handleMenuAction(() => onStartRename(s.id, label))}
-              className="w-full px-3 py-1.5 text-[12px] text-left text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-            >
-              Rename
-            </button>
-          )}
-          {archived ? (
-            <>
-              <button
-                onClick={(e) => handleMenuAction(() => onUnarchive(e, s.id))}
-                className="w-full px-3 py-1.5 text-[12px] text-left text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-              >
-                Restore
-              </button>
-              <button
-                onClick={(e) => handleMenuAction(() => onDelete(e, s.id))}
-                className="w-full px-3 py-1.5 text-[12px] text-left text-red-400 hover:bg-cc-hover transition-colors cursor-pointer"
-              >
-                Delete
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={(e) => handleMenuAction(() => onArchive(e, s.id))}
-              className="w-full px-3 py-1.5 text-[12px] text-left text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-            >
-              Archive
-            </button>
-          )}
-        </div>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+            <path d="M3 3h10v2H3zM4 5v7a1 1 0 001 1h6a1 1 0 001-1V5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M6.5 8h3" strokeLinecap="round" />
+          </svg>
+        </button>
       )}
     </div>
   );
