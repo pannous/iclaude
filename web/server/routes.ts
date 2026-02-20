@@ -690,9 +690,10 @@ export function createRoutes(
     const bridgeStates = wsBridge.getAllSessions();
     const bridgeMap = new Map(bridgeStates.map((s) => [s.session_id, s]));
     const now = Date.now();
-    // Filter out orphaned sessions (connected, 0 turns, no name, age > 2min)
+    // Filter out orphaned sessions (connected, 0 turns, no name, no title, age > 2min)
+    // Sessions with a title have had real activity and must never be filtered.
     const sessions = allSessions.filter((s) => {
-      if (s.state === "connected" && !s.name && !names[s.sessionId]) {
+      if (s.state === "connected" && !s.name && !s.title && !names[s.sessionId]) {
         const bridge = bridgeMap.get(s.sessionId);
         if ((bridge?.num_turns ?? 0) === 0 && now - s.createdAt > 120_000) return false;
       }

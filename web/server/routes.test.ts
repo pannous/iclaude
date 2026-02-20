@@ -904,6 +904,33 @@ describe("GET /api/sessions", () => {
       cwd: "/home/ubuntu/companion",
     });
   });
+
+  it("filters stale connected sessions with 0 turns but keeps titled sessions", async () => {
+    // Sessions: s1 is stale prewarm (no title, 0 turns, old), s2 has a title despite 0 turns,
+    // s3 has name in sessionNames. s1 should be filtered, s2 and s3 kept.
+    const OLD_TIMESTAMP = Date.now() - 200_000; // 200 seconds ago
+    const sessions = [
+      { sessionId: "s1", state: "connected", cwd: "/a", createdAt: OLD_TIMESTAMP },
+      { sessionId: "s2", state: "connected", cwd: "/b", createdAt: OLD_TIMESTAMP, title: "Fix the login bug" },
+      { sessionId: "s3", state: "connected", cwd: "/c", createdAt: OLD_TIMESTAMP },
+    ];
+    launcher.listSessions.mockReturnValue(sessions);
+    vi.mocked(sessionNames.getAllNames).mockReturnValue({ s3: "Named session" });
+    bridge.getAllSessions.mockReturnValue([
+      { session_id: "s1", num_turns: 0 },
+      { session_id: "s2", num_turns: 0 },
+      { session_id: "s3", num_turns: 0 },
+    ]);
+
+    const res = await app.request("/api/sessions", { method: "GET" });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    // s1 is filtered (stale prewarm: no title, no name, 0 turns, old)
+    // s2 is kept (has a title, indicating real activity)
+    // s3 is kept (has a name in sessionNames)
+    expect(json.map((s: { sessionId: string }) => s.sessionId)).toEqual(["s2", "s3"]);
+  });
 });
 
 describe("GET /api/sessions/:id", () => {
