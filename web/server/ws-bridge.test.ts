@@ -733,6 +733,63 @@ describe("Browser handlers", () => {
     expect(disconnectedMsg).toBeUndefined();
   });
 
+  it("handleBrowserOpen: recovers message history via sessionInfoLookup when session has no history", () => {
+    // Create a CLI session JSONL file that loadCLIHistory can find
+    const { mkdirSync, writeFileSync } = require("node:fs");
+    const { join: pJoin } = require("node:path");
+    const { homedir: hd } = require("node:os");
+    const projectDir = "/test/project".replace(/\//g, "-");
+    const projectPath = pJoin(hd(), ".claude", "projects", projectDir);
+    const cliId = "cli-session-123";
+    const sessionFile = pJoin(projectPath, `${cliId}.jsonl`);
+
+    // Create the JSONL file with a user message and an assistant message
+    mkdirSync(projectPath, { recursive: true });
+    const lines = [
+      JSON.stringify({
+        type: "user",
+        message: { role: "user", content: "Hello" },
+        timestamp: "2026-02-20T00:00:00Z",
+        uuid: "u1",
+      }),
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          id: "a1",
+          type: "message",
+          role: "assistant",
+          model: "claude-sonnet-4-6",
+          content: [{ type: "text", text: "Hi there!" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 10, output_tokens: 5 },
+        },
+        timestamp: "2026-02-20T00:00:01Z",
+        uuid: "u2",
+      }),
+    ];
+    writeFileSync(sessionFile, lines.join("\n"));
+
+    // Set up the lookup callback — simulates the launcher knowing about this session
+    bridge.onSessionInfoLookupCallback((sessionId) => {
+      if (sessionId === "s1") return { cliSessionId: cliId, cwd: "/test/project" };
+      return null;
+    });
+
+    // Browser connects to session with no prior history
+    const browser = makeBrowserSocket("s1");
+    bridge.handleBrowserOpen(browser, "s1");
+
+    const calls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    const historyMsg = calls.find((c: any) => c.type === "message_history");
+    expect(historyMsg).toBeDefined();
+    expect(historyMsg.messages.length).toBeGreaterThan(0);
+
+    // Clean up
+    const { unlinkSync, rmdirSync } = require("node:fs");
+    try { unlinkSync(sessionFile); } catch {}
+    try { rmdirSync(projectPath); } catch {}
+  });
+
   it("handleBrowserClose: removes from set", () => {
     const browser = makeBrowserSocket("s1");
     bridge.handleBrowserOpen(browser, "s1");

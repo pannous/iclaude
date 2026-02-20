@@ -270,6 +270,7 @@ export class WsBridge {
   private pendingRelaunches = new Map<string, ReturnType<typeof setTimeout>>();
   private userMsgCounter = 0;
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
+  private sessionInfoLookup: ((sessionId: string) => { cliSessionId?: string; cwd?: string } | null) | null = null;
   private static readonly GIT_SESSION_KEYS: GitSessionKey[] = [
     "git_branch",
     "is_worktree",
@@ -302,6 +303,12 @@ export class WsBridge {
   /** Register a callback for when git info is resolved and branch is known. */
   onSessionGitInfoReadyCallback(cb: (sessionId: string, cwd: string, branch: string) => void): void {
     this.onGitInfoReady = cb;
+  }
+
+  /** Register a callback to look up session info (cliSessionId, cwd) from the launcher.
+   *  Used by handleBrowserOpen to load CLI history for sessions that lost their messageHistory. */
+  onSessionInfoLookupCallback(cb: (sessionId: string) => { cliSessionId?: string; cwd?: string } | null): void {
+    this.sessionInfoLookup = cb;
   }
 
   /**
@@ -969,6 +976,38 @@ export class WsBridge {
       session: session.state,
     };
     this.sendToBrowser(ws, snapshot);
+
+    // If message history is empty, try to recover from CLI session files.
+    // This handles cases where the session was restored from disk but lost its
+    // messageHistory (debounce didn't flush), or was newly created by browser connect.
+    if (session.messageHistory.length === 0) {
+      let cliSessionId = session.cliSessionId;
+      let cwd = session.state.cwd;
+
+      // If we don't have cliSessionId locally, ask the launcher
+      if (!cliSessionId && this.sessionInfoLookup) {
+        const info = this.sessionInfoLookup(sessionId);
+        if (info) {
+          if (info.cliSessionId) {
+            cliSessionId = info.cliSessionId;
+            session.cliSessionId = cliSessionId;
+          }
+          if (info.cwd && !cwd) {
+            cwd = info.cwd;
+            session.state.cwd = cwd;
+          }
+        }
+      }
+
+      if (cliSessionId) {
+        const cliHistory = this.loadCLIHistory(cliSessionId, cwd);
+        if (cliHistory.length > 0) {
+          console.log(`[ws-bridge] Recovered ${cliHistory.length} message(s) from CLI history for session ${sessionId} on browser connect`);
+          session.messageHistory = cliHistory;
+          this.persistSession(session);
+        }
+      }
+    }
 
     // Replay message history so the browser can reconstruct the conversation
     if (session.messageHistory.length > 0) {
@@ -1786,7 +1825,11 @@ export class WsBridge {
 
   private sendToBrowser(ws: ServerWebSocket<SocketData>, msg: BrowserIncomingMessage) {
     try {
-      ws.send(JSON.stringify(msg));
+      const json = JSON.stringify(msg);
+      const result = ws.send(json);
+      if (result === 0) {
+        console.warn(`[ws-bridge] sendToBrowser: message dropped (backpressure) type=${msg.type} size=${json.length}`);
+      }
     } catch {
       // Socket will be cleaned up on close
     }

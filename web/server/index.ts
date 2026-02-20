@@ -89,6 +89,14 @@ wsBridge.onSessionGitInfoReadyCallback((sessionId, cwd, branch) => {
   prPoller.watch(sessionId, cwd, branch);
 });
 
+// Provide session info from the launcher so WsBridge can load CLI history
+// for sessions that lost their messageHistory (e.g. after server restart with unflushed writes)
+wsBridge.onSessionInfoLookupCallback((sessionId) => {
+  const info = launcher.getSession(sessionId);
+  if (!info) return null;
+  return { cliSessionId: info.cliSessionId, cwd: info.cwd };
+});
+
 // Auto-relaunch CLI when a browser connects to a session with no CLI
 wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
   const now = Date.now();
