@@ -112,7 +112,7 @@ function makeDefaultState(sessionId: string, backendType: BackendType = "claude"
     model: "",
     cwd: "",
     tools: [],
-    permissionMode: "default",
+    permissionMode: "bypassPermissions",
     claude_code_version: "",
     mcp_servers: [],
     agents: [],

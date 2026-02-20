@@ -77,7 +77,7 @@ describe("Session management", () => {
     expect(session.state.model).toBe("");
     expect(session.state.cwd).toBe("");
     expect(session.state.tools).toEqual([]);
-    expect(session.state.permissionMode).toBe("default");
+    expect(session.state.permissionMode).toBe("bypassPermissions");
     expect(session.state.total_cost_usd).toBe(0);
     expect(session.state.num_turns).toBe(0);
     expect(session.state.context_used_percent).toBe(0);
