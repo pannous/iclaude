@@ -18,6 +18,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PID_FILE="$ROOT_DIR/.tunnel.pid"
 URL_FILE="$ROOT_DIR/.tunnel.url"
 LOG_FILE="$ROOT_DIR/.tunnel.log"
+VITE_CONFIG="$ROOT_DIR/web/vite.config.ts"
 
 VITE_PORT=2345
 BACKEND_PORT=3456
@@ -38,6 +39,23 @@ is_port_listening() {
   lsof -iTCP:"$1" -sTCP:LISTEN -t &>/dev/null
 }
 
+# Add a wildcard host entry to vite.config.ts allowedHosts (idempotent).
+# Vite dev server watches vite.config.ts and auto-restarts on change.
+vite_add_host() {
+  local host="$1"
+  grep -qF "\"$host\"" "$VITE_CONFIG" && return 0  # already present
+  sed -i '' "s/allowedHosts: \[/allowedHosts: [\"$host\",/" "$VITE_CONFIG"
+  step "Added \"$host\" to vite.config.ts allowedHosts (Vite will auto-restart)"
+}
+
+# Remove the wildcard entry added by vite_add_host.
+vite_remove_host() {
+  local host="$1"
+  grep -qF "\"$host\"" "$VITE_CONFIG" || return 0  # not present
+  sed -i '' "s/\"$host\",//" "$VITE_CONFIG"
+  info "Removed \"$host\" from vite.config.ts allowedHosts"
+}
+
 pick_port() {
   if is_port_listening "$VITE_PORT"; then
     echo "$VITE_PORT"
@@ -49,6 +67,11 @@ pick_port() {
 }
 
 cmd_stop() {
+  # Remove any hosts we added to vite.config.ts
+  vite_remove_host ".trycloudflare.com"
+  vite_remove_host ".ngrok-free.app"
+  vite_remove_host ".ngrok.io"
+
   if [ -f "$PID_FILE" ]; then
     local pid
     pid=$(cat "$PID_FILE")
@@ -118,6 +141,7 @@ wait_for_ngrok_url() {
 
 start_cloudflared() {
   local port="$1"
+  vite_add_host ".trycloudflare.com"
   step "Starting cloudflared tunnel on port $port..."
   nohup cloudflared tunnel --url "http://localhost:$port" \
     --no-autoupdate \
@@ -143,6 +167,8 @@ start_cloudflared() {
 
 start_ngrok() {
   local port="$1"
+  vite_add_host ".ngrok-free.app"
+  vite_add_host ".ngrok.io"
   step "Starting ngrok tunnel on port $port..."
   # Kill any existing ngrok on port 4040
   pkill -f "ngrok http $port" 2>/dev/null || true
