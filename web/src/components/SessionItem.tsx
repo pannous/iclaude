@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import type { SessionItem as SessionItemType } from "../utils/project-grouping.js";
 import { timeAgo } from "../utils/time-ago.js";
 
@@ -48,9 +48,6 @@ export function SessionItem({
   const isRunning = s.status === "running";
   const isCompacting = s.status === "compacting";
   const isEditing = editingSessionId === s.id;
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const menuBtnRef = useRef<HTMLButtonElement>(null);
 
   // Status bar color
   const statusBarClass = archived
@@ -78,6 +75,10 @@ export function SessionItem({
     ? "bg-blue-500"
     : "bg-[#5BA8A0]";
   const backendLabel = s.backendType === "codex" ? "Codex" : "Claude";
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
 
   // Close menu on click outside or Escape
   useEffect(() => {
