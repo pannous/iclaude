@@ -957,7 +957,7 @@ describe("POST /api/sessions/:id/editor/start", () => {
       cwd: "/repo/my app",
     });
     mockResolveBinary.mockImplementation((name: string) => (name === "code-server" ? "/usr/bin/code-server" : null));
-    // Mock the healthz readiness poll so it resolves immediately
+    // Mock fetch so the readiness poll resolves immediately instead of timing out
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("ok", { status: 200 }));
 
     const res = await app.request("/api/sessions/s1/editor/start", { method: "POST" });
