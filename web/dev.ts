@@ -75,9 +75,11 @@ function startBackend(): Subprocess {
   return proc;
 }
 
-function restartBackend() {
+async function restartBackend() {
   if (backend) {
     backend.kill();
+    // Wait for the process to exit so the OS releases the port before re-binding
+    await Promise.race([backend.exited, new Promise((r) => setTimeout(r, 2000))]);
     backend = null;
   }
   backend = startBackend();
@@ -111,7 +113,7 @@ async function handleChange(filename: string) {
 
   if (passed) {
     log("ok", "Typecheck passed, restarting backend...");
-    restartBackend();
+    await restartBackend();
   } else {
     log("warn", "Typecheck failed, keeping old server running");
   }

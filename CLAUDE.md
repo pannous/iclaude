@@ -171,6 +171,9 @@ gh pr edit --body-file /tmp/pr_body.md
 - All features must be compatible with both Codex and Claude Code. If a feature is only compatible with one, it must be gated behind a clear UI affordance (e.g. "This feature requires Claude Code") and the incompatible option should be hidden or disabled.
 - When implementing a new feature, always consider how it will work with both models and test with both if possible. If a feature is only implemented for one model, document that clearly in the code and in the UI.
 
+## Tests
+- All new features must include one or more tests where applicable. Tests should be added under `web/server/` for backend code and `web/src/` for frontend code.
+
 ## Legacy: HTML Skills System
 
 **Note**: Upstream removed the HTML Skills plugin system in favor of MCP server management. Our implementation is preserved in:

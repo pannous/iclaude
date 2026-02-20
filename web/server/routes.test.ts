@@ -301,6 +301,23 @@ describe("POST /api/sessions/create", () => {
     );
   });
 
+  it("forwards resumeSessionId to launcher so the CLI spawns with --resume", async () => {
+    // When a user resumes a Claude session from the sidebar, the frontend passes
+    // resumeSessionId (the CLI's internal session ID from ~/.claude/projects/).
+    // This must reach launcher.launch() so the CLI can continue the conversation
+    // and loadCLIHistory() can retrieve the saved messages.
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: TEST_CWD, resumeSessionId: "cli-session-abc" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(launcher.launch).toHaveBeenCalledWith(
+      expect.objectContaining({ resumeSessionId: "cli-session-abc" }),
+    );
+  });
+
   it("injects environment variables when envSlug is provided", async () => {
     mockedEnvManager.getEnv.mockReturnValue({
       name: "Production",
