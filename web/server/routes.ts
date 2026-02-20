@@ -310,7 +310,7 @@ export function createRoutes(
 
       const session = launcher.launch({
         model: body.model,
-        permissionMode: body.permissionMode,
+        permissionMode: body.permissionMode ?? "bypassPermissions",
         cwd,
         claudeBinary: body.claudeBinary,
         codexBinary: body.codexBinary,
@@ -630,7 +630,7 @@ export function createRoutes(
 
         const session = launcher.launch({
           model: body.model,
-          permissionMode: body.permissionMode,
+          permissionMode: body.permissionMode ?? "bypassPermissions",
           cwd,
           claudeBinary: body.claudeBinary,
           codexBinary: body.codexBinary,

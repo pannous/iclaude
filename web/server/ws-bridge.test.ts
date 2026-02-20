@@ -538,6 +538,9 @@ describe("CLI handlers", () => {
     bridge.handleCLIOpen(cli, "s1");
     bridge.handleBrowserOpen(browser, "s1");
 
+    // Use non-bypass mode so control_request is queued rather than auto-approved
+    bridge.getSession("s1")!.state.permissionMode = "default";
+
     // Simulate a pending permission request
     const controlReq = JSON.stringify({
       type: "control_request",
@@ -647,6 +650,9 @@ describe("Browser handlers", () => {
   it("handleBrowserOpen: sends pending permissions", () => {
     const cli = makeCliSocket("s1");
     bridge.handleCLIOpen(cli, "s1");
+
+    // Use non-bypass mode so control_request is queued rather than auto-approved
+    bridge.getSession("s1")!.state.permissionMode = "default";
 
     // Create a pending permission
     const controlReq = JSON.stringify({
@@ -1082,6 +1088,9 @@ describe("CLI message routing", () => {
   });
 
   it("control_request (can_use_tool): adds to pending and broadcasts", () => {
+    // Use non-bypass mode so control_request is queued rather than auto-approved
+    bridge.getSession("s1")!.state.permissionMode = "default";
+
     const msg = JSON.stringify({
       type: "control_request",
       request_id: "req-42",
@@ -1360,6 +1369,9 @@ describe("Browser message routing", () => {
   });
 
   it("permission_response allow: sends control_response to CLI", () => {
+    // Use non-bypass mode so control_request is queued rather than auto-approved
+    bridge.getSession("s1")!.state.permissionMode = "default";
+
     // First create a pending permission
     bridge.handleCLIMessage(cli, JSON.stringify({
       type: "control_request",
