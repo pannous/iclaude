@@ -4,7 +4,7 @@ const mockExecSync = vi.hoisted(() => vi.fn());
 vi.mock("node:child_process", () => ({ execSync: mockExecSync }));
 vi.mock("node:crypto", () => ({ randomUUID: () => "test-uuid" }));
 
-import { WsBridge, type SocketData } from "./ws-bridge.js";
+import { WsBridge, truncateTitle, type SocketData } from "./ws-bridge.js";
 import { SessionStore } from "./session-store.js";
 import { containerManager } from "./container-manager.js";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -3184,5 +3184,35 @@ describe("MCP control messages", () => {
     expect(sent.request.subtype).toBe("mcp_set_servers");
     expect(sent.request.servers).toEqual(servers);
     vi.useRealTimers();
+  });
+});
+
+// ─── truncateTitle ─────────────────────────────────────────────────────────────
+
+describe("truncateTitle", () => {
+  it("strips XML tags from messages", () => {
+    expect(truncateTitle("<local-command-caveat>Caveat: The message")).toBe(
+      "Caveat: The message",
+    );
+  });
+
+  it("strips nested and multiple tags", () => {
+    expect(truncateTitle("<a><b>Hello</b> world</a>")).toBe("Hello world");
+  });
+
+  it("strips self-closing tags", () => {
+    expect(truncateTitle("before <br/> after")).toBe("before after");
+  });
+
+  it("truncates long tag-stripped text at word boundary", () => {
+    const long = "<tag>" + "word ".repeat(20) + "</tag>";
+    const result = truncateTitle(long);
+    expect(result.length).toBeLessThanOrEqual(50);
+    expect(result).toMatch(/\.\.\.$/);
+    expect(result).not.toContain("<");
+  });
+
+  it("passes through plain text unchanged when short", () => {
+    expect(truncateTitle("Fix the login bug")).toBe("Fix the login bug");
   });
 });

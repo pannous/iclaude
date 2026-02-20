@@ -32,8 +32,8 @@ import type { RecorderManager } from "./recorder.js";
 import { containerManager } from "./container-manager.js";
 
 /** Truncate a message to use as a session title (max ~50 chars at word boundary). */
-function truncateTitle(message: string): string {
-  const cleaned = message.replace(/\s+/g, " ").trim();
+export function truncateTitle(message: string): string {
+  const cleaned = message.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
   if (cleaned.length <= 50) return cleaned;
   const words = cleaned.split(" ");
   let title = "";
