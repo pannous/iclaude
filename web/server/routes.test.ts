@@ -201,6 +201,7 @@ function createMockBridge() {
     getSessionTitle: vi.fn(() => undefined),
     getCodexRateLimits: vi.fn(() => null),
     markContainerized: vi.fn(),
+    broadcastToSession: vi.fn(),
   } as any;
 }
 

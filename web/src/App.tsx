@@ -85,7 +85,8 @@ export default function App() {
       connectSession(route.sessionId);
       // Validate session exists — try to relaunch if not in active list
       api.listSessions().then((list) => {
-        if (!list.some((s: { sessionId: string }) => s.sessionId === route.sessionId)) {
+        const session = list.find((s: { sessionId: string; archived?: boolean }) => s.sessionId === route.sessionId);
+        if (!session) {
           console.warn(`[app] Session ${route.sessionId} not in API list (${list.length} sessions), attempting relaunch`);
           api.relaunchSession(route.sessionId).then(() => {
             // Relaunch succeeded — reconnect WebSocket
@@ -98,6 +99,11 @@ export default function App() {
             useStore.getState().newSession();
             navigateHome(true);
           });
+        } else if (session.archived) {
+          // Session is archived — disconnect and go home
+          disconnectSession(route.sessionId);
+          useStore.getState().newSession();
+          navigateHome(true);
         }
       }).catch(() => {});
     } else if (route.page === "home") {
@@ -151,29 +157,27 @@ export default function App() {
     const sdkSessions = store.sdkSessions;
     const activeSessions = sdkSessions.filter(s => !s.archived);
 
-    // Disconnect current session if any
-    if (store.currentSessionId) {
-      disconnectSession(store.currentSessionId);
+    // Disconnect all active sessions immediately
+    for (const session of activeSessions) {
+      disconnectSession(session.sessionId);
     }
 
-    // Archive all active sessions
-    for (const session of activeSessions) {
-      api.archiveSession(session.sessionId).catch(() => {
-        // best-effort
-      });
-    }
+    // Optimistically mark all active sessions as archived so no reconnects happen
+    store.setSdkSessions(sdkSessions.map(s => s.archived ? s : { ...s, archived: true }));
 
     // Go back to home page
     store.newSession();
+    setShowArchiveAllConfirm(false);
 
-    // Refresh session list
+    // Archive on server (await to ensure consistent state before refreshing)
+    await Promise.allSettled(activeSessions.map(s => api.archiveSession(s.sessionId)));
+
+    // Refresh from server
     api.listSessions().then((list) => {
       store.setSdkSessions(list);
     }).catch(() => {
       // best-effort
     });
-
-    setShowArchiveAllConfirm(false);
   }
 
   if (route.page === "playground") {

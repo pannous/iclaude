@@ -975,6 +975,8 @@ export function createRoutes(
     const worktreeResult = cleanupWorktree(id, body.force);
     launcher.setArchived(id, true);
     sessionStore.setArchived(id, true);
+    // Notify browser clients so they disconnect immediately rather than reconnecting
+    wsBridge.broadcastToSession(id, { type: "session_archived" });
     return c.json({ ok: true, worktree: worktreeResult });
   });
 

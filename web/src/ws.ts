@@ -576,6 +576,17 @@ function handleParsedMessage(
       break;
     }
 
+    case "session_archived": {
+      // Server has archived this session — disconnect immediately and stop reconnecting
+      disconnectSession(sessionId);
+      // Update the local store so reconnect logic also sees it as archived
+      const sdkSessions = store.sdkSessions;
+      store.setSdkSessions(sdkSessions.map(s =>
+        s.sessionId === sessionId ? { ...s, archived: true } : s
+      ));
+      break;
+    }
+
     case "message_history": {
       console.debug(`[ws] message_history for ${sessionId}: ${data.messages.length} messages`);
       const chatMessages: ChatMessage[] = [];

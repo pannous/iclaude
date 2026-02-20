@@ -329,6 +329,10 @@ export function Sidebar() {
     e.stopPropagation();
     const store = useStore.getState();
     const archived = store.sdkSessions.filter((s) => s.archived);
+    // Disconnect all archived sessions to cancel any pending reconnect timers
+    for (const s of archived) {
+      disconnectSession(s.sessionId);
+    }
     // Optimistically remove all archived from local state
     store.setSdkSessions(store.sdkSessions.filter((s) => !s.archived));
     setShowArchived(false);
