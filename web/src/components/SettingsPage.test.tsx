@@ -19,6 +19,7 @@ interface MockStoreState {
   setNotificationDesktop: ReturnType<typeof vi.fn>;
   setUpdateInfo: ReturnType<typeof vi.fn>;
   setUpdateOverlayActive: ReturnType<typeof vi.fn>;
+  setEditorTabEnabled: ReturnType<typeof vi.fn>;
 }
 
 let mockState: MockStoreState;
@@ -34,6 +35,7 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     setNotificationDesktop: vi.fn(),
     setUpdateInfo: vi.fn(),
     setUpdateOverlayActive: vi.fn(),
+    setEditorTabEnabled: vi.fn(),
     ...overrides,
   };
 }
@@ -69,10 +71,18 @@ beforeEach(() => {
   mockApi.getSettings.mockResolvedValue({
     openrouterApiKeyConfigured: true,
     openrouterModel: "openrouter/free",
+    linearApiKeyConfigured: false,
+    linearAutoTransition: false,
+    linearAutoTransitionStateName: "",
+    editorTabEnabled: false,
   });
   mockApi.updateSettings.mockResolvedValue({
     openrouterApiKeyConfigured: true,
     openrouterModel: "openrouter/free",
+    linearApiKeyConfigured: false,
+    linearAutoTransition: false,
+    linearAutoTransitionStateName: "",
+    editorTabEnabled: false,
   });
   mockApi.forceCheckForUpdate.mockResolvedValue({
     currentVersion: "0.22.1",
@@ -101,6 +111,10 @@ describe("SettingsPage", () => {
     mockApi.getSettings.mockResolvedValueOnce({
       openrouterApiKeyConfigured: false,
       openrouterModel: "openrouter/free",
+      linearApiKeyConfigured: false,
+      linearAutoTransition: false,
+      linearAutoTransitionStateName: "",
+      editorTabEnabled: false,
     });
 
     render(<SettingsPage />);
@@ -131,6 +145,7 @@ describe("SettingsPage", () => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
         openrouterApiKey: "or-key",
         openrouterModel: "openai/gpt-4o-mini",
+        editorTabEnabled: false,
       });
     });
 
@@ -149,6 +164,7 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
         openrouterModel: "openrouter/free",
+        editorTabEnabled: false,
       });
     });
   });
@@ -165,6 +181,22 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
         openrouterModel: "openai/gpt-4o-mini",
+        editorTabEnabled: false,
+      });
+    });
+  });
+
+  it("saves editor tab toggle in settings payload", async () => {
+    render(<SettingsPage />);
+    await screen.findByText("OpenRouter key configured");
+
+    fireEvent.click(screen.getByRole("button", { name: /Enable Editor tab \(CodeMirror\)/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(mockApi.updateSettings).toHaveBeenCalledWith({
+        openrouterModel: "openrouter/free",
+        editorTabEnabled: true,
       });
     });
   });
@@ -209,6 +241,10 @@ describe("SettingsPage", () => {
     let resolveSave: ((value: {
       openrouterApiKeyConfigured: boolean;
       openrouterModel: string;
+      linearApiKeyConfigured: boolean;
+      linearAutoTransition: boolean;
+      linearAutoTransitionStateName: string;
+      editorTabEnabled: boolean;
     }) => void) | undefined;
     mockApi.updateSettings.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -229,6 +265,10 @@ describe("SettingsPage", () => {
     resolveSave?.({
       openrouterApiKeyConfigured: true,
       openrouterModel: "openrouter/free",
+      linearApiKeyConfigured: false,
+      linearAutoTransition: false,
+      linearAutoTransitionStateName: "",
+      editorTabEnabled: false,
     });
 
     await screen.findByText("Settings saved.");

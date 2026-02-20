@@ -238,6 +238,7 @@ export interface AppSettings {
   linearApiKeyConfigured: boolean;
   linearAutoTransition: boolean;
   linearAutoTransitionStateName: string;
+  editorTabEnabled: boolean;
 }
 
 export interface LinearWorkflowState {
@@ -536,6 +537,7 @@ export const api = {
     linearAutoTransition?: boolean;
     linearAutoTransitionStateId?: string;
     linearAutoTransitionStateName?: string;
+    editorTabEnabled?: boolean;
   }) => put<AppSettings>("/settings", data),
   searchLinearIssues: (query: string, limit = 8) =>
     get<{ issues: LinearIssue[] }>(

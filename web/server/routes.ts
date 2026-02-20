@@ -1586,6 +1586,7 @@ export function createRoutes(
       linearApiKeyConfigured: !!settings.linearApiKey.trim(),
       linearAutoTransition: settings.linearAutoTransition,
       linearAutoTransitionStateName: settings.linearAutoTransitionStateName,
+      editorTabEnabled: settings.editorTabEnabled,
     });
   });
 
@@ -1609,9 +1610,13 @@ export function createRoutes(
     if (body.linearAutoTransitionStateName !== undefined && typeof body.linearAutoTransitionStateName !== "string") {
       return c.json({ error: "linearAutoTransitionStateName must be a string" }, 400);
     }
+    if (body.editorTabEnabled !== undefined && typeof body.editorTabEnabled !== "boolean") {
+      return c.json({ error: "editorTabEnabled must be a boolean" }, 400);
+    }
     const hasAnyField = body.openrouterApiKey !== undefined || body.openrouterModel !== undefined
       || body.linearApiKey !== undefined || body.linearAutoTransition !== undefined
-      || body.linearAutoTransitionStateId !== undefined || body.linearAutoTransitionStateName !== undefined;
+      || body.linearAutoTransitionStateId !== undefined || body.linearAutoTransitionStateName !== undefined
+      || body.editorTabEnabled !== undefined;
     if (!hasAnyField) {
       return c.json({ error: "At least one settings field is required" }, 400);
     }
@@ -1646,6 +1651,10 @@ export function createRoutes(
         typeof body.linearAutoTransitionStateName === "string"
           ? body.linearAutoTransitionStateName.trim()
           : undefined,
+      editorTabEnabled:
+        typeof body.editorTabEnabled === "boolean"
+          ? body.editorTabEnabled
+          : undefined,
     });
 
     return c.json({
@@ -1654,6 +1663,7 @@ export function createRoutes(
       linearApiKeyConfigured: !!settings.linearApiKey.trim(),
       linearAutoTransition: settings.linearAutoTransition,
       linearAutoTransitionStateName: settings.linearAutoTransitionStateName,
+      editorTabEnabled: settings.editorTabEnabled,
     });
   });
 

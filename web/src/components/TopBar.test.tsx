@@ -17,6 +17,7 @@ interface MockStoreState {
   taskPanelOpen: boolean;
   setTaskPanelOpen: ReturnType<typeof vi.fn>;
   messages: Map<string, unknown[]>;
+  editorTabEnabled: boolean;
   activeTab: string;
   setActiveTab: ReturnType<typeof vi.fn>;
   openSkills: string[];
@@ -47,6 +48,7 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     taskPanelOpen: false,
     setTaskPanelOpen: vi.fn(),
     messages: new Map(),
+    editorTabEnabled: true,
     activeTab: "chat",
     setActiveTab: vi.fn(),
     openSkills: [],
@@ -162,6 +164,12 @@ describe("TopBar", () => {
     expect(btn).toBeDisabled();
     fireEvent.click(btn);
     expect(storeState.openQuickTerminal).not.toHaveBeenCalled();
+  });
+
+  it("hides editor tab when editor feature is disabled in settings", () => {
+    resetStore({ editorTabEnabled: false });
+    render(<TopBar />);
+    expect(screen.queryByRole("button", { name: "Editor tab" })).not.toBeInTheDocument();
   });
 
   it("keeps terminal tab active when clicking shell while already active", () => {

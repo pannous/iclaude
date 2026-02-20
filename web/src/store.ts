@@ -99,6 +99,7 @@ interface AppState {
   taskPanelConfig: TaskPanelConfig;
   taskPanelConfigMode: boolean;
   homeResetKey: number;
+  editorTabEnabled: boolean;
   newSessionCwd: string | null;
   activeTab: string; // "chat" | "diff" | "terminal" | "editor" | "skill:<slug>"
   openSkills: string[];
@@ -196,6 +197,7 @@ interface AppState {
   setUpdateInfo: (info: UpdateInfo | null) => void;
   dismissUpdate: (version: string) => void;
   setUpdateOverlayActive: (active: boolean) => void;
+  setEditorTabEnabled: (enabled: boolean) => void;
 
   // Editor / Skill actions
   setActiveTab: (tab: string) => void;
@@ -358,6 +360,7 @@ export const useStore = create<AppState>((set) => ({
   taskPanelConfig: getInitialTaskPanelConfig(),
   taskPanelConfigMode: false,
   homeResetKey: 0,
+  editorTabEnabled: false,
   newSessionCwd: null,
   activeTab: "chat",
   openSkills: [],
@@ -843,6 +846,7 @@ export const useStore = create<AppState>((set) => ({
     set({ updateDismissedVersion: version });
   },
   setUpdateOverlayActive: (active) => set({ updateOverlayActive: active }),
+  setEditorTabEnabled: (enabled) => set({ editorTabEnabled: enabled }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setEditorUrl: (sessionId, url) =>
@@ -1025,6 +1029,7 @@ export const useStore = create<AppState>((set) => ({
       prStatus: new Map(),
       linkedLinearIssues: new Map(),
       taskPanelConfigMode: false,
+      editorTabEnabled: false,
       activeTab: "chat" as const,
       editorOpenFile: new Map(),
       editorUrl: new Map(),
