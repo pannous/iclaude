@@ -224,6 +224,14 @@ export interface UsageLimits {
   } | null;
 }
 
+export interface EditorStartResult {
+  available: boolean;
+  installed: boolean;
+  mode: "host" | "container";
+  url?: string;
+  message?: string;
+}
+
 export interface AppSettings {
   openrouterApiKeyConfigured: boolean;
   openrouterModel: string;
@@ -634,7 +642,7 @@ export const api = {
 
   // Editor
   startEditor: (sessionId: string) =>
-    post<{ url: string }>(
+    post<EditorStartResult>(
       `/sessions/${encodeURIComponent(sessionId)}/editor/start`,
     ),
 

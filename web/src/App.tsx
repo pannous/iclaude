@@ -21,6 +21,7 @@ import { CronManager } from "./components/CronManager.js";
 import { TerminalPage } from "./components/TerminalPage.js";
 import { SessionLaunchOverlay } from "./components/SessionLaunchOverlay.js";
 import { SessionTerminalDock } from "./components/SessionTerminalDock.js";
+import { SessionEditorPane } from "./components/SessionEditorPane.js";
 import { UpdateOverlay } from "./components/UpdateOverlay.js";
 
 const DiffPanel = lazy(() => import("./components/DiffPanel.js").then(m => ({ default: m.DiffPanel })));
@@ -294,22 +295,14 @@ export default function App() {
                       />
                     )
                     : activeTab === "editor"
-                      ? (
-                        <Suspense fallback={
-                          <div className="h-full flex items-center justify-center">
-                            <div className="w-5 h-5 border-2 border-cc-primary border-t-transparent rounded-full animate-spin" />
-                          </div>
-                        }>
-                          <FileEditor />
-                        </Suspense>
+                      ? <SessionEditorPane sessionId={currentSessionId} />
+                      : (
+                        <SessionTerminalDock sessionId={currentSessionId} suppressPanel>
+                          {activeTab === "diff"
+                            ? <DiffPanel sessionId={currentSessionId} />
+                            : <ChatView sessionId={currentSessionId} />}
+                        </SessionTerminalDock>
                       )
-                    : (
-                      <SessionTerminalDock sessionId={currentSessionId} suppressPanel>
-                        {activeTab === "diff"
-                          ? <DiffPanel sessionId={currentSessionId} />
-                          : <ChatView sessionId={currentSessionId} />}
-                      </SessionTerminalDock>
-                    )
                 ) : (
                   <HomePage key={homeResetKey} />
                 )}

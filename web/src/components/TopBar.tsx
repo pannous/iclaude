@@ -11,8 +11,8 @@ const EMPTY_MESSAGES: import("../types.js").ChatMessage[] = [];
 
 type WorkspaceTab = "chat" | "diff" | "terminal" | "editor";
 
-function getActiveTabSurfaceColor(tab: WorkspaceTab): string {
-  if (tab === "terminal") return "var(--cc-card)";
+function getActiveTabSurfaceColor(tab: WorkspaceTab | string): string {
+  if (tab === "terminal" || tab === "editor") return "var(--cc-card)";
   return "var(--cc-bg)";
 }
 
@@ -66,6 +66,7 @@ export function TopBar() {
   const openSkills = useStore((s) => s.openSkills);
   const closeSkill = useStore((s) => s.closeSkill);
   const markChatTabReentry = useStore((s) => s.markChatTabReentry);
+  const editorUrl = useStore((s) => currentSessionId ? s.editorUrls.get(currentSessionId) : undefined);
   const [claudeMdOpen, setClaudeMdOpen] = useState(false);
   const quickTerminalOpen = useStore((s) => s.quickTerminalOpen);
   const quickTerminalTabs = useStore((s) => s.quickTerminalTabs);
@@ -140,23 +141,23 @@ export function TopBar() {
   const showContextToggle = route.page === "session" && !!currentSessionId;
   const editorFileCount = useStore((s) => s.editorFiles.length);
   const workspaceTabs = useMemo(() => {
-    const tabs: Array<WorkspaceTab> = ["chat", "diff"];
-    if (editorFileCount > 0) tabs.push("editor");
-    tabs.push("terminal");
+    const tabs: WorkspaceTab[] = ["chat", "diff", "terminal", "editor"];
     return tabs;
   }, [editorFileCount]);
 
   const activateWorkspaceTab = (tab: WorkspaceTab) => {
-    if (tab === "editor") {
-      setActiveTab("editor");
-      return;
-    }
     if (tab === "terminal") {
       if (!cwd) return;
       if (!quickTerminalOpen || quickTerminalTabs.length === 0) {
         openQuickTerminal({ ...defaultTerminalOpts, reuseIfExists: true });
       }
       setActiveTab("terminal");
+      return;
+    }
+
+    if (tab === "editor") {
+      if (!cwd) return;
+      setActiveTab("editor");
       return;
     }
 
@@ -180,17 +181,17 @@ export function TopBar() {
         const next: Partial<Record<WorkspaceTab, string>> = {};
         const chatColor = sampleColorBelowTab(chatTabRef.current);
         const diffColor = sampleColorBelowTab(diffTabRef.current);
-        const editorColor = sampleColorBelowTab(editorTabRef.current);
         const terminalColor = sampleColorBelowTab(terminalTabRef.current);
+        const editorColor = sampleColorBelowTab(editorTabRef.current);
         if (chatColor) next.chat = chatColor;
         if (diffColor) next.diff = diffColor;
-        if (editorColor) next.editor = editorColor;
         if (terminalColor) next.terminal = terminalColor;
+        if (editorColor) next.editor = editorColor;
         if (
           prev.chat === next.chat &&
           prev.diff === next.diff &&
-          prev.editor === next.editor &&
-          prev.terminal === next.terminal
+          prev.terminal === next.terminal &&
+          prev.editor === next.editor
         ) {
           return prev;
         }
@@ -292,29 +293,11 @@ export function TopBar() {
               >
                 Diffs
                 {changedFilesCount > 0 && (
-                  <span className="text-[10px] bg-cc-warning text-white rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center font-semibold leading-none">
+                  <span className="text-[10px] rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center font-semibold leading-none border border-amber-300/70 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
                     {changedFilesCount}
                   </span>
                 )}
               </button>
-              {editorFileCount > 0 && (
-                <button
-                  ref={editorTabRef}
-                  onClick={() => activateWorkspaceTab("editor")}
-                  className={`px-3.5 border text-[12px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    activeTab === "editor"
-                      ? "relative z-10 h-9 -mb-px text-cc-fg border-cc-border/80 border-b-transparent rounded-[14px_14px_0_0]"
-                      : "h-8 mb-px bg-transparent text-cc-muted border-transparent rounded-[8px_8px_0_0] hover:bg-cc-hover/70 hover:text-cc-fg"
-                  }`}
-                  style={activeTab === "editor" ? { backgroundColor: sampledTabColors.editor || activeTabSurfaceColor } : undefined}
-                  aria-label="Editor tab"
-                >
-                  Editor
-                  <span className="text-[10px] bg-cc-primary/20 text-cc-primary rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center font-semibold leading-none">
-                    {editorFileCount}
-                  </span>
-                </button>
-              )}
               <button
                 ref={terminalTabRef}
                 onClick={() => activateWorkspaceTab("terminal")}
@@ -332,6 +315,38 @@ export function TopBar() {
               >
                 Shell
               </button>
+              <button
+                ref={editorTabRef}
+                onClick={() => activateWorkspaceTab("editor")}
+                disabled={!cwd}
+                className={`px-3.5 border text-[12px] font-semibold transition-colors ${
+                  !cwd
+                    ? "h-8 mb-px bg-transparent text-cc-muted/50 border-transparent rounded-[8px_8px_0_0] cursor-not-allowed"
+                    : activeTab === "editor"
+                      ? "relative z-10 h-9 -mb-px text-cc-fg border-cc-border/80 border-b-transparent rounded-[14px_14px_0_0] cursor-pointer"
+                      : "h-8 mb-px bg-transparent text-cc-muted border-transparent rounded-[8px_8px_0_0] hover:bg-cc-hover/70 hover:text-cc-fg cursor-pointer"
+                }`}
+                style={activeTab === "editor" ? { backgroundColor: sampledTabColors.editor || activeTabSurfaceColor } : undefined}
+                title={!cwd ? "Editor unavailable while session is reconnecting" : "VS Code editor"}
+                aria-label="Editor tab"
+              >
+                Editor
+              </button>
+              {editorUrl && (
+                <a
+                  href={editorUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="h-8 mb-px px-1.5 flex items-center rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover/70 transition-colors"
+                  title="Open editor in new window"
+                  aria-label="Open editor in new window"
+                >
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                    <path d="M6.22 8.72a.75.75 0 001.06 1.06l5.22-5.22v1.69a.75.75 0 001.5 0v-3.5a.75.75 0 00-.75-.75h-3.5a.75.75 0 000 1.5h1.69L6.22 8.72z" />
+                    <path d="M3.5 6.75c0-.69.56-1.25 1.25-1.25H7A.75.75 0 007 4H4.75A2.75 2.75 0 002 6.75v4.5A2.75 2.75 0 004.75 14h4.5A2.75 2.75 0 0012 11.25V9a.75.75 0 00-1.5 0v2.25c0 .69-.56 1.25-1.25 1.25h-4.5c-.69 0-1.25-.56-1.25-1.25v-4.5z" />
+                  </svg>
+                </a>
+              )}
               {openSkills.map((slug) => (
                 <TabBtn
                   key={slug}

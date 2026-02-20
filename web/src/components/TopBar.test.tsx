@@ -22,6 +22,7 @@ interface MockStoreState {
   openSkills: string[];
   closeSkill: ReturnType<typeof vi.fn>;
   markChatTabReentry: ReturnType<typeof vi.fn>;
+  editorUrls: Map<string, string>;
   quickTerminalOpen: boolean;
   quickTerminalTabs: { id: string; label: string; cwd: string; containerId?: string }[];
   openQuickTerminal: ReturnType<typeof vi.fn>;
@@ -51,6 +52,7 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     openSkills: [],
     closeSkill: vi.fn(),
     markChatTabReentry: vi.fn(),
+    editorUrls: new Map(),
     quickTerminalOpen: false,
     quickTerminalTabs: [],
     openQuickTerminal: vi.fn(),
@@ -91,6 +93,17 @@ describe("TopBar", () => {
     render(<TopBar />);
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.queryByText("3")).not.toBeInTheDocument();
+  });
+
+  it("uses theme-safe classes for the diff badge in dark mode", () => {
+    resetStore({
+      changedFiles: new Map([["s1", new Set(["/repo/src/a.ts"])]]),
+    });
+    render(<TopBar />);
+    const badge = screen.getByText("1");
+    expect(badge.className).toContain("bg-amber-100");
+    expect(badge.className).toContain("dark:bg-amber-950");
+    expect(badge.className).not.toContain("bg-cc-warning");
   });
 
   it("hides diff badge when all changed files are out of scope", () => {

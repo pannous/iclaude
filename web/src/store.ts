@@ -105,6 +105,7 @@ interface AppState {
   editorOpenFile: Map<string, string>;
   editorUrl: Map<string, string>;
   editorLoading: Map<string, boolean>;
+  editorUrls: Map<string, string>;
   chatTabReentryTickBySession: Map<string, number>;
 
   // File editor tab state (global, not per-session)
@@ -363,6 +364,7 @@ export const useStore = create<AppState>((set) => ({
   editorOpenFile: new Map(),
   editorUrl: new Map(),
   editorLoading: new Map(),
+  editorUrls: new Map(),
   chatTabReentryTickBySession: new Map(),
   editorFiles: [],
   editorActiveFilePath: null,
@@ -843,6 +845,12 @@ export const useStore = create<AppState>((set) => ({
   setUpdateOverlayActive: (active) => set({ updateOverlayActive: active }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
+  setEditorUrl: (sessionId, url) =>
+    set((s) => {
+      const next = new Map(s.editorUrls);
+      next.set(sessionId, url);
+      return { editorUrls: next };
+    }),
   markChatTabReentry: (sessionId) =>
     set((s) => {
       const chatTabReentryTickBySession = new Map(s.chatTabReentryTickBySession);
@@ -881,13 +889,6 @@ export const useStore = create<AppState>((set) => ({
         editorOpenFile.delete(sessionId);
       }
       return { editorOpenFile };
-    }),
-
-  setEditorUrl: (sessionId, url) =>
-    set((s) => {
-      const editorUrl = new Map(s.editorUrl);
-      editorUrl.set(sessionId, url);
-      return { editorUrl };
     }),
 
   setEditorLoading: (sessionId, loading) =>
@@ -1028,6 +1029,7 @@ export const useStore = create<AppState>((set) => ({
       editorOpenFile: new Map(),
       editorUrl: new Map(),
       editorLoading: new Map(),
+      editorUrls: new Map(),
       chatTabReentryTickBySession: new Map(),
       editorFiles: [],
       editorActiveFilePath: null,
