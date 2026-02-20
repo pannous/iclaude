@@ -240,11 +240,11 @@ export function TopBar() {
   }, [showWorkspaceControls, workspaceTabs, activeTab, cwd, quickTerminalOpen, quickTerminalTabs.length, openQuickTerminal, defaultTerminalOpts, setActiveTab, markChatTabReentry, currentSessionId]);
 
   return (
-    <header className={`relative shrink-0 h-12 px-2 sm:px-4 bg-cc-sidebar ${showWorkspaceControls ? "" : "border-b border-cc-border"}`}>
+    <header className="relative shrink-0 h-12 px-2 sm:px-4 bg-cc-sidebar border-b border-cc-border">
       <div className="h-full flex items-end gap-2 min-w-0">
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="mb-1 flex items-center justify-center w-8 h-8 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer shrink-0"
+          className="mb-px flex items-center justify-center w-8 h-8 rounded-lg text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer shrink-0"
           aria-label="Toggle sidebar"
         >
           <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
@@ -358,11 +358,11 @@ export function TopBar() {
               ))}
               <SkillPicker />
               <div
-                className="hidden lg:flex h-8 mb-px items-center pl-2"
+                className="hidden lg:flex h-8 mb-px items-center ml-1 pl-2 border-l border-cc-border/40"
                 title="Switch tabs with Ctrl/Cmd + J"
                 aria-label="Tab switch shortcut"
               >
-                <span className="inline-flex items-center gap-1 text-[10px] text-cc-muted/60">
+                <span className="inline-flex items-center gap-1 text-[10px] text-cc-muted/50">
                   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" className="w-3 h-3">
                     <rect x="1.75" y="3" width="12.5" height="10" rx="1.75" />
                     <path d="M4.5 6.5h7M4.5 9h5.5" strokeLinecap="round" />
@@ -382,7 +382,7 @@ export function TopBar() {
         )}
 
         {/* Right side */}
-        <div className="mb-1 flex items-center gap-1.5 shrink-0">
+        <div className="mb-px flex items-center gap-1.5 shrink-0">
         {/* Folder + Branch info */}
         {currentSessionId && isSessionView && cwd && (
           <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-cc-muted">

@@ -27,7 +27,7 @@ export function SkillPicker() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="px-1.5 py-1 rounded-md text-[11px] font-medium text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
+        className="h-8 mb-px px-2 rounded-[8px_8px_0_0] text-[12px] font-semibold text-cc-muted hover:text-cc-fg hover:bg-cc-hover/70 transition-colors cursor-pointer"
         title="Open skill panel"
       >
         +
