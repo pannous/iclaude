@@ -6,13 +6,14 @@ import type { SessionState, SdkSessionInfo } from "../types.js";
 // ─── Mock setup ──────────────────────────────────────────────────────────────
 
 const mockConnectSession = vi.fn();
-const mockConnectAllSessions = vi.fn();
 const mockDisconnectSession = vi.fn();
+const mockDisconnectAllExcept = vi.fn();
 
 vi.mock("../ws.js", () => ({
   connectSession: (...args: unknown[]) => mockConnectSession(...args),
-  connectAllSessions: (...args: unknown[]) => mockConnectAllSessions(...args),
   disconnectSession: (...args: unknown[]) => mockDisconnectSession(...args),
+  disconnectAllExcept: (...args: unknown[]) => mockDisconnectAllExcept(...args),
+  waitForConnection: vi.fn().mockResolvedValue(undefined),
 }));
 
 const mockApi = {

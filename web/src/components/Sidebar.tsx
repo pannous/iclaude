@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useStore } from "../store.js";
 import { api, type ResumableSession } from "../api.js";
-import { connectSession, connectAllSessions, disconnectSession, waitForConnection } from "../ws.js";
+import { connectSession, disconnectSession, disconnectAllExcept, waitForConnection } from "../ws.js";
 import { navigateToSession, navigateHome, parseHash } from "../utils/routing.js";
 import { ProjectGroup } from "./ProjectGroup.js";
 import { SessionItem } from "./SessionItem.js";
@@ -120,8 +120,8 @@ export function Sidebar() {
         const list = await api.listSessions();
         if (active) {
           useStore.getState().setSdkSessions(list);
-          // Connect all active sessions so we receive notifications for all of them
-          connectAllSessions(list);
+          // Enforce single-active-connection: close any stale sockets for non-current sessions
+          disconnectAllExcept(useStore.getState().currentSessionId);
           // Hydrate session names from server (server is source of truth)
           const store = useStore.getState();
           for (const s of list) {

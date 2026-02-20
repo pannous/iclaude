@@ -760,7 +760,8 @@ function scheduleReconnect(sessionId: string) {
   const timer = setTimeout(() => {
     reconnectTimers.delete(sessionId);
     const store = useStore.getState();
-    // Reconnect any active (non-archived) session
+    // Only reconnect if this is still the active session and not archived
+    if (store.currentSessionId !== sessionId) return;
     const sdkSession = store.sdkSessions.find((s) => s.sessionId === sessionId);
     if (sdkSession && !sdkSession.archived) {
       connectSession(sessionId);
@@ -789,6 +790,15 @@ export function disconnectSession(sessionId: string) {
 export function disconnectAll() {
   for (const [id] of sockets) {
     disconnectSession(id);
+  }
+}
+
+/** Close all open WS connections except the given session. */
+export function disconnectAllExcept(keepSessionId: string | null) {
+  for (const [id] of sockets) {
+    if (id !== keepSessionId) {
+      disconnectSession(id);
+    }
   }
 }
 
