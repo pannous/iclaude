@@ -328,7 +328,7 @@ describe("Sidebar", () => {
     expect(input.tagName).toBe("INPUT");
   });
 
-  it("session actions menu button exists in the DOM", () => {
+  it("archive button exists directly on active session items", () => {
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
@@ -337,12 +337,12 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    // Session actions button (three-dot menu) has title "Session actions"
-    const menuButton = screen.getByTitle("Session actions");
-    expect(menuButton).toBeInTheDocument();
+    // Archive button is a direct icon button (no dropdown menu needed)
+    const archiveButton = screen.getByTitle("Archive session");
+    expect(archiveButton).toBeInTheDocument();
   });
 
-  it("session actions menu shows archive option when clicked", () => {
+  it("archive button is directly visible on active sessions without clicking a menu", () => {
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
@@ -351,15 +351,14 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    const menuButton = screen.getByTitle("Session actions");
-    fireEvent.click(menuButton);
-
-    // Menu should show Archive and Rename options
-    expect(screen.getByText("Archive")).toBeInTheDocument();
-    expect(screen.getByText("Rename")).toBeInTheDocument();
+    // Archive is a direct button — no menu click required
+    const archiveButton = screen.getByTitle("Archive session");
+    expect(archiveButton).toBeInTheDocument();
+    // Rename is available via double-click on the session item, not a menu button
+    expect(screen.queryByTitle("Session actions")).not.toBeInTheDocument();
   });
 
-  it("session actions menu button is visible by default on mobile and hover-only on desktop", () => {
+  it("archive button is dimmed by default and brightens on hover", () => {
     const session = makeSession("s1");
     const sdk = makeSdkSession("s1");
     mockState = createMockState({
@@ -368,11 +367,11 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    const menuButton = screen.getByTitle("Session actions");
+    const archiveButton = screen.getByTitle("Archive session");
 
-    expect(menuButton).toHaveClass("opacity-100");
-    expect(menuButton).toHaveClass("sm:opacity-0");
-    expect(menuButton).toHaveClass("sm:group-hover:opacity-100");
+    // Dimmed by default, full opacity on hover
+    expect(archiveButton).toHaveClass("opacity-30");
+    expect(archiveButton).toHaveClass("hover:opacity-100");
   });
 
   it("permission badge uses consistent positioning", () => {
@@ -388,8 +387,10 @@ describe("Sidebar", () => {
     const permissionBadge = screen.getAllByText("1").find((node) =>
       node.classList.contains("bg-cc-warning") && node.classList.contains("px-1"),
     )!;
-    expect(permissionBadge).toHaveClass("right-2");
-    expect(permissionBadge).toHaveClass("sm:group-hover:opacity-0");
+    // On touch devices badge sits at right-8; on hover-capable devices it shifts to right-2
+    expect(permissionBadge).toHaveClass("right-8");
+    expect(permissionBadge).toHaveClass("can-hover:right-2");
+    expect(permissionBadge).toHaveClass("can-hover:group-hover:opacity-0");
   });
 
   it("archived sessions section shows count", () => {
@@ -720,16 +721,12 @@ describe("Sidebar", () => {
     const toggleButton = screen.getByText(/Archived \(1\)/);
     fireEvent.click(toggleButton);
 
-    // Find the session actions menu for the archived session
-    const menuButtons = screen.getAllByTitle("Session actions");
-    // The archived session's menu button (last one since archived section is below)
-    const archivedMenuButton = menuButtons[menuButtons.length - 1];
-    fireEvent.click(archivedMenuButton);
-
-    // Should show Restore and Delete options, but not Archive or Rename
-    expect(screen.getByText("Restore")).toBeInTheDocument();
-    expect(screen.getByText("Delete")).toBeInTheDocument();
-    expect(screen.queryByText("Archive")).not.toBeInTheDocument();
+    // Archived sessions show direct Restore and Delete icon buttons (no menu needed)
+    expect(screen.getByTitle("Restore session")).toBeInTheDocument();
+    expect(screen.getByTitle("Delete permanently")).toBeInTheDocument();
+    // The active session has an Archive button; the archived one does not
+    expect(screen.getByTitle("Archive session")).toBeInTheDocument();
+    expect(screen.queryByTitle("Session actions")).not.toBeInTheDocument();
   });
 
   it("session item shows relative timestamp", () => {

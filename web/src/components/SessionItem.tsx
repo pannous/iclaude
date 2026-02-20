@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import type { RefObject } from "react";
 import type { SessionItem as SessionItemType } from "../utils/project-grouping.js";
 import { timeAgo } from "../utils/time-ago.js";
 
@@ -75,39 +75,6 @@ export function SessionItem({
     ? "bg-blue-500"
     : "bg-[#5BA8A0]";
   const backendLabel = s.backendType === "codex" ? "Codex" : "Claude";
-
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const menuBtnRef = useRef<HTMLButtonElement>(null);
-
-  // Close menu on click outside or Escape
-  useEffect(() => {
-    if (!menuOpen) return;
-    function handleClickOutside(e: MouseEvent | TouchEvent) {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        menuBtnRef.current && !menuBtnRef.current.contains(e.target as Node)
-      ) {
-        setMenuOpen(false);
-      }
-    }
-    function handleEscape(e: KeyboardEvent) {
-      if (e.key === "Escape") setMenuOpen(false);
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("touchstart", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("touchstart", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [menuOpen]);
-
-  const handleMenuAction = useCallback((action: () => void) => {
-    setMenuOpen(false);
-    action();
-  }, []);
 
   // Whether row 2 (metadata) has any content
   const hasMetadata = s.gitBranch || s.gitAhead > 0 || s.gitBehind > 0 || s.linesAdded > 0 || s.linesRemoved > 0;
@@ -222,69 +189,47 @@ export function SessionItem({
         )}
       </button>
 
-      {/* Permission badge */}
-      {!archived && permCount > 0 && !menuOpen && (
-        <span className="absolute right-2 top-1/2 -translate-y-1/2 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-cc-warning text-white text-[10px] font-bold leading-none px-1 sm:group-hover:opacity-0 transition-opacity pointer-events-none">
+      {/* Permission badge — hidden on hover to reveal action buttons */}
+      {!archived && permCount > 0 && (
+        <span className="absolute right-8 can-hover:right-2 top-1/2 -translate-y-1/2 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-cc-warning text-white text-[10px] font-bold leading-none px-1 can-hover:group-hover:opacity-0 transition-opacity pointer-events-none">
           {permCount}
         </span>
       )}
 
-      {/* Three-dot menu button */}
-      <button
-        ref={menuBtnRef}
-        onClick={(e) => {
-          e.stopPropagation();
-          setMenuOpen(!menuOpen);
-        }}
-        className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-md opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
-        title="Session actions"
-        aria-label="Session actions"
-      >
-        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-          <circle cx="8" cy="3" r="1.5" />
-          <circle cx="8" cy="8" r="1.5" />
-          <circle cx="8" cy="13" r="1.5" />
-        </svg>
-      </button>
-
-      {/* Context menu */}
-      {menuOpen && (
-        <div
-          ref={menuRef}
-          className="absolute right-0 top-full mt-1 w-36 py-1 bg-cc-card border border-cc-border rounded-lg shadow-lg z-10 animate-[menu-appear_150ms_ease-out]"
+      {/* Action buttons */}
+      {archived ? (
+        <>
+          <button
+            onClick={(e) => onUnarchive(e, s.id)}
+            className="absolute right-8 top-1/2 -translate-y-1/2 p-1 rounded-md can-hover:opacity-0 can-hover:group-hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
+            title="Restore session"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+              <path d="M8 10V3M5 5l3-3 3 3" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M3 13h10" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => onDelete(e, s.id)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md can-hover:opacity-0 can-hover:group-hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-red-400 transition-all cursor-pointer"
+            title="Delete permanently"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={(e) => onArchive(e, s.id)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md opacity-30 hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
+          title="Archive session"
         >
-          {!archived && (
-            <button
-              onClick={() => handleMenuAction(() => onStartRename(s.id, label))}
-              className="w-full px-3 py-1.5 text-[12px] text-left text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-            >
-              Rename
-            </button>
-          )}
-          {archived ? (
-            <>
-              <button
-                onClick={(e) => handleMenuAction(() => onUnarchive(e, s.id))}
-                className="w-full px-3 py-1.5 text-[12px] text-left text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-              >
-                Restore
-              </button>
-              <button
-                onClick={(e) => handleMenuAction(() => onDelete(e, s.id))}
-                className="w-full px-3 py-1.5 text-[12px] text-left text-red-400 hover:bg-cc-hover transition-colors cursor-pointer"
-              >
-                Delete
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={(e) => handleMenuAction(() => onArchive(e, s.id))}
-              className="w-full px-3 py-1.5 text-[12px] text-left text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-            >
-              Archive
-            </button>
-          )}
-        </div>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+            <path d="M3 3h10v2H3zM4 5v7a1 1 0 001 1h6a1 1 0 001-1V5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M6.5 8h3" strokeLinecap="round" />
+          </svg>
+        </button>
       )}
     </div>
   );
