@@ -221,7 +221,7 @@ export function LinearSection({
       setProjectsLoading(true);
       api.listLinearProjects()
         .then(({ projects }) => setAvailableProjects(projects))
-        .catch(() => {})
+        .catch((e) => console.warn("[linear] listLinearProjects", e))
         .finally(() => setProjectsLoading(false));
     }
   }

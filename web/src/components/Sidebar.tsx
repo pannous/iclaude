@@ -222,7 +222,7 @@ export function Sidebar() {
   function confirmRename() {
     if (editingSessionId && editingName.trim()) {
       useStore.getState().setSessionName(editingSessionId, editingName.trim());
-      api.renameSession(editingSessionId, editingName.trim()).catch(() => {});
+      api.renameSession(editingSessionId, editingName.trim()).catch((e) => console.warn("[sidebar] renameSession", e));
     }
     setEditingSessionId(null);
     setEditingName("");

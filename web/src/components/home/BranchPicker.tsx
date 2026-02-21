@@ -67,7 +67,7 @@ export function BranchPicker({
           onClick={() => {
             if (!showBranchDropdown && gitRepoInfo) {
               api.gitFetch(gitRepoInfo.repoRoot)
-                .catch(() => {})
+                .catch((e) => console.warn("[branch-picker] gitFetch", e))
                 .finally(() => {
                   api.listBranches(gitRepoInfo.repoRoot).then((b) => {
                     setBranches(b);

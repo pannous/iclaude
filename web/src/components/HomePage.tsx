@@ -99,12 +99,12 @@ export function HomePage() {
       if (!cwd) {
         setCwd(serverCwd || home);
       }
-    }).catch(() => {});
-    api.listEnvs().then(setEnvs).catch(() => {});
-    api.getBackends().then(setBackends).catch(() => {});
+    }).catch((e) => console.warn("[home] getHome", e));
+    api.listEnvs().then(setEnvs).catch((e) => console.warn("[home] listEnvs", e));
+    api.getBackends().then(setBackends).catch((e) => console.warn("[home] getBackends", e));
     api.getSettings().then((s) => {
       setLinearConfigured(s.linearApiKeyConfigured);
-    }).catch(() => {});
+    }).catch((e) => console.warn("[home] getSettings", e));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When backend changes, reset model and mode to defaults
@@ -157,7 +157,7 @@ export function HomePage() {
         setEnvImageState(state);
         // Auto-trigger pull if image is not available
         if (state.status === "idle") {
-          api.pullImage(effectiveImage).catch(() => {});
+          api.pullImage(effectiveImage).catch((e) => console.warn("[home] pullImage", e));
         }
         // Stop polling once settled
         if (state.status === "ready" || state.status === "error") {
@@ -166,7 +166,7 @@ export function HomePage() {
             envImagePollRef.current = null;
           }
         }
-      }).catch(() => {});
+      }).catch((e) => console.warn("[home] checkImageStatus", e));
     };
 
     checkAndPull();
@@ -711,7 +711,7 @@ export function HomePage() {
             <button
               onClick={() => {
                 if (!showEnvDropdown) {
-                  api.listEnvs().then(setEnvs).catch(() => {});
+                  api.listEnvs().then(setEnvs).catch((e) => console.warn("[home] listEnvs", e));
                 }
                 setShowEnvDropdown(!showEnvDropdown);
               }}
@@ -906,7 +906,7 @@ export function HomePage() {
         <EnvManager
           onClose={() => {
             setShowEnvManager(false);
-            api.listEnvs().then(setEnvs).catch(() => {});
+            api.listEnvs().then(setEnvs).catch((e) => console.warn("[home] listEnvs", e));
           }}
         />
       )}

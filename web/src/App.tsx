@@ -80,7 +80,7 @@ export default function App() {
   useEffect(() => {
     api.getSettings().then((settings) => {
       setEditorTabEnabled(settings.editorTabEnabled);
-    }).catch(() => {});
+    }).catch((e) => console.warn("[app] getSettings", e));
   }, [setEditorTabEnabled]);
 
   useEffect(() => {
@@ -131,7 +131,7 @@ export default function App() {
           useStore.getState().newSession();
           navigateHome(true);
         }
-      }).catch(() => {});
+      }).catch((e) => console.warn("[app] listSessions", e));
     } else if (route.page === "home") {
       const store = useStore.getState();
       if (store.currentSessionId !== null) {
@@ -146,7 +146,7 @@ export default function App() {
     const check = () => {
       api.checkForUpdate().then((info) => {
         useStore.getState().setUpdateInfo(info);
-      }).catch(() => {});
+      }).catch((e) => console.warn("[app] checkForUpdate", e));
     };
     check();
     const interval = setInterval(check, 5 * 60 * 1000);

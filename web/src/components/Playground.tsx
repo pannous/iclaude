@@ -1962,7 +1962,7 @@ function PlaygroundClaudeMdButton() {
   const [cwd, setCwd] = useState("/tmp");
 
   useEffect(() => {
-    api.getHome().then((res) => setCwd(res.cwd)).catch(() => {});
+    api.getHome().then((res) => setCwd(res.cwd)).catch((e) => console.warn("[playground] getHome", e));
   }, []);
 
   return (

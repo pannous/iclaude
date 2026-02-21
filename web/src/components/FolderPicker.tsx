@@ -28,7 +28,7 @@ export function FolderPicker({ initialPath, onSelect, onClose }: FolderPickerPro
 
   // Fetch .claude project folders once on mount
   useEffect(() => {
-    api.getRecentProjects().then((r) => setClaudeProjects(r.projects)).catch(() => {});
+    api.getRecentProjects().then((r) => setClaudeProjects(r.projects)).catch((e) => console.warn("[folder] getRecentProjects", e));
   }, []);
 
   const sessionDirs = useMemo(() => {

@@ -116,7 +116,7 @@ export function CronManager({ onClose, embedded = false }: Props) {
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(() => {
-    api.listCronJobs().then(setJobs).catch(() => {}).finally(() => setLoading(false));
+    api.listCronJobs().then(setJobs).catch((e) => console.warn("[cron] listCronJobs", e)).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {

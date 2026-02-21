@@ -81,8 +81,8 @@ export function LinearSettingsPage({ embedded = false }: LinearSettingsPageProps
             fetchWorkflowStates().then(() => {
               // Once states are loaded, sync selectedStateId from the saved name
               // This is done inside the effect chain because we need the states list
-            }).catch(() => {});
-          }).catch(() => {});
+            }).catch((e) => console.warn("[linear-settings] fetchWorkflowStates", e));
+          }).catch((e) => console.warn("[linear-settings] refreshConnectionStatus", e));
         }
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
@@ -304,7 +304,7 @@ export function LinearSettingsPage({ embedded = false }: LinearSettingsPageProps
               <button
                 type="button"
                 onClick={() => {
-                  refreshConnectionStatus().catch(() => {});
+                  refreshConnectionStatus().catch((e) => console.warn("[linear-settings] refreshConnectionStatus", e));
                 }}
                 disabled={checkingConnection || loading || !configured}
                 className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${

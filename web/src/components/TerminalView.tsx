@@ -120,7 +120,7 @@ export function TerminalView({
       const terminalId = terminalIdRef.current;
       terminalIdRef.current = null;
       if (terminalId) {
-        api.killTerminal(terminalId).catch(() => {});
+        api.killTerminal(terminalId).catch((e) => console.warn("[terminal] killTerminal", e));
       }
     };
   }, [cwd, containerId]);

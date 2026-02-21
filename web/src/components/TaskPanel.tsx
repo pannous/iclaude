@@ -398,7 +398,7 @@ function GitHubPRSection({ sessionId }: { sessionId: string }) {
     if (prStatus || !cwd || !branch) return;
     api.getPRStatus(cwd, branch).then((data) => {
       useStore.getState().setPRStatus(sessionId, data);
-    }).catch(() => {});
+    }).catch((e) => console.warn("[task-panel] getPRStatus", e));
   }, [sessionId, cwd, branch, prStatus]);
 
   if (!prStatus?.available || !prStatus.pr) return null;
@@ -447,7 +447,7 @@ function LinearIssueSection({ sessionId }: { sessionId: string }) {
       if (data.issue) {
         useStore.getState().setLinkedLinearIssue(sessionId, data.issue);
       }
-    }).catch(() => {});
+    }).catch((e) => console.warn("[task-panel] getLinkedLinearIssue", e));
   }, [sessionId]);
 
   // Fetch fresh data from Linear periodically

@@ -53,7 +53,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
   const refreshImageStatus = useCallback((tag: string) => {
     api.getImageStatus(tag).then((state) => {
       setImageStates((prev) => ({ ...prev, [tag]: state }));
-    }).catch(() => {});
+    }).catch((e) => console.warn("[env] getImageStatus", e));
   }, []);
 
   /** Trigger a pull for an image and start polling */
@@ -62,7 +62,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
       if (res.state) {
         setImageStates((prev) => ({ ...prev, [tag]: res.state }));
       }
-    }).catch(() => {});
+    }).catch((e) => console.warn("[env] pullImage", e));
   }, []);
 
   // Track pulling images in a ref so the interval callback always reads current values
@@ -117,7 +117,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
   const [creating, setCreating] = useState(false);
 
   const refresh = useCallback(() => {
-    api.listEnvs().then(setEnvs).catch(() => {}).finally(() => setLoading(false));
+    api.listEnvs().then(setEnvs).catch((e) => console.warn("[env] listEnvs", e)).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -126,7 +126,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
     api.getContainerStatus().then((s) => {
       setDockerAvailable(s.available);
       if (s.available) {
-        api.getContainerImages().then(setAvailableImages).catch(() => {});
+        api.getContainerImages().then(setAvailableImages).catch((e) => console.warn("[env] getContainerImages", e));
       }
     }).catch(() => setDockerAvailable(false));
   }, [refresh]);
@@ -237,7 +237,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
           }
           refresh();
           // Refresh images list
-          api.getContainerImages().then(setAvailableImages).catch(() => {});
+          api.getContainerImages().then(setAvailableImages).catch((e) => console.warn("[env] getContainerImages", e));
         }
       };
       setTimeout(poll, 2000);

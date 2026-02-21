@@ -43,12 +43,12 @@ export function archiveCurrentSession() {
   if (!currentId) return;
 
   disconnectSession(currentId);
-  api.archiveSession(currentId).catch(() => {});
+  api.archiveSession(currentId).catch((e) => console.warn("[keybindings] archiveSession", e));
   store.newSession();
   api
     .listSessions()
     .then((list) => store.setSdkSessions(list))
-    .catch(() => {});
+    .catch((e) => console.warn("[keybindings] listSessions", e));
 }
 
 export function newSession() {
