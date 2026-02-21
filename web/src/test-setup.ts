@@ -1,6 +1,15 @@
 // Setup file for jsdom-based tests
 // Polyfills that must be available before any module import
 
+// Register vitest-axe matchers (toHaveNoViolations) in jsdom environments.
+// The vitest-axe/extend-expect entry is an empty file in some builds, so we
+// manually import the matcher and extend expect ourselves.
+if (typeof window !== "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const matchers = await import("vitest-axe/matchers") as any;
+  expect.extend({ toHaveNoViolations: matchers.toHaveNoViolations });
+}
+
 if (typeof window !== "undefined") {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -40,7 +49,8 @@ if (typeof window !== "undefined") {
   }
 }
 
-// Node 25+ exposes a broken localStorage stub (no getItem/setItem/clear)
+
+// LOCAL: Node 25+ exposes a broken localStorage stub (no getItem/setItem/clear)
 // when --localstorage-file is not configured. Replace it with an in-memory
 // implementation so tests that call localStorage.clear() etc. work correctly.
 if (typeof localStorage !== "undefined" && typeof localStorage.clear !== "function") {
@@ -61,3 +71,5 @@ if (typeof localStorage !== "undefined" && typeof localStorage.clear !== "functi
     get: () => memStorage,
   });
 }
+
+export {};

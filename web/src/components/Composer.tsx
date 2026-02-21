@@ -5,11 +5,14 @@ import { CLAUDE_MODES, CODEX_MODES } from "../utils/backends.js";
 import { api, type SavedPrompt } from "../api.js";
 import type { ModeOption } from "../utils/backends.js";
 
+import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
+
+// LOCAL: slugify for skill names
 function slugify(input: string): string {
   return input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "untitled";
 }
 
-// Web Speech API types (not in all TS DOM libs)
+// LOCAL: Web Speech API types (not in all TS DOM libs)
 interface SpeechRecognitionResult {
   readonly isFinal: boolean;
   readonly length: number;
@@ -43,26 +46,8 @@ const SpeechRecognitionAPI: SpeechRecognitionConstructor | undefined =
     ? ((window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition) as SpeechRecognitionConstructor | undefined
     : undefined;
 
+
 let idCounter = 0;
-
-interface ImageAttachment {
-  name: string;
-  base64: string;
-  mediaType: string;
-}
-
-function readFileAsBase64(file: File): Promise<{ base64: string; mediaType: string }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const base64 = dataUrl.split(",")[1];
-      resolve({ base64, mediaType: file.type });
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 interface CommandItem {
   name: string;
@@ -542,6 +527,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 />
                 <button
                   onClick={() => removeImage(i)}
+                  aria-label="Remove image"
                   className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-cc-error text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                 >
                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5">
@@ -561,6 +547,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
           multiple
           onChange={handleFileSelect}
           className="hidden"
+          aria-label="Attach images"
         />
 
         {/* Unified input card */}
@@ -659,6 +646,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   if (savePromptError) setSavePromptError(null);
                 }}
                 placeholder="Prompt title"
+                aria-label="Prompt title"
                 className="w-full px-2 py-1.5 text-sm bg-cc-input-bg border border-cc-border rounded-md text-cc-fg focus:outline-none focus:border-cc-primary/40"
               />
               <div className="text-[11px] text-cc-muted">Saved as <code>{sessionData?.cwd || "."}/prompts/{slugify(savePromptName)}.md</code></div>
@@ -728,6 +716,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
               onClick={syncCaret}
               onKeyUp={syncCaret}
               onPaste={handlePaste}
+              aria-label="Message input"
               placeholder={isConnected
                 ? "Type a message... (/ + @)"
                 : "Waiting for CLI connection..."}

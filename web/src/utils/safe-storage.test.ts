@@ -103,6 +103,7 @@ describe("no raw localStorage in source files", () => {
   const ALLOWED_FILES = new Set([
     "utils/safe-storage.ts", // the wrapper itself
     "test-setup.ts",         // test polyfills
+    "analytics.ts",          // upstream telemetry uses raw localStorage intentionally
   ]);
 
   function collectSourceFiles(dir: string, base: string): string[] {

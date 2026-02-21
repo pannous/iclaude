@@ -23,7 +23,6 @@ interface MockStoreState {
   openSkills: string[];
   closeSkill: ReturnType<typeof vi.fn>;
   markChatTabReentry: ReturnType<typeof vi.fn>;
-  editorUrls: Map<string, string>;
   quickTerminalOpen: boolean;
   quickTerminalTabs: { id: string; label: string; cwd: string; containerId?: string }[];
   openQuickTerminal: ReturnType<typeof vi.fn>;
@@ -54,7 +53,6 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     openSkills: [],
     closeSkill: vi.fn(),
     markChatTabReentry: vi.fn(),
-    editorUrls: new Map(),
     quickTerminalOpen: false,
     quickTerminalTabs: [],
     openQuickTerminal: vi.fn(),
@@ -252,5 +250,21 @@ describe("TopBar", () => {
       Reflect.deleteProperty(document as unknown as Record<string, unknown>, "elementsFromPoint");
     }
     underlay.remove();
+  });
+
+  it("tab buttons have accessible names", () => {
+    // Verifies all workspace tabs are identifiable by assistive technology.
+    render(<TopBar />);
+    expect(screen.getByRole("button", { name: "Session tab" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Diffs tab" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Shell tab" })).toBeInTheDocument();
+  });
+
+  it("passes axe accessibility checks", async () => {
+    const { axe } = await import("vitest-axe");
+    resetStore();
+    const { container } = render(<TopBar />);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
   });
 });
