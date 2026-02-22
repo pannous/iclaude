@@ -268,38 +268,18 @@ export class WsBridge {
     session: Session,
     options: { broadcastUpdate?: boolean; notifyPoller?: boolean } = {},
   ): void {
-    const before = {
-      git_branch: session.state.git_branch,
-      is_worktree: session.state.is_worktree,
-      is_containerized: session.state.is_containerized,
-      repo_root: session.state.repo_root,
-      git_ahead: session.state.git_ahead,
-      git_behind: session.state.git_behind,
-    };
+    const before: Partial<Record<GitSessionKey, unknown>> = {};
+    for (const key of WsBridge.GIT_SESSION_KEYS) before[key] = session.state[key];
 
     resolveSessionGitInfo(session.id, session.state);
 
-    let changed = false;
-    for (const key of WsBridge.GIT_SESSION_KEYS) {
-      if (session.state[key] !== before[key]) {
-        changed = true;
-        break;
-      }
-    }
+    const changed = WsBridge.GIT_SESSION_KEYS.some((k) => session.state[k] !== before[k]);
 
     if (changed) {
       if (options.broadcastUpdate) {
-        this.broadcastToBrowsers(session, {
-          type: "session_update",
-          session: {
-            git_branch: session.state.git_branch,
-            is_worktree: session.state.is_worktree,
-            is_containerized: session.state.is_containerized,
-            repo_root: session.state.repo_root,
-            git_ahead: session.state.git_ahead,
-            git_behind: session.state.git_behind,
-          },
-        });
+        const gitState: Partial<SessionState> = {};
+        for (const key of WsBridge.GIT_SESSION_KEYS) (gitState as Record<string, unknown>)[key] = session.state[key];
+        this.broadcastToBrowsers(session, { type: "session_update", session: gitState });
       }
       this.persistSession(session);
     }
