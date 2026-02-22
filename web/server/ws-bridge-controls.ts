@@ -10,12 +10,7 @@ export function handleInterrupt(
   session: Session,
   sendToCLI: (session: Session, ndjson: string) => void,
 ): void {
-  const ndjson = JSON.stringify({
-    type: "control_request",
-    request_id: randomUUID(),
-    request: { subtype: "interrupt" },
-  });
-  sendToCLI(session, ndjson);
+  sendControlRequest(session, { subtype: "interrupt" }, sendToCLI);
 }
 
 export function handleSetModel(
@@ -23,12 +18,7 @@ export function handleSetModel(
   model: string,
   sendToCLI: (session: Session, ndjson: string) => void,
 ): void {
-  const ndjson = JSON.stringify({
-    type: "control_request",
-    request_id: randomUUID(),
-    request: { subtype: "set_model", model },
-  });
-  sendToCLI(session, ndjson);
+  sendControlRequest(session, { subtype: "set_model", model }, sendToCLI);
 }
 
 export function handleSetPermissionMode(
@@ -36,12 +26,7 @@ export function handleSetPermissionMode(
   mode: string,
   sendToCLI: (session: Session, ndjson: string) => void,
 ): void {
-  const ndjson = JSON.stringify({
-    type: "control_request",
-    request_id: randomUUID(),
-    request: { subtype: "set_permission_mode", mode },
-  });
-  sendToCLI(session, ndjson);
+  sendControlRequest(session, { subtype: "set_permission_mode", mode }, sendToCLI);
 }
 
 export function handleControlResponse(
