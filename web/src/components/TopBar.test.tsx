@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
 vi.mock("../api.js", () => ({
@@ -29,7 +29,7 @@ interface MockStoreState {
   resetQuickTerminal: ReturnType<typeof vi.fn>;
   sessions: Map<string, { cwd?: string; is_containerized?: boolean }>;
   sdkSessions: { sessionId: string; cwd?: string; title?: string; containerId?: string }[];
-  changedFiles: Map<string, Set<string>>;
+  gitChangedFilesCount: Map<string, number>;
   sessionNames: Map<string, string>;
   sessionSubtitles: Map<string, string>;
   editorFiles: string[];
@@ -59,7 +59,7 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     resetQuickTerminal: vi.fn(),
     sessions: new Map([["s1", { cwd: "/repo" }]]),
     sdkSessions: [],
-    changedFiles: new Map(),
+    gitChangedFilesCount: new Map(),
     sessionNames: new Map(),
     sessionSubtitles: new Map(),
     editorFiles: [],
@@ -81,13 +81,9 @@ beforeEach(() => {
 
 describe("TopBar", () => {
   it("shows diff badge count only for files within cwd", () => {
+    // gitChangedFilesCount is set by DiffPanel after filtering to cwd scope
     resetStore({
-      changedFiles: new Map([
-        [
-          "s1",
-          new Set(["/repo/src/a.ts", "/repo/src/b.ts", "/Users/stan/.claude/plans/plan.md"]),
-        ],
-      ]),
+      gitChangedFilesCount: new Map([["s1", 2]]),
     });
 
     render(<TopBar />);
@@ -97,20 +93,18 @@ describe("TopBar", () => {
 
   it("uses theme-safe classes for the diff badge in dark mode", () => {
     resetStore({
-      changedFiles: new Map([["s1", new Set(["/repo/src/a.ts"])]]),
+      gitChangedFilesCount: new Map([["s1", 1]]),
     });
     render(<TopBar />);
     const badge = screen.getByText("1");
+    // Badge uses amber Tailwind utilities, not semantic cc-warning token.
     expect(badge.className).toContain("bg-amber-100");
-    expect(badge.className).toContain("dark:bg-amber-950");
+    expect(badge.className).toContain("dark:bg-amber-900/60");
     expect(badge.className).not.toContain("bg-cc-warning");
   });
 
-  it("hides diff badge when all changed files are out of scope", () => {
-    resetStore({
-      changedFiles: new Map([["s1", new Set(["/Users/stan/.claude/plans/plan.md"])]]),
-    });
-
+  it("hides diff badge when no changed files", () => {
+    // gitChangedFilesCount not set (or 0) → no badge
     render(<TopBar />);
     expect(screen.queryByText("1")).not.toBeInTheDocument();
   });
@@ -202,54 +196,18 @@ describe("TopBar", () => {
     expect(storeState.setActiveTab).toHaveBeenCalledWith("diff");
   });
 
-  it("samples the active tab background color from the pixel below it", async () => {
+  it("marks the active tab with a primary underline indicator", () => {
+    // Flat underline tabs: the active tab gets border-cc-primary, inactive tabs get border-transparent.
     resetStore({ activeTab: "diff" });
-    const underlay = document.createElement("div");
-    underlay.style.backgroundColor = "rgb(12, 34, 56)";
-    document.body.appendChild(underlay);
-
-    const originalElementsFromPoint = (document as Document & {
-      elementsFromPoint?: (x: number, y: number) => Element[];
-    }).elementsFromPoint;
-    Object.defineProperty(document, "elementsFromPoint", {
-      configurable: true,
-      writable: true,
-      value: () => [underlay],
-    });
-
     render(<TopBar />);
 
     const diffTab = screen.getByRole("button", { name: "Diffs tab" });
-    vi.spyOn(diffTab, "getBoundingClientRect").mockReturnValue({
-      x: 10,
-      y: 10,
-      left: 10,
-      top: 10,
-      right: 110,
-      bottom: 40,
-      width: 100,
-      height: 30,
-      toJSON: () => ({}),
-    } as DOMRect);
+    const chatTab = screen.getByRole("button", { name: "Session tab" });
 
-    act(() => {
-      window.dispatchEvent(new Event("resize"));
-    });
-
-    await waitFor(() => {
-      expect(diffTab).toHaveStyle({ backgroundColor: "rgb(12, 34, 56)" });
-    });
-
-    if (originalElementsFromPoint) {
-      Object.defineProperty(document, "elementsFromPoint", {
-        configurable: true,
-        writable: true,
-        value: originalElementsFromPoint,
-      });
-    } else {
-      Reflect.deleteProperty(document as unknown as Record<string, unknown>, "elementsFromPoint");
-    }
-    underlay.remove();
+    expect(diffTab.className).toContain("border-cc-primary");
+    expect(diffTab.className).toContain("text-cc-fg");
+    expect(chatTab.className).toContain("border-transparent");
+    expect(chatTab.className).toContain("text-cc-muted");
   });
 
   it("tab buttons have accessible names", () => {

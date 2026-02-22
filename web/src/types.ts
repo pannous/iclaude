@@ -39,6 +39,8 @@ export interface TaskItem {
 
 export interface SdkSessionInfo {
   sessionId: string;
+  /** The CLI's internal session ID, used for --resume */
+  cliSessionId?: string;
   pid?: number;
   state: "starting" | "connected" | "running" | "exited";
   exitCode?: number | null;
@@ -56,14 +58,14 @@ export interface SdkSessionInfo {
   containerName?: string;
   containerImage?: string;
   name?: string;
-  /** The CLI's internal session ID, used for --resume */
-  cliSessionId?: string;
   backendType?: BackendType;
   gitBranch?: string;
   gitAhead?: number;
   gitBehind?: number;
   totalLinesAdded?: number;
   totalLinesRemoved?: number;
+  resumeSessionAt?: string;
+  forkSession?: boolean;
   /** If this session was spawned by a cron job */
   cronJobId?: string;
   /** Human-readable name of the cron job that spawned this session */

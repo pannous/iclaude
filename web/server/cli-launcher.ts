@@ -80,6 +80,10 @@ export interface SdkSessionInfo {
   cronJobId?: string;
   /** Human-readable name of the cron job that spawned this session */
   cronJobName?: string;
+  /** If session was created from an existing Claude thread/session. */
+  resumeSessionAt?: string;
+  /** Whether the resumed session used --fork-session. */
+  forkSession?: boolean;
 
   // Container fields
   /** Docker container ID when session runs inside a container */
@@ -117,6 +121,10 @@ export interface LaunchOptions {
   containerImage?: string;
   /** Runtime cwd inside the container (typically "/workspace"). */
   containerCwd?: string;
+  /** Start from a specific prior Claude session/thread point. */
+  resumeSessionAt?: string;
+  /** Fork a new Claude session when resuming from prior context. */
+  forkSession?: boolean;
 }
 
 /**
@@ -274,9 +282,9 @@ export class CliLauncher {
       backendType,
     };
 
-    // Pre-set cliSessionId so subsequent relaunches use --resume
-    if (options.resumeSessionId) {
-      info.cliSessionId = options.resumeSessionId;
+    if (options.resumeSessionAt) {
+      info.resumeSessionAt = options.resumeSessionAt;
+      info.forkSession = options.forkSession === true;
     }
 
     if (backendType === "codex") {
@@ -466,6 +474,8 @@ export class CliLauncher {
       "--print",
       "--output-format", "stream-json",
       "--input-format", "stream-json",
+      // Required on newer Claude Code versions to emit streaming chunk events.
+      "--include-partial-messages",
       "--verbose",
     ];
 
@@ -479,6 +489,12 @@ export class CliLauncher {
       for (const tool of options.allowedTools) {
         args.push("--allowedTools", tool);
       }
+    }
+    if (options.resumeSessionAt) {
+      args.push("--resume-session-at", options.resumeSessionAt);
+    }
+    if (options.forkSession) {
+      args.push("--fork-session");
     }
 
     // Always pass -p "" for headless mode. When relaunching, also pass --resume

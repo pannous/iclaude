@@ -464,8 +464,9 @@ export function Sidebar() {
   return (
     <aside className="w-[260px] h-full flex flex-col bg-cc-sidebar border-r border-cc-border">
       {/* Header */}
-      <div className="p-3 pb-2">
-        <a href="https://github.com/pannous/companion" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 mb-3 hover:opacity-80 transition-opacity">
+      <div className="p-3.5 pb-2">
+        {/* LOCAL: Link to GitHub repo */}
+        <a href="https://github.com/pannous/companion" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 mb-3 hover:opacity-80 transition-opacity">
           <img src={logoSrc} alt="" className="w-6 h-6" />
           <span className="text-[13px] font-semibold text-cc-fg tracking-tight">The Companion</span>
         </a>
@@ -569,7 +570,7 @@ export function Sidebar() {
       )}
 
       {/* Session list */}
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
+      <div className="flex-1 overflow-y-auto px-2.5 pb-2">
         {activeSessions.length === 0 && cronSessions.length === 0 && archivedSessions.length === 0 ? (
           <p className="px-3 py-8 text-xs text-cc-muted text-center leading-relaxed">
             No sessions yet.
@@ -711,7 +712,7 @@ export function Sidebar() {
                 <svg viewBox={item.viewBox} fill="currentColor" className="w-4 h-4">
                   <path d={item.iconPath} fillRule={item.fillRule} clipRule={item.clipRule} />
                 </svg>
-                <span className="text-[9px] font-medium leading-none">{item.shortLabel}</span>
+                <span className="text-[10px] font-medium leading-none">{item.shortLabel}</span>
               </button>
             );
           })}

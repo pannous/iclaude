@@ -550,11 +550,11 @@ describe("Composer layout", () => {
     expect(sendBtn.className).toContain("h-9");
   });
 
-  it("textarea uses w-full to fill flex container", () => {
+  it("textarea uses min-w-0 to fill flex container", () => {
     // Verifies the textarea fills its flex parent container.
     const { container } = render(<Composer sessionId="s1" />);
     const textarea = container.querySelector("textarea")!;
-    expect(textarea.className).toContain("w-full");
+    expect(textarea.className).toContain("min-w-0");
   });
 });
 
@@ -566,7 +566,8 @@ describe("Composer save prompt", () => {
     const textarea = container.querySelector("textarea")!;
 
     fireEvent.change(textarea, { target: { value: "Prompt body text" } });
-    fireEvent.click(screen.getByTitle("Save as prompt"));
+    // Mobile + desktop layouts render separate buttons; click the first visible one.
+    fireEvent.click(screen.getAllByTitle("Save as prompt")[0]);
     const titleInput = screen.getByPlaceholderText("Prompt title");
     fireEvent.change(titleInput, { target: { value: "My Prompt" } });
     fireEvent.click(screen.getByText("Save"));
