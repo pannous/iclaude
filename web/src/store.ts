@@ -4,7 +4,14 @@ import type { UpdateInfo, PRStatusResponse, CreationProgressEvent, LinearIssue }
 import { safeStorage } from "./utils/safe-storage.js";
 import { type TaskPanelConfig, getInitialTaskPanelConfig, getDefaultConfig, persistTaskPanelConfig, SECTION_DEFINITIONS } from "./components/task-panel-sections.js";
 
-/** Delete a key from a Map, returning the same reference if the key wasn't present. */
+// ─── Immutable collection helpers ────────────────────────────────────────────
+
+function setInMap<K, V>(map: Map<K, V>, key: K, value: V): Map<K, V> {
+  const next = new Map(map);
+  next.set(key, value);
+  return next;
+}
+
 function deleteFromMap<K, V>(map: Map<K, V>, key: K): Map<K, V> {
   if (!map.has(key)) return map;
   const next = new Map(map);
@@ -12,7 +19,13 @@ function deleteFromMap<K, V>(map: Map<K, V>, key: K): Map<K, V> {
   return next;
 }
 
-/** Delete a key from a Set, returning the same reference if the key wasn't present. */
+function addToSet<V>(set: Set<V>, value: V): Set<V> {
+  if (set.has(value)) return set;
+  const next = new Set(set);
+  next.add(value);
+  return next;
+}
+
 function deleteFromSet<V>(set: Set<V>, key: V): Set<V> {
   if (!set.has(key)) return set;
   const next = new Set(set);
@@ -469,20 +482,15 @@ export const useStore = create<AppState>((set) => ({
   },
 
   addSession: (session) =>
-    set((s) => {
-      const sessions = new Map(s.sessions);
-      sessions.set(session.session_id, session);
-      const messages = new Map(s.messages);
-      if (!messages.has(session.session_id)) messages.set(session.session_id, []);
-      return { sessions, messages };
-    }),
+    set((s) => ({
+      sessions: setInMap(s.sessions, session.session_id, session),
+      messages: s.messages.has(session.session_id) ? s.messages : setInMap(s.messages, session.session_id, []),
+    })),
 
   updateSession: (sessionId, updates) =>
     set((s) => {
-      const sessions = new Map(s.sessions);
-      const existing = sessions.get(sessionId);
-      if (existing) sessions.set(sessionId, { ...existing, ...updates });
-      return { sessions };
+      const existing = s.sessions.get(sessionId);
+      return existing ? { sessions: setInMap(s.sessions, sessionId, { ...existing, ...updates }) } : s;
     }),
 
   removeSession: (sessionId) =>
@@ -527,202 +535,112 @@ export const useStore = create<AppState>((set) => ({
     set((s) => {
       const existing = s.messages.get(sessionId) || [];
       // Deduplicate: skip if a message with same ID already exists
-      if (msg.id && existing.some((m) => m.id === msg.id)) {
-        return s;
-      }
-      const messages = new Map(s.messages);
-      messages.set(sessionId, [...existing, msg]);
-      return { messages };
+      if (msg.id && existing.some((m) => m.id === msg.id)) return s;
+      return { messages: setInMap(s.messages, sessionId, [...existing, msg]) };
     }),
 
   setMessages: (sessionId, msgs) =>
-    set((s) => {
-      const messages = new Map(s.messages);
-      messages.set(sessionId, msgs);
-      return { messages };
-    }),
+    set((s) => ({ messages: setInMap(s.messages, sessionId, msgs) })),
 
   updateLastAssistantMessage: (sessionId, updater) =>
     set((s) => {
-      const messages = new Map(s.messages);
-      const list = [...(messages.get(sessionId) || [])];
+      const list = [...(s.messages.get(sessionId) || [])];
       for (let i = list.length - 1; i >= 0; i--) {
-        if (list[i].role === "assistant") {
-          list[i] = updater(list[i]);
-          break;
-        }
+        if (list[i].role === "assistant") { list[i] = updater(list[i]); break; }
       }
-      messages.set(sessionId, list);
-      return { messages };
+      return { messages: setInMap(s.messages, sessionId, list) };
     }),
 
   setStreaming: (sessionId, text) =>
-    set((s) => {
-      const streaming = new Map(s.streaming);
-      if (text === null) {
-        streaming.delete(sessionId);
-      } else {
-        streaming.set(sessionId, text);
-      }
-      return { streaming };
-    }),
+    set((s) => ({
+      streaming: text === null ? deleteFromMap(s.streaming, sessionId) : setInMap(s.streaming, sessionId, text),
+    })),
 
   setStreamingStats: (sessionId, stats) =>
     set((s) => {
-      const streamingStartedAt = new Map(s.streamingStartedAt);
-      const streamingOutputTokens = new Map(s.streamingOutputTokens);
       if (stats === null) {
-        streamingStartedAt.delete(sessionId);
-        streamingOutputTokens.delete(sessionId);
-      } else {
-        if (stats.startedAt !== undefined) streamingStartedAt.set(sessionId, stats.startedAt);
-        if (stats.outputTokens !== undefined) streamingOutputTokens.set(sessionId, stats.outputTokens);
+        return {
+          streamingStartedAt: deleteFromMap(s.streamingStartedAt, sessionId),
+          streamingOutputTokens: deleteFromMap(s.streamingOutputTokens, sessionId),
+        };
       }
-      return { streamingStartedAt, streamingOutputTokens };
+      return {
+        streamingStartedAt: stats.startedAt !== undefined ? setInMap(s.streamingStartedAt, sessionId, stats.startedAt) : s.streamingStartedAt,
+        streamingOutputTokens: stats.outputTokens !== undefined ? setInMap(s.streamingOutputTokens, sessionId, stats.outputTokens) : s.streamingOutputTokens,
+      };
     }),
 
   addPermission: (sessionId, perm) =>
     set((s) => {
-      const pendingPermissions = new Map(s.pendingPermissions);
-      const sessionPerms = new Map(pendingPermissions.get(sessionId) || []);
-      sessionPerms.set(perm.request_id, perm);
-      pendingPermissions.set(sessionId, sessionPerms);
-      return { pendingPermissions };
+      const sessionPerms = setInMap(s.pendingPermissions.get(sessionId) || new Map(), perm.request_id, perm);
+      return { pendingPermissions: setInMap(s.pendingPermissions, sessionId, sessionPerms) };
     }),
 
   removePermission: (sessionId, requestId) =>
     set((s) => {
-      const pendingPermissions = new Map(s.pendingPermissions);
-      const sessionPerms = pendingPermissions.get(sessionId);
-      if (sessionPerms) {
-        const updated = new Map(sessionPerms);
-        updated.delete(requestId);
-        pendingPermissions.set(sessionId, updated);
-      }
-      return { pendingPermissions };
+      const sessionPerms = s.pendingPermissions.get(sessionId);
+      if (!sessionPerms) return s;
+      return { pendingPermissions: setInMap(s.pendingPermissions, sessionId, deleteFromMap(sessionPerms, requestId)) };
     }),
 
   addTask: (sessionId, task) =>
-    set((s) => {
-      const sessionTasks = new Map(s.sessionTasks);
-      const tasks = [...(sessionTasks.get(sessionId) || []), task];
-      sessionTasks.set(sessionId, tasks);
-      return { sessionTasks };
-    }),
+    set((s) => ({ sessionTasks: setInMap(s.sessionTasks, sessionId, [...(s.sessionTasks.get(sessionId) || []), task]) })),
 
   setTasks: (sessionId, tasks) =>
-    set((s) => {
-      const sessionTasks = new Map(s.sessionTasks);
-      sessionTasks.set(sessionId, tasks);
-      return { sessionTasks };
-    }),
+    set((s) => ({ sessionTasks: setInMap(s.sessionTasks, sessionId, tasks) })),
 
   updateTask: (sessionId, taskId, updates) =>
     set((s) => {
-      const sessionTasks = new Map(s.sessionTasks);
-      const tasks = sessionTasks.get(sessionId);
-      if (tasks) {
-        sessionTasks.set(
-          sessionId,
-          tasks.map((t) => (t.id === taskId ? { ...t, ...updates } : t)),
-        );
-      }
-      return { sessionTasks };
+      const tasks = s.sessionTasks.get(sessionId);
+      if (!tasks) return s;
+      return { sessionTasks: setInMap(s.sessionTasks, sessionId, tasks.map((t) => (t.id === taskId ? { ...t, ...updates } : t))) };
     }),
 
   addChangedFile: (sessionId, filePath) =>
-    set((s) => {
-      const changedFiles = new Map(s.changedFiles);
-      const files = new Set(changedFiles.get(sessionId) || []);
-      files.add(filePath);
-      changedFiles.set(sessionId, files);
-      return { changedFiles };
-    }),
+    set((s) => ({ changedFiles: setInMap(s.changedFiles, sessionId, addToSet(s.changedFiles.get(sessionId) || new Set(), filePath)) })),
 
   clearChangedFiles: (sessionId) =>
-    set((s) => {
-      const changedFiles = new Map(s.changedFiles);
-      changedFiles.delete(sessionId);
-      return { changedFiles };
-    }),
+    set((s) => ({ changedFiles: deleteFromMap(s.changedFiles, sessionId) })),
 
   setSessionName: (sessionId, name) =>
     set((s) => {
-      const sessionNames = new Map(s.sessionNames);
-      sessionNames.set(sessionId, name);
+      const sessionNames = setInMap(s.sessionNames, sessionId, name);
       safeStorage.setItem("cc-session-names", JSON.stringify(Array.from(sessionNames.entries())));
       return { sessionNames };
     }),
 
   setSessionSubtitle: (sessionId, subtitle) =>
-    set((s) => {
-      const sessionSubtitles = new Map(s.sessionSubtitles);
-      sessionSubtitles.set(sessionId, subtitle);
-      return { sessionSubtitles };
-    }),
+    set((s) => ({ sessionSubtitles: setInMap(s.sessionSubtitles, sessionId, subtitle) })),
 
   markRecentlyRenamed: (sessionId) =>
-    set((s) => {
-      const recentlyRenamed = new Set(s.recentlyRenamed);
-      recentlyRenamed.add(sessionId);
-      return { recentlyRenamed };
-    }),
+    set((s) => ({ recentlyRenamed: addToSet(s.recentlyRenamed, sessionId) })),
 
   clearRecentlyRenamed: (sessionId) =>
-    set((s) => {
-      const recentlyRenamed = new Set(s.recentlyRenamed);
-      recentlyRenamed.delete(sessionId);
-      return { recentlyRenamed };
-    }),
+    set((s) => ({ recentlyRenamed: deleteFromSet(s.recentlyRenamed, sessionId) })),
 
   setPRStatus: (sessionId, status) =>
-    set((s) => {
-      const prStatus = new Map(s.prStatus);
-      prStatus.set(sessionId, status);
-      return { prStatus };
-    }),
+    set((s) => ({ prStatus: setInMap(s.prStatus, sessionId, status) })),
 
   setLinkedLinearIssue: (sessionId, issue) =>
-    set((s) => {
-      const linkedLinearIssues = new Map(s.linkedLinearIssues);
-      if (issue) {
-        linkedLinearIssues.set(sessionId, issue);
-      } else {
-        linkedLinearIssues.delete(sessionId);
-      }
-      return { linkedLinearIssues };
-    }),
+    set((s) => ({
+      linkedLinearIssues: issue ? setInMap(s.linkedLinearIssues, sessionId, issue) : deleteFromMap(s.linkedLinearIssues, sessionId),
+    })),
 
   setMcpServers: (sessionId, servers) =>
-    set((s) => {
-      const mcpServers = new Map(s.mcpServers);
-      mcpServers.set(sessionId, servers);
-      return { mcpServers };
-    }),
+    set((s) => ({ mcpServers: setInMap(s.mcpServers, sessionId, servers) })),
 
   setToolProgress: (sessionId, toolUseId, data) =>
     set((s) => {
-      const toolProgress = new Map(s.toolProgress);
-      const sessionProgress = new Map(toolProgress.get(sessionId) || []);
-      sessionProgress.set(toolUseId, data);
-      toolProgress.set(sessionId, sessionProgress);
-      return { toolProgress };
+      const sessionProgress = setInMap(s.toolProgress.get(sessionId) || new Map(), toolUseId, data);
+      return { toolProgress: setInMap(s.toolProgress, sessionId, sessionProgress) };
     }),
 
   clearToolProgress: (sessionId, toolUseId) =>
     set((s) => {
-      const toolProgress = new Map(s.toolProgress);
-      if (toolUseId) {
-        const sessionProgress = toolProgress.get(sessionId);
-        if (sessionProgress) {
-          const updated = new Map(sessionProgress);
-          updated.delete(toolUseId);
-          toolProgress.set(sessionId, updated);
-        }
-      } else {
-        toolProgress.delete(sessionId);
-      }
-      return { toolProgress };
+      if (!toolUseId) return { toolProgress: deleteFromMap(s.toolProgress, sessionId) };
+      const sessionProgress = s.toolProgress.get(sessionId);
+      if (!sessionProgress) return s;
+      return { toolProgress: setInMap(s.toolProgress, sessionId, deleteFromMap(sessionProgress, toolUseId)) };
     }),
 
   toggleProjectCollapse: (projectKey) =>
@@ -745,32 +663,16 @@ export const useStore = create<AppState>((set) => ({
     }),
 
   setPreviousPermissionMode: (sessionId, mode) =>
-    set((s) => {
-      const previousPermissionMode = new Map(s.previousPermissionMode);
-      previousPermissionMode.set(sessionId, mode);
-      return { previousPermissionMode };
-    }),
+    set((s) => ({ previousPermissionMode: setInMap(s.previousPermissionMode, sessionId, mode) })),
 
   setConnectionStatus: (sessionId, status) =>
-    set((s) => {
-      const connectionStatus = new Map(s.connectionStatus);
-      connectionStatus.set(sessionId, status);
-      return { connectionStatus };
-    }),
+    set((s) => ({ connectionStatus: setInMap(s.connectionStatus, sessionId, status) })),
 
   setCliConnected: (sessionId, connected) =>
-    set((s) => {
-      const cliConnected = new Map(s.cliConnected);
-      cliConnected.set(sessionId, connected);
-      return { cliConnected };
-    }),
+    set((s) => ({ cliConnected: setInMap(s.cliConnected, sessionId, connected) })),
 
   setSessionStatus: (sessionId, status) =>
-    set((s) => {
-      const sessionStatus = new Map(s.sessionStatus);
-      sessionStatus.set(sessionId, status);
-      return { sessionStatus };
-    }),
+    set((s) => ({ sessionStatus: setInMap(s.sessionStatus, sessionId, status) })),
 
   setUpdateInfo: (info) => set({ updateInfo: info }),
   dismissUpdate: (version) => {
@@ -782,20 +684,10 @@ export const useStore = create<AppState>((set) => ({
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   markChatTabReentry: (sessionId) =>
-    set((s) => {
-      const chatTabReentryTickBySession = new Map(s.chatTabReentryTickBySession);
-      const nextTick = (chatTabReentryTickBySession.get(sessionId) ?? 0) + 1;
-      chatTabReentryTickBySession.set(sessionId, nextTick);
-      return { chatTabReentryTickBySession };
-    }),
-
+    set((s) => ({ chatTabReentryTickBySession: setInMap(s.chatTabReentryTickBySession, sessionId, (s.chatTabReentryTickBySession.get(sessionId) ?? 0) + 1) })),
 
   setDiffPanelSelectedFile: (sessionId, filePath) =>
-    set((s) => {
-      const diffPanelSelectedFile = new Map(s.diffPanelSelectedFile);
-      diffPanelSelectedFile.set(sessionId, filePath);
-      return { diffPanelSelectedFile };
-    }),
+    set((s) => ({ diffPanelSelectedFile: setInMap(s.diffPanelSelectedFile, sessionId, filePath) })),
 
   openSkill: (slug) =>
     set((s) => {
@@ -811,29 +703,15 @@ export const useStore = create<AppState>((set) => ({
     }),
 
   setEditorOpenFile: (sessionId, filePath) =>
-    set((s) => {
-      const editorOpenFile = new Map(s.editorOpenFile);
-      if (filePath) {
-        editorOpenFile.set(sessionId, filePath);
-      } else {
-        editorOpenFile.delete(sessionId);
-      }
-      return { editorOpenFile };
-    }),
+    set((s) => ({
+      editorOpenFile: filePath ? setInMap(s.editorOpenFile, sessionId, filePath) : deleteFromMap(s.editorOpenFile, sessionId),
+    })),
 
   setEditorUrl: (sessionId, url) => // LOCAL
-    set((s) => {
-      const editorUrl = new Map(s.editorUrl);
-      editorUrl.set(sessionId, url);
-      return { editorUrl };
-    }),
+    set((s) => ({ editorUrl: setInMap(s.editorUrl, sessionId, url) })),
 
   setEditorLoading: (sessionId, loading) =>
-    set((s) => {
-      const editorLoading = new Map(s.editorLoading);
-      editorLoading.set(sessionId, loading);
-      return { editorLoading };
-    }),
+    set((s) => ({ editorLoading: setInMap(s.editorLoading, sessionId, loading) })),
 
   openFileInEditor: (filePath) =>
     set((s) => {
