@@ -265,80 +265,40 @@ interface AppState {
   reset: () => void;
 }
 
-function getInitialSessionNames(): Map<string, string> {
-  if (typeof window === "undefined") return new Map();
+// ─── Storage initialization helpers ──────────────────────────────────────────
+
+function initBool(key: string, fallback: boolean | (() => boolean)): boolean {
+  if (typeof window === "undefined") return typeof fallback === "function" ? fallback() : fallback;
+  const stored = safeStorage.getItem(key);
+  if (stored !== null) return stored === "true";
+  return typeof fallback === "function" ? fallback() : fallback;
+}
+
+function initString(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  return safeStorage.getItem(key) || null;
+}
+
+function initParsed<T>(key: string, parse: (raw: string) => T, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
   try {
-    return new Map(JSON.parse(safeStorage.getItem("cc-session-names") || "[]"));
+    const raw = safeStorage.getItem(key);
+    return raw ? parse(raw) : fallback;
   } catch {
-    return new Map();
+    return fallback;
   }
 }
 
-function getInitialSessionId(): string | null {
-  if (typeof window === "undefined") return null;
-  return safeStorage.getItem("cc-current-session") || null;
-}
-
-function getInitialDarkMode(): boolean {
-  if (typeof window === "undefined") return false;
-  const stored = safeStorage.getItem("cc-dark-mode");
-  if (stored !== null) return stored === "true";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
-
-function getInitialNotificationSound(): boolean {
-  if (typeof window === "undefined") return true;
-  const stored = safeStorage.getItem("cc-notification-sound");
-  if (stored !== null) return stored === "true";
-  return true;
-}
-
-function getInitialYoloMode(): boolean {
-  if (typeof window === "undefined") return true;
-  const stored = safeStorage.getItem("cc-yolo-mode");
-  if (stored !== null) return stored === "true";
-  return true;
-}
-
-function getInitialNotificationDesktop(): boolean {
-  if (typeof window === "undefined") return false;
-  const stored = safeStorage.getItem("cc-notification-desktop");
-  if (stored !== null) return stored === "true";
-  return false;
-}
-
-function getInitialDismissedVersion(): string | null {
-  if (typeof window === "undefined") return null;
-  return safeStorage.getItem("cc-update-dismissed") || null;
-}
-
-function getInitialCollapsedProjects(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    return new Set(JSON.parse(safeStorage.getItem("cc-collapsed-projects") || "[]"));
-  } catch {
-    return new Set();
-  }
-}
-
-function getInitialQuickTerminalPlacement(): QuickTerminalPlacement {
-  if (typeof window === "undefined") return "bottom";
-  const stored = safeStorage.getItem("cc-terminal-placement");
-  if (stored === "top" || stored === "right" || stored === "bottom" || stored === "left") return stored;
-  return "bottom";
-}
-
-function getInitialDiffBase(): DiffBase {
-  if (typeof window === "undefined") return "last-commit";
-  const stored = safeStorage.getItem("cc-diff-base");
-  if (stored === "last-commit" || stored === "default-branch") return stored;
-  return "last-commit";
+function initEnum<T extends string>(key: string, valid: readonly T[], fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  const stored = safeStorage.getItem(key) as T;
+  return valid.includes(stored) ? stored : fallback;
 }
 
 export const useStore = create<AppState>((set) => ({
   sessions: new Map(),
   sdkSessions: [],
-  currentSessionId: getInitialSessionId(),
+  currentSessionId: initString("cc-current-session"),
   messages: new Map(),
   streaming: new Map(),
   streamingStartedAt: new Map(),
@@ -351,25 +311,25 @@ export const useStore = create<AppState>((set) => ({
   sessionTasks: new Map(),
   changedFiles: new Map(),
   diffPanelSelectedFile: new Map(),
-  sessionNames: getInitialSessionNames(),
+  sessionNames: initParsed("cc-session-names", (r) => new Map(JSON.parse(r) as [string, string][]), new Map<string, string>()),
   sessionSubtitles: new Map(),
   recentlyRenamed: new Set(),
   prStatus: new Map(),
   linkedLinearIssues: new Map(),
   mcpServers: new Map(),
   toolProgress: new Map(),
-  collapsedProjects: getInitialCollapsedProjects(),
+  collapsedProjects: initParsed("cc-collapsed-projects", (r) => new Set(JSON.parse(r) as string[]), new Set<string>()),
   creationProgress: null,
   creationError: null,
   sessionCreating: false,
   sessionCreatingBackend: null,
   updateInfo: null,
-  updateDismissedVersion: getInitialDismissedVersion(),
+  updateDismissedVersion: initString("cc-update-dismissed"),
   updateOverlayActive: false,
-  darkMode: getInitialDarkMode(),
-  notificationSound: getInitialNotificationSound(),
-  yoloMode: getInitialYoloMode(),
-  notificationDesktop: getInitialNotificationDesktop(),
+  darkMode: initBool("cc-dark-mode", () => typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches),
+  notificationSound: initBool("cc-notification-sound", true),
+  yoloMode: initBool("cc-yolo-mode", true),
+  notificationDesktop: initBool("cc-notification-desktop", false),
   sidebarOpen: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
   taskPanelOpen: typeof window !== "undefined" ? window.innerWidth >= 1024 : true,
   taskPanelConfig: getInitialTaskPanelConfig(),
@@ -388,10 +348,10 @@ export const useStore = create<AppState>((set) => ({
   quickTerminalOpen: false,
   quickTerminalTabs: [],
   activeQuickTerminalTabId: null,
-  quickTerminalPlacement: getInitialQuickTerminalPlacement(),
+  quickTerminalPlacement: initEnum("cc-terminal-placement", ["top", "right", "bottom", "left"] as const, "bottom"),
   quickTerminalNextHostIndex: 1,
   quickTerminalNextDockerIndex: 1,
-  diffBase: getInitialDiffBase(),
+  diffBase: initEnum("cc-diff-base", ["last-commit", "default-branch"] as const, "last-commit"),
   terminalOpen: false,
   terminalCwd: null,
   terminalId: null,
@@ -1007,10 +967,10 @@ export const useStore = create<AppState>((set) => ({
       quickTerminalOpen: false,
       quickTerminalTabs: [],
       activeQuickTerminalTabId: null,
-      quickTerminalPlacement: getInitialQuickTerminalPlacement(),
+      quickTerminalPlacement: initEnum("cc-terminal-placement", ["top", "right", "bottom", "left"] as const, "bottom"),
       quickTerminalNextHostIndex: 1,
       quickTerminalNextDockerIndex: 1,
-      diffBase: getInitialDiffBase(),
+      diffBase: initEnum("cc-diff-base", ["last-commit", "default-branch"] as const, "last-commit"),
       terminalOpen: false,
       terminalCwd: null,
       terminalId: null,
