@@ -1,5 +1,4 @@
 import {
-  mkdirSync,
   readdirSync,
   readFileSync,
   writeFileSync,
@@ -7,7 +6,7 @@ import {
   existsSync,
 } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { slugify, companionDir, companionFilePath } from "./utils.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -54,32 +53,16 @@ export interface EnvUpdateFields {
 
 // ─── Paths ──────────────────────────────────────────────────────────────────
 
-const COMPANION_DIR = join(homedir(), ".companion");
-const ENVS_DIR = join(COMPANION_DIR, "envs");
-
-function ensureDir(): void {
-  mkdirSync(ENVS_DIR, { recursive: true });
-}
+const ENVS_DIR = companionDir("envs");
 
 function filePath(slug: string): string {
-  return join(ENVS_DIR, `${slug}.json`);
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+  return companionFilePath("envs", slug);
 }
 
 // ─── CRUD ───────────────────────────────────────────────────────────────────
 
 export function listEnvs(): CompanionEnv[] {
-  ensureDir();
+
   try {
     const files = readdirSync(ENVS_DIR).filter((f) => f.endsWith(".json"));
     const envs: CompanionEnv[] = [];
@@ -99,7 +82,7 @@ export function listEnvs(): CompanionEnv[] {
 }
 
 export function getEnv(slug: string): CompanionEnv | null {
-  ensureDir();
+
   try {
     const raw = readFileSync(filePath(slug), "utf-8");
     return JSON.parse(raw) as CompanionEnv;
@@ -133,7 +116,7 @@ export function createEnv(
   const slug = slugify(name.trim());
   if (!slug) throw new Error("Environment name must contain alphanumeric characters");
 
-  ensureDir();
+
   if (existsSync(filePath(slug))) {
     throw new Error(`An environment with a similar name already exists ("${slug}")`);
   }
@@ -164,7 +147,7 @@ export function updateEnv(
   slug: string,
   updates: EnvUpdateFields,
 ): CompanionEnv | null {
-  ensureDir();
+
   const existing = getEnv(slug);
   if (!existing) return null;
 
@@ -211,7 +194,7 @@ export function updateBuildStatus(
   status: CompanionEnv["buildStatus"],
   opts?: { error?: string; imageTag?: string },
 ): CompanionEnv | null {
-  ensureDir();
+
   const existing = getEnv(slug);
   if (!existing) return null;
 
@@ -230,7 +213,7 @@ export function updateBuildStatus(
 }
 
 export function deleteEnv(slug: string): boolean {
-  ensureDir();
+
   if (!existsSync(filePath(slug))) return false;
   try {
     unlinkSync(filePath(slug));

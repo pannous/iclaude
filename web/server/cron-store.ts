@@ -1,5 +1,4 @@
 import {
-  mkdirSync,
   readdirSync,
   readFileSync,
   writeFileSync,
@@ -7,37 +6,20 @@ import {
   existsSync,
 } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import type { CronJob, CronJobCreateInput } from "./cron-types.js";
+import { slugify, companionDir, companionFilePath } from "./utils.js";
 
 // ─── Paths ──────────────────────────────────────────────────────────────────
 
-const COMPANION_DIR = join(homedir(), ".companion");
-const CRON_DIR = join(COMPANION_DIR, "cron");
-
-function ensureDir(): void {
-  mkdirSync(CRON_DIR, { recursive: true });
-}
+const CRON_DIR = companionDir("cron");
 
 function filePath(id: string): string {
-  return join(CRON_DIR, `${id}.json`);
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+  return companionFilePath("cron", id);
 }
 
 // ─── CRUD ───────────────────────────────────────────────────────────────────
 
 export function listJobs(): CronJob[] {
-  ensureDir();
   try {
     const files = readdirSync(CRON_DIR).filter((f) => f.endsWith(".json"));
     const jobs: CronJob[] = [];
@@ -57,7 +39,6 @@ export function listJobs(): CronJob[] {
 }
 
 export function getJob(id: string): CronJob | null {
-  ensureDir();
   try {
     const raw = readFileSync(filePath(id), "utf-8");
     return JSON.parse(raw) as CronJob;
@@ -75,7 +56,6 @@ export function createJob(data: CronJobCreateInput): CronJob {
   const id = slugify(data.name.trim());
   if (!id) throw new Error("Job name must contain alphanumeric characters");
 
-  ensureDir();
   if (existsSync(filePath(id))) {
     throw new Error(`A job with a similar name already exists ("${id}")`);
   }
@@ -101,7 +81,6 @@ export function updateJob(
   id: string,
   updates: Partial<CronJob>,
 ): CronJob | null {
-  ensureDir();
   const existing = getJob(id);
   if (!existing) return null;
 
@@ -138,7 +117,6 @@ export function updateJob(
 }
 
 export function deleteJob(id: string): boolean {
-  ensureDir();
   if (!existsSync(filePath(id))) return false;
   try {
     unlinkSync(filePath(id));
