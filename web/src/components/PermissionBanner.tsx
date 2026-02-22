@@ -5,7 +5,7 @@ import { useStore } from "../store.js";
 import { sendToSession } from "../ws.js";
 import type { PermissionRequest } from "../types.js";
 import type { PermissionUpdate } from "../../server/session-types.js";
-import { DiffViewer } from "./DiffViewer.js";
+import { BashDisplay, EditDisplay, WriteDisplay, ReadDisplay, GlobDisplay, GrepDisplay, GenericDisplay } from "./ToolDisplays.js";
 
 /** Human-readable label for a permission suggestion */
 function suggestionLabel(s: PermissionUpdate): string {
@@ -185,19 +185,6 @@ function ToolInputDisplay({
   return <GenericDisplay input={input} description={description} />;
 }
 
-function BashDisplay({ input }: { input: Record<string, unknown> }) {
-  const command = typeof input.command === "string" ? input.command : "";
-  const desc = typeof input.description === "string" ? input.description : "";
-
-  return (
-    <div className="space-y-1.5">
-      {desc && <div className="text-xs text-cc-muted">{desc}</div>}
-      <pre className="text-xs text-cc-fg font-mono-code bg-cc-code-bg/30 rounded-lg px-2 sm:px-3 py-2 max-h-32 overflow-y-auto overflow-x-auto whitespace-pre-wrap break-words">
-        <span className="text-cc-muted select-none">$ </span>{command}
-      </pre>
-    </div>
-  );
-}
 
 function AskUserQuestionDisplay({
   input,
@@ -396,66 +383,6 @@ function AskUserQuestionDisplay({
   );
 }
 
-function EditDisplay({ input }: { input: Record<string, unknown> }) {
-  const filePath = String(input.file_path || "");
-  const oldStr = String(input.old_string || "");
-  const newStr = String(input.new_string || "");
-
-  return (
-    <DiffViewer
-      oldText={oldStr}
-      newText={newStr}
-      fileName={filePath}
-      mode="compact"
-    />
-  );
-}
-
-function WriteDisplay({ input }: { input: Record<string, unknown> }) {
-  const filePath = String(input.file_path || "");
-  const content = String(input.content || "");
-
-  return (
-    <DiffViewer
-      newText={content}
-      fileName={filePath}
-      mode="compact"
-    />
-  );
-}
-
-function ReadDisplay({ input }: { input: Record<string, unknown> }) {
-  const filePath = String(input.file_path || "");
-  return (
-    <div className="text-xs text-cc-muted font-mono-code bg-cc-code-bg/30 rounded-lg px-3 py-2">
-      {filePath}
-    </div>
-  );
-}
-
-function GlobDisplay({ input }: { input: Record<string, unknown> }) {
-  const pattern = typeof input.pattern === "string" ? input.pattern : "";
-  const path = typeof input.path === "string" ? input.path : "";
-  return (
-    <div className="text-xs font-mono-code bg-cc-code-bg/30 rounded-lg px-3 py-2 space-y-0.5">
-      <div className="text-cc-fg">{pattern}</div>
-      {path && <div className="text-cc-muted">{path}</div>}
-    </div>
-  );
-}
-
-function GrepDisplay({ input }: { input: Record<string, unknown> }) {
-  const pattern = typeof input.pattern === "string" ? input.pattern : "";
-  const path = typeof input.path === "string" ? input.path : "";
-  const glob = typeof input.glob === "string" ? input.glob : "";
-  return (
-    <div className="text-xs font-mono-code bg-cc-code-bg/30 rounded-lg px-3 py-2 space-y-0.5">
-      <div className="text-cc-fg">{pattern}</div>
-      {path && <div className="text-cc-muted">{path}</div>}
-      {glob && <div className="text-cc-muted">{glob}</div>}
-    </div>
-  );
-}
 
 function ExitPlanModeDisplay({ input }: { input: Record<string, unknown> }) {
   const plan = typeof input.plan === "string" ? input.plan : "";
@@ -519,37 +446,3 @@ function ExitPlanModeDisplay({ input }: { input: Record<string, unknown> }) {
   );
 }
 
-function GenericDisplay({
-  input,
-  description,
-}: {
-  input: Record<string, unknown>;
-  description?: string;
-}) {
-  const entries = Object.entries(input).filter(
-    ([, v]) => v !== undefined && v !== null && v !== "",
-  );
-
-  if (entries.length === 0 && description) {
-    return <div className="text-xs text-cc-fg">{description}</div>;
-  }
-
-  return (
-    <div className="space-y-1">
-      {description && <div className="text-xs text-cc-muted mb-1">{description}</div>}
-      <div className="bg-cc-code-bg/30 rounded-lg px-3 py-2 space-y-1">
-        {entries.map(([key, value]) => {
-          const displayValue = typeof value === "string"
-            ? value.length > 200 ? value.slice(0, 200) + "..." : value
-            : JSON.stringify(value);
-          return (
-            <div key={key} className="flex gap-2 text-[11px] font-mono-code">
-              <span className="text-cc-muted shrink-0">{key}:</span>
-              <span className="text-cc-fg break-all">{displayValue}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
