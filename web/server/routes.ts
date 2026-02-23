@@ -279,6 +279,7 @@ export function createRoutes(
 
       // Pre-load conversation history from CLI session file so the browser
       // sees it immediately, before system.init arrives from the CLI.
+      // Covers both paths: resumeSessionAt (HomePage branching) and resumeSessionId (Sidebar resume).
       const resumeCliId = resumeSessionAt || body.resumeSessionId;
       if (resumeCliId) {
         wsBridge.initializeResumedSession(session.sessionId, resumeCliId, cwd);
@@ -612,6 +613,7 @@ export function createRoutes(
 
         // Pre-load conversation history from CLI session file so the browser
         // sees it immediately, before system.init arrives from the CLI.
+        // Covers both paths: resumeSessionAt (HomePage branching) and resumeSessionId (Sidebar resume).
         const resumeCliId = resumeSessionAt || body.resumeSessionId;
         if (resumeCliId) {
           wsBridge.initializeResumedSession(session.sessionId, resumeCliId, cwd);

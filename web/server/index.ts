@@ -94,6 +94,8 @@ wsBridge.onSessionGitInfoReadyCallback((sessionId, cwd, branch) => {
 wsBridge.onSessionInfoLookupCallback((sessionId) => {
   const info = launcher.getSession(sessionId);
   if (!info) return null;
+  // Fall back to resumeSessionAt: for resumed sessions, cliSessionId isn't set until
+  // system.init arrives (which requires user input), but we need the ID now to load history.
   return { cliSessionId: info.cliSessionId || info.resumeSessionAt, cwd: info.cwd };
 });
 
@@ -219,6 +221,7 @@ const server = Bun.serve<SocketData>({
       if (data.kind === "cli") {
         const info = launcher.getSession(data.sessionId);
         wsBridge.handleCLIOpen(ws, data.sessionId, {
+          // Same resumeSessionAt fallback: lets handleCLIOpen load history on CLI reconnect
           cliSessionId: info?.cliSessionId || info?.resumeSessionAt,
           cwd: info?.cwd,
         });
