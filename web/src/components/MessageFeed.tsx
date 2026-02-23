@@ -44,6 +44,36 @@ type FeedEntry =
   | ToolMsgGroup
   | SubagentGroup;
 
+function mergeDuplicateMessage(existing: ChatMessage, incoming: ChatMessage): ChatMessage {
+  if (existing.role === "assistant" && incoming.role === "assistant") {
+    return {
+      ...existing,
+      ...incoming,
+      content: incoming.content || existing.content,
+      contentBlocks: (incoming.contentBlocks && incoming.contentBlocks.length > 0)
+        ? incoming.contentBlocks
+        : existing.contentBlocks,
+      timestamp: Math.max(existing.timestamp || 0, incoming.timestamp || 0) || incoming.timestamp || existing.timestamp,
+    };
+  }
+  return (incoming.timestamp || 0) >= (existing.timestamp || 0) ? incoming : existing;
+}
+
+function dedupeMessagesById(messages: ChatMessage[]): ChatMessage[] {
+  const deduped: ChatMessage[] = [];
+  const indexById = new Map<string, number>();
+  for (const msg of messages) {
+    const existingIndex = indexById.get(msg.id);
+    if (existingIndex === undefined) {
+      indexById.set(msg.id, deduped.length);
+      deduped.push(msg);
+      continue;
+    }
+    deduped[existingIndex] = mergeDuplicateMessage(deduped[existingIndex], msg);
+  }
+  return deduped;
+}
+
 /**
  * Get the dominant tool name if this message is "tool-only"
  * (assistant message whose contentBlocks are ALL tool_use of the same name).
@@ -277,12 +307,12 @@ function FeedEntries({ entries }: { entries: FeedEntry[] }) {
     <>
       {entries.map((entry, i) => {
         if (entry.kind === "tool_msg_group") {
-          return <ToolMessageGroup key={entry.firstId || i} group={entry} />;
+          return <ToolMessageGroup key={`tool:${entry.firstId}:${i}`} group={entry} />;
         }
         if (entry.kind === "subagent") {
-          return <SubagentContainer key={entry.taskToolUseId} group={entry} />;
+          return <SubagentContainer key={`subagent:${entry.taskToolUseId}:${i}`} group={entry} />;
         }
-        return <MessageBubble key={entry.msg.id} message={entry.msg} />;
+        return <MessageBubble key={`message:${entry.msg.id}:${i}`} message={entry.msg} />;
       })}
     </>
   );
@@ -396,20 +426,8 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
   const canLoadResumeHistory = resumeSourceSessionId.length > 0;
   const resumeModeLabel = sdkSession?.forkSession ? "Forked from" : "Continuing from";
   const mergedMessages = useMemo(() => {
-    if (resumeHistoryMessages.length === 0) return messages;
-    const deduped: ChatMessage[] = [];
-    const seen = new Set<string>();
-    for (const msg of resumeHistoryMessages) {
-      if (seen.has(msg.id)) continue;
-      seen.add(msg.id);
-      deduped.push(msg);
-    }
-    for (const msg of messages) {
-      if (seen.has(msg.id)) continue;
-      seen.add(msg.id);
-      deduped.push(msg);
-    }
-    return deduped;
+    if (resumeHistoryMessages.length === 0) return dedupeMessagesById(messages);
+    return dedupeMessagesById([...resumeHistoryMessages, ...messages]);
   }, [resumeHistoryMessages, messages]);
 
   const grouped = useMemo(() => groupMessages(mergedMessages), [mergedMessages]);

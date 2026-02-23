@@ -222,6 +222,25 @@ describe("MessageFeed - message rendering", () => {
     expect(screen.getByText("Session restored")).toBeTruthy();
     expect(screen.getByText("Continue")).toBeTruthy();
   });
+
+  it("deduplicates duplicate message IDs in normal sessions and avoids key warnings", () => {
+    const sid = "test-duplicate-ids";
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    setStoreMessages(sid, [
+      makeMessage({ id: "msg_dup", role: "assistant", content: "Old assistant text" }),
+      makeMessage({ id: "msg_dup", role: "assistant", content: "Newest assistant text" }),
+    ]);
+
+    render(<MessageFeed sessionId={sid} />);
+
+    expect(screen.queryByText("Old assistant text")).toBeNull();
+    expect(screen.getByText("Newest assistant text")).toBeTruthy();
+    const keyWarnings = consoleErrorSpy.mock.calls
+      .map((call) => call.map((arg) => String(arg)).join(" "))
+      .filter((msg) => msg.includes("Encountered two children with the same key"));
+    expect(keyWarnings).toHaveLength(0);
+    consoleErrorSpy.mockRestore();
+  });
 });
 
 // ─── Streaming assistant bubble ──────────────────────────────────────────────
