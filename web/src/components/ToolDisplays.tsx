@@ -77,11 +77,12 @@ export function ReadDisplay({ input }: { input: ToolInput }) {
 
   return (
     <div className="space-y-1">
-      <div
-        className="text-xs text-cc-muted font-mono-code hover:text-cc-primary cursor-pointer transition-colors"
+      <button
+        type="button"
+        className="text-xs text-cc-muted font-mono-code hover:text-cc-primary cursor-pointer transition-colors text-left"
         onClick={() => filePath && useStore.getState().openFileInEditor(filePath)}
         title={`Open ${filePath} in editor`}
-      >{filePath}</div>
+      >{filePath}</button>
       {(offset != null || limit != null) && (
         <div className="flex gap-2 text-[10px] text-cc-muted">
           {offset != null && <span>offset: {offset}</span>}
