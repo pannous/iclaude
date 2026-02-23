@@ -22,10 +22,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
 
   if (message.role === "user") {
     return (
-      <div className="group/msg flex justify-end gap-1.5 items-start animate-[fadeSlideIn_0.2s_ease-out]">
-        <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity mt-2">
-          <CopyButton getText={() => messageToText(message)} title="Copy message" />
-        </div>
+      <div className="flex justify-end gap-1.5 items-start animate-[fadeSlideIn_0.2s_ease-out]">
         <div className="max-w-[85%] sm:max-w-[80%] px-3 sm:px-4 py-2.5 rounded-[14px] rounded-br-[4px] bg-cc-user-bubble text-cc-fg">
           {message.images && message.images.length > 0 && (
             <div className="flex gap-2 flex-wrap mb-2">
@@ -42,6 +39,9 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
           <div className="text-[13px] sm:text-[14px] leading-relaxed break-words">
             <MarkdownContent text={message.content} />
           </div>
+        </div>
+        <div className="mt-2">
+          <CopyButton getText={() => messageToText(message)} title="Copy message" />
         </div>
       </div>
     );
@@ -122,7 +122,7 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
 
   if (blocks.length === 0 && message.content) {
     return (
-      <div className="group/msg flex items-start gap-3">
+      <div className="flex items-start gap-3">
         <AssistantAvatar />
         <div className="flex-1 min-w-0">
           {cleanContent && <MarkdownContent text={cleanContent} showCursor={!!message.isStreaming} />}
@@ -147,7 +147,7 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
             </div>
           )}
         </div>
-        <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity mt-0.5">
+        <div className="mt-0.5">
           <CopyButton getText={getText} title="Copy response" />
         </div>
       </div>
@@ -155,7 +155,7 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
   }
 
   return (
-    <div className="group/msg flex items-start gap-3">
+    <div className="flex items-start gap-3">
       <AssistantAvatar />
       <div className="flex-1 min-w-0 space-y-3">
         {grouped.map((group, i) => {
@@ -190,7 +190,7 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
         )}
       </div>
       {hasText && (
-        <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity mt-0.5">
+        <div className="mt-0.5">
           <CopyButton getText={getText} title="Copy response" />
         </div>
       )}
