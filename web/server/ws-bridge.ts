@@ -56,6 +56,15 @@ import {
   handlePermissionResponse,
 } from "./ws-bridge-browser.js";
 
+// LOCAL: Known system-injected XML tags that wrap (or replace) user content.
+// Matches the tag AND its enclosed text so both are removed before title generation.
+const SYSTEM_TAG_RE = /<\/?(local-command-caveat|local-command-stdout|command-name|command-message|command-args|system-reminder|user-prompt-submit-hook|antml:[a-z_]+)[^>]*>/g;
+
+/** Strip Claude Code system-injected XML tags and their content from a message. */
+export function stripSystemTags(message: string): string {
+  return message.replace(SYSTEM_TAG_RE, "").replace(/\s+/g, " ").trim();
+}
+
 // LOCAL: Truncate a message to use as a session title (max ~50 chars at word boundary).
 export function truncateTitle(message: string): string {
   const cleaned = message.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
@@ -330,7 +339,12 @@ export class WsBridge {
               textContent = textBlocks.map((block: any) => block.text || "").join("\n").trim();
             }
 
-            // Skip empty user messages (e.g., messages with only tool_result blocks)
+            // Strip system-injected XML tags (e.g. <local-command-caveat>) from
+            // CLI session history so they don't leak into titles or chat display.
+            textContent = stripSystemTags(textContent);
+
+            // Skip empty user messages (e.g., messages with only tool_result blocks
+            // or messages that were entirely system tags)
             if (!textContent) {
               continue;
             }
@@ -489,7 +503,7 @@ export class WsBridge {
     if (session.title) return session.title;
     const firstUserMsg = session.messageHistory.find((m) => m.type === "user_message");
     if (firstUserMsg && firstUserMsg.type === "user_message") {
-      return firstUserMsg.content.slice(0, 60) + (firstUserMsg.content.length > 60 ? "..." : "");
+      return truncateTitle(firstUserMsg.content);
     }
     return undefined;
   }
@@ -1124,7 +1138,11 @@ export class WsBridge {
         (m) => m.type === "user_message",
       );
       if (firstUserMsg && firstUserMsg.type === "user_message") {
-        this.onFirstTurnCompleted(session.id, firstUserMsg.content);
+        // Strip system-injected tags before passing to auto-namer
+        const cleanContent = stripSystemTags(firstUserMsg.content);
+        if (cleanContent) {
+          this.onFirstTurnCompleted(session.id, cleanContent);
+        }
       }
     }
   }

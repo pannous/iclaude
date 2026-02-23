@@ -4,7 +4,7 @@ const mockExecSync = vi.hoisted(() => vi.fn());
 vi.mock("node:child_process", () => ({ execSync: mockExecSync }));
 vi.mock("node:crypto", () => ({ randomUUID: () => "test-uuid" }));
 
-import { WsBridge, truncateTitle, type SocketData } from "./ws-bridge.js";
+import { WsBridge, truncateTitle, stripSystemTags, type SocketData } from "./ws-bridge.js";
 import { SessionStore } from "./session-store.js";
 import { containerManager } from "./container-manager.js";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -3312,6 +3312,40 @@ describe("MCP control messages", () => {
     expect(sent.request.subtype).toBe("mcp_set_servers");
     expect(sent.request.servers).toEqual(servers);
     vi.useRealTimers();
+  });
+});
+
+// ─── stripSystemTags ──────────────────────────────────────────────────────────
+
+describe("stripSystemTags", () => {
+  it("strips <local-command-caveat> tags and their closing tags", () => {
+    const input = '<local-command-caveat>Caveat: The messages below were generated</local-command-caveat> actual user message';
+    expect(stripSystemTags(input)).toBe("Caveat: The messages below were generated actual user message");
+  });
+
+  it("strips <local-command-stdout> tags", () => {
+    expect(stripSystemTags("<local-command-stdout>Enabled plan mode</local-command-stdout>")).toBe("Enabled plan mode");
+  });
+
+  it("strips <command-name> and <command-args> tags", () => {
+    const input = '<command-name>/plan</command-name> <command-message>plan</command-message> <command-args></command-args>';
+    expect(stripSystemTags(input)).toBe("/plan plan");
+  });
+
+  it("strips <system-reminder> tags", () => {
+    expect(stripSystemTags("<system-reminder>reminder text</system-reminder>")).toBe("reminder text");
+  });
+
+  it("returns empty string when content is only system tags", () => {
+    expect(stripSystemTags("<local-command-caveat></local-command-caveat>")).toBe("");
+  });
+
+  it("preserves non-system HTML tags", () => {
+    expect(stripSystemTags("Hello <b>world</b>")).toBe("Hello <b>world</b>");
+  });
+
+  it("passes through plain text unchanged", () => {
+    expect(stripSystemTags("Fix the login bug")).toBe("Fix the login bug");
   });
 });
 

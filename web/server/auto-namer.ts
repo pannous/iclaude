@@ -3,7 +3,11 @@ import { DEFAULT_OPENROUTER_MODEL, getSettings } from "./settings-manager.js";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 function sanitizeTitle(raw: string): string | null {
-  const title = raw.replace(/^"|"$/g, "").replace(/^'|'$/g, "").trim();
+  const title = raw
+    .replace(/<[^>]*>/g, "")          // strip any XML/HTML tags from AI output
+    .replace(/^"|"$/g, "")
+    .replace(/^'|'$/g, "")
+    .trim();
   if (!title || title.length >= 100) return null;
   return title;
 }
@@ -46,7 +50,11 @@ export async function generateSessionTitle(
   }
 
   const model = settings.openrouterModel?.trim() || DEFAULT_OPENROUTER_MODEL;
-  const truncated = firstUserMessage.slice(0, 500);
+  // Strip system-injected XML tags before sending to the naming model so they
+  // don't pollute the generated title (e.g. <local-command-caveat>).
+  const cleaned = firstUserMessage.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+  const truncated = cleaned.slice(0, 500);
+  if (!truncated) return null;
   const userPrompt = `Generate a concise 3-5 word session title for this user request. Output only the title.\n\nRequest: ${truncated}`;
 
   const controller = new AbortController();
