@@ -277,6 +277,13 @@ export function createRoutes(
         forkSession,
       });
 
+      // Pre-load conversation history from CLI session file so the browser
+      // sees it immediately, before system.init arrives from the CLI.
+      const resumeCliId = resumeSessionAt || body.resumeSessionId;
+      if (resumeCliId) {
+        wsBridge.initializeResumedSession(session.sessionId, resumeCliId, cwd);
+      }
+
       // Re-track container with real session ID and mark session as containerized
       // so the bridge preserves the host cwd for sidebar grouping
       if (containerInfo) {
@@ -602,6 +609,13 @@ export function createRoutes(
           resumeSessionAt,
           forkSession,
         });
+
+        // Pre-load conversation history from CLI session file so the browser
+        // sees it immediately, before system.init arrives from the CLI.
+        const resumeCliId = resumeSessionAt || body.resumeSessionId;
+        if (resumeCliId) {
+          wsBridge.initializeResumedSession(session.sessionId, resumeCliId, cwd);
+        }
 
         // Re-track container and mark session as containerized
         if (containerInfo) {

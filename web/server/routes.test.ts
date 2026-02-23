@@ -241,6 +241,7 @@ function createMockBridge() {
     getCodexRateLimits: vi.fn(() => null),
     markContainerized: vi.fn(),
     broadcastToSession: vi.fn(),
+    initializeResumedSession: vi.fn(),
   } as any;
 }
 
@@ -900,6 +901,11 @@ describe("POST /api/sessions/create — resume", () => {
     expect(launcher.launch).toHaveBeenCalledWith(
       expect.objectContaining({ resumeSessionId: CLI_SESSION_ID, cwd: TEST_CWD }),
     );
+    // The bridge must be told to pre-load CLI history so the browser sees messages
+    // immediately, before system.init arrives from the CLI.
+    expect(bridge.initializeResumedSession).toHaveBeenCalledWith(
+      "session-1", CLI_SESSION_ID, TEST_CWD,
+    );
   });
 
   it("does not pass resumeSessionId when omitted (new session)", async () => {
@@ -913,6 +919,8 @@ describe("POST /api/sessions/create — resume", () => {
     // resumeSessionId must be undefined/absent so the CLI starts a fresh session
     const call = launcher.launch.mock.calls[0][0];
     expect(call.resumeSessionId).toBeUndefined();
+    // No history pre-loading for fresh sessions
+    expect(bridge.initializeResumedSession).not.toHaveBeenCalled();
   });
 });
 
@@ -934,6 +942,10 @@ describe("POST /api/sessions/create-stream — resume", () => {
 
     expect(launcher.launch).toHaveBeenCalledWith(
       expect.objectContaining({ resumeSessionId: CLI_SESSION_ID, cwd: TEST_CWD }),
+    );
+    // Same history pre-loading for streaming path
+    expect(bridge.initializeResumedSession).toHaveBeenCalledWith(
+      "session-1", CLI_SESSION_ID, TEST_CWD,
     );
   });
 });

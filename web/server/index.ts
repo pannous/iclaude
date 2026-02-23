@@ -94,7 +94,7 @@ wsBridge.onSessionGitInfoReadyCallback((sessionId, cwd, branch) => {
 wsBridge.onSessionInfoLookupCallback((sessionId) => {
   const info = launcher.getSession(sessionId);
   if (!info) return null;
-  return { cliSessionId: info.cliSessionId, cwd: info.cwd };
+  return { cliSessionId: info.cliSessionId || info.resumeSessionAt, cwd: info.cwd };
 });
 
 // Auto-relaunch CLI when a browser connects to a session with no CLI
@@ -219,7 +219,7 @@ const server = Bun.serve<SocketData>({
       if (data.kind === "cli") {
         const info = launcher.getSession(data.sessionId);
         wsBridge.handleCLIOpen(ws, data.sessionId, {
-          cliSessionId: info?.cliSessionId,
+          cliSessionId: info?.cliSessionId || info?.resumeSessionAt,
           cwd: info?.cwd,
         });
         launcher.markConnected(data.sessionId);
