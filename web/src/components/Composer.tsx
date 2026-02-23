@@ -860,8 +860,11 @@ export function Composer({ sessionId }: { sessionId: string }) {
               </button>
 
               {/* Send/stop: always visible */}
+              {/* onMouseDown preventDefault keeps textarea focused on iOS/iPadOS,
+                  preventing the tap-to-blur behavior that swallows the click event */}
               {isRunning ? (
                 <button
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={handleInterrupt}
                   className="flex items-center justify-center w-10 h-10 sm:w-9 sm:h-9 rounded-lg bg-cc-error/10 hover:bg-cc-error/20 text-cc-error transition-colors cursor-pointer"
                   title="Stop generation"
@@ -872,6 +875,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 </button>
               ) : (
                 <button
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={handleSend}
                   disabled={!canSend}
                   className={`flex items-center justify-center w-10 h-10 sm:w-9 sm:h-9 rounded-full transition-colors ${
