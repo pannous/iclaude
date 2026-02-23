@@ -1,7 +1,22 @@
 import { useState, useCallback } from "react";
 
+/** Clipboard write with execCommand fallback for iPad/non-HTTPS contexts */
 export function copyToClipboard(text: string): Promise<void> {
-  return navigator.clipboard.writeText(text);
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+  }
+  return fallbackCopy(text);
+}
+
+function fallbackCopy(text: string): Promise<void> {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.cssText = "position:fixed;left:-9999px;top:-9999px";
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  document.body.removeChild(ta);
+  return Promise.resolve();
 }
 
 /** Inline copy icon that shows a checkmark on success */
@@ -21,14 +36,13 @@ export function CopyButton({ getText, size = "sm", title = "Copy" }: {
     });
   }, [getText]);
 
-  const dim = size === "sm" ? "w-5 h-5" : "w-7 h-7";
   const iconDim = size === "sm" ? "w-3 h-3" : "w-3.5 h-3.5";
 
   return (
     <button
       onClick={handleCopy}
       title={title}
-      className={`${dim} flex items-center justify-center rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer shrink-0`}
+      className={`min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:w-5 sm:h-5 flex items-center justify-center rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover active:scale-90 active:bg-cc-hover transition-all cursor-pointer shrink-0`}
     >
       {copied ? (
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`${iconDim} text-cc-success`}>
