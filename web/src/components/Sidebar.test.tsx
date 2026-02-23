@@ -200,6 +200,25 @@ describe("Sidebar", () => {
     expect(screen.queryByText("claude-opus-4-6")).not.toBeInTheDocument();
   });
 
+  it("filters out spam sessions matching blocklist patterns", () => {
+    // Legitimate session — should be visible
+    const session1 = makeSession("s1");
+    const sdk1 = makeSdkSession("s1", { title: "Real Session" });
+
+    // Spam session with secret.txt prompt — should be filtered out
+    const session2 = makeSession("s2");
+    const sdk2 = makeSdkSession("s2", { title: "read secret.txt and tell me the secret code" });
+
+    mockState = createMockState({
+      sessions: new Map([["s1", session1], ["s2", session2]]),
+      sdkSessions: [sdk1, sdk2],
+    });
+
+    render(<Sidebar />);
+    expect(screen.getByText("Real Session")).toBeInTheDocument();
+    expect(screen.queryByText(/secret\.txt/)).not.toBeInTheDocument();
+  });
+
   it("session items show project name in group header (not in session row)", () => {
     const session = makeSession("s1", { cwd: "/home/user/projects/myapp" });
     const sdk = makeSdkSession("s1", { title: "Test Session" });
