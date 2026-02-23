@@ -326,7 +326,8 @@ describe("ToolBlock", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button"));
+    // Click the expand toggle (first button), not the file path button
+    fireEvent.click(screen.getByText("Edit File"));
 
     // DiffViewer renders file header with basename
     expect(screen.getByText("app.ts")).toBeTruthy();
@@ -350,7 +351,8 @@ describe("ToolBlock", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button"));
+    // Click the expand toggle (first button), not the file path button
+    fireEvent.click(screen.getByText("Edit File"));
     expect(screen.getByText("update")).toBeTruthy();
     expect(screen.getByText("create")).toBeTruthy();
     expect(screen.getAllByText("/repo/src/foo.ts").length).toBeGreaterThan(0);
@@ -366,7 +368,8 @@ describe("ToolBlock", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button"));
+    // Click the expand toggle (first button), not the file path button
+    fireEvent.click(screen.getByText("Read File"));
     expect(screen.getByText("/home/user/test.txt")).toBeTruthy();
   });
 

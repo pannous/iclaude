@@ -62,25 +62,45 @@ export function ToolBlock({
   // Extract the most useful preview
   const preview = getPreview(name, input);
 
+  const hasClickablePath = (name === "Read" || name === "Write" || name === "Edit") && input.file_path;
+
   return (
     <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-cc-hover transition-colors cursor-pointer"
-      >
-        <svg
-          viewBox="0 0 16 16"
-          fill="currentColor"
-          className={`w-3 h-3 text-cc-muted transition-transform shrink-0 ${open ? "rotate-90" : ""}`}
+      {/* Split header: expand toggle is a button, file path is a separate button for iOS touch */}
+      <div className="flex items-center gap-2.5 px-3 py-2 hover:bg-cc-hover transition-colors">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="flex items-center gap-2.5 min-w-0 text-left cursor-pointer flex-shrink-0"
         >
-          <path d="M6 4l4 4-4 4" />
-        </svg>
-        <ToolIcon type={iconType} />
-        <span className="text-xs font-medium text-cc-fg">{label}</span>
-        {preview && (
-          <FilePathPreview name={name} input={input} preview={preview} />
-        )}
-      </button>
+          <svg
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            className={`w-3 h-3 text-cc-muted transition-transform shrink-0 ${open ? "rotate-90" : ""}`}
+          >
+            <path d="M6 4l4 4-4 4" />
+          </svg>
+          <ToolIcon type={iconType} />
+          <span className="text-xs font-medium text-cc-fg">{label}</span>
+        </button>
+        {preview && hasClickablePath ? (
+          <button
+            type="button"
+            className="text-xs text-cc-muted truncate flex-1 font-mono-code hover:text-cc-primary cursor-pointer underline decoration-cc-muted/30 hover:decoration-cc-primary/50 transition-colors text-left min-w-0"
+            onClick={() => useStore.getState().openFileInEditor(String(input.file_path))}
+            title={`Open ${String(input.file_path)} in editor`}
+          >
+            {preview}
+          </button>
+        ) : preview ? (
+          <span
+            className="text-xs text-cc-muted truncate flex-1 font-mono-code cursor-pointer min-w-0"
+            onClick={() => setOpen(!open)}
+          >
+            {preview}
+          </span>
+        ) : null}
+      </div>
 
       {open && (
         <div className="px-3 pb-3 pt-0 border-t border-cc-border">
@@ -90,27 +110,6 @@ export function ToolBlock({
         </div>
       )}
     </div>
-  );
-}
-
-function FilePathPreview({ name, input, preview }: { name: string; input: Record<string, unknown>; preview: string }) {
-  const hasFilePath = (name === "Read" || name === "Write" || name === "Edit") && input.file_path;
-  if (hasFilePath) {
-    const fullPath = String(input.file_path);
-    return (
-      <span
-        className="text-xs text-cc-muted truncate flex-1 font-mono-code hover:text-cc-primary cursor-pointer underline decoration-cc-muted/30 hover:decoration-cc-primary/50 transition-colors"
-        onClick={(e) => { e.stopPropagation(); useStore.getState().openFileInEditor(fullPath); }}
-        title={`Open ${fullPath} in editor`}
-      >
-        {preview}
-      </span>
-    );
-  }
-  return (
-    <span className="text-xs text-cc-muted truncate flex-1 font-mono-code">
-      {preview}
-    </span>
   );
 }
 
