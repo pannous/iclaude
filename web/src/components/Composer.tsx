@@ -261,13 +261,18 @@ export function Composer({ sessionId }: { sessionId: string }) {
       images: images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
     });
 
-    useStore.getState().appendMessage(sessionId, {
+    const store = useStore.getState();
+    store.appendMessage(sessionId, {
       id: `user-${Date.now()}-${++idCounter}`,
       role: "user",
       content: msg,
       images: images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
       timestamp: Date.now(),
     });
+
+    // Optimistically show "Generating..." indicator immediately
+    store.setSessionStatus(sessionId, "running");
+    store.setStreamingStats(sessionId, { startedAt: Date.now() });
 
     setText("");
     setImages([]);
