@@ -133,6 +133,21 @@ export function registerFsRoutes(api: Hono): void {
     return c.json({ path: basePath, tree });
   });
 
+  api.get("/fs/stat", async (c) => {
+    const filePath = c.req.query("path");
+    if (!filePath) return c.json({ error: "path required" }, 400);
+    const absPath = resolve(filePath);
+    try {
+      const info = await stat(absPath);
+      return c.json({ path: absPath, size: info.size, isFile: info.isFile() });
+    } catch (e: unknown) {
+      return c.json(
+        { error: e instanceof Error ? e.message : "Cannot stat file" },
+        404,
+      );
+    }
+  });
+
   api.get("/fs/read", async (c) => {
     const filePath = c.req.query("path");
     if (!filePath) return c.json({ error: "path required" }, 400);

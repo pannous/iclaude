@@ -8,6 +8,15 @@ interface SessionEditorPaneProps {
   sessionId: string;
 }
 
+const LARGE_FILE_THRESHOLD = 512 * 1024; // 512 KB — warn before loading
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB — server rejects above this
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function flattenFiles(nodes: TreeNode[]): TreeNode[] {
   const out: TreeNode[] = [];
   for (const node of nodes) {
@@ -88,6 +97,7 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     || null,
   );
   const storeActiveFile = useStore((s) => s.editorActiveFilePath);
+  const setEditorActiveFilePath = useStore((s) => s.setEditorActiveFilePath);
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [loadingTree, setLoadingTree] = useState(true);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -97,9 +107,23 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [fileSize, setFileSize] = useState<number | null>(null);
+  // When a large file is detected, we pause loading until the user confirms
+  const [pendingLargeFile, setPendingLargeFile] = useState<{ path: string; size: number } | null>(null);
 
   const dirty = content !== originalContent;
   const files = useMemo(() => flattenFiles(tree), [tree]);
+
+  const closeFile = useCallback(() => {
+    if (dirty && !window.confirm("Discard unsaved changes?")) return;
+    setSelectedPath(null);
+    setContent("");
+    setOriginalContent("");
+    setFileSize(null);
+    setPendingLargeFile(null);
+    setError(null);
+    setEditorActiveFilePath(null);
+  }, [dirty, setEditorActiveFilePath]);
 
   // When a file is opened via openFileInEditor (e.g. clicking a path in chat),
   // resolve it against cwd and switch to it
@@ -143,19 +167,44 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     };
   }, [cwd]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Check file size before loading content — gate large files behind confirmation
   useEffect(() => {
     if (!selectedPath) {
       setContent("");
       setOriginalContent("");
+      setFileSize(null);
+      setPendingLargeFile(null);
       return;
     }
     let cancelled = false;
     setLoadingFile(true);
     setError(null);
-    api.readFile(selectedPath).then((res) => {
+    setPendingLargeFile(null);
+
+    api.statFile(selectedPath).then((info) => {
       if (cancelled) return;
-      setContent(res.content);
-      setOriginalContent(res.content);
+      setFileSize(info.size);
+
+      if (info.size > MAX_FILE_SIZE) {
+        setError(`File too large to edit (${formatBytes(info.size)}). Maximum is ${formatBytes(MAX_FILE_SIZE)}.`);
+        setContent("");
+        setOriginalContent("");
+        setLoadingFile(false);
+        return;
+      }
+
+      if (info.size > LARGE_FILE_THRESHOLD) {
+        setPendingLargeFile({ path: selectedPath, size: info.size });
+        setLoadingFile(false);
+        return;
+      }
+
+      // Small file — load directly
+      return api.readFile(selectedPath).then((res) => {
+        if (cancelled) return;
+        setContent(res.content);
+        setOriginalContent(res.content);
+      });
     }).catch((err) => {
       if (cancelled) return;
       setError(err instanceof Error ? err.message : "Failed to read file");
@@ -168,6 +217,24 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
       cancelled = true;
     };
   }, [selectedPath]);
+
+  const loadLargeFile = useCallback(() => {
+    if (!pendingLargeFile) return;
+    const path = pendingLargeFile.path;
+    setPendingLargeFile(null);
+    setLoadingFile(true);
+    setError(null);
+    api.readFile(path).then((res) => {
+      setContent(res.content);
+      setOriginalContent(res.content);
+    }).catch((err) => {
+      setError(err instanceof Error ? err.message : "Failed to read file");
+      setContent("");
+      setOriginalContent("");
+    }).finally(() => {
+      setLoadingFile(false);
+    });
+  }, [pendingLargeFile]);
 
   const saveCurrentFile = useCallback(() => {
     if (!selectedPath || saving || !dirty) return;
@@ -219,6 +286,7 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
               selectedPath={selectedPath}
               onSelect={(nextPath) => {
                 if (dirty && !window.confirm("Discard unsaved changes?")) return;
+                setPendingLargeFile(null);
                 setSelectedPath(nextPath);
               }}
             />
@@ -228,23 +296,43 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
 
       <div className="flex-1 min-h-0 flex flex-col">
         <div className="px-3 py-2 border-b border-cc-border bg-cc-sidebar flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] text-cc-muted truncate">{selectedPath ? relPath(cwd, selectedPath) : "No file selected"}</p>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-[11px] text-cc-muted truncate">{selectedPath ? relPath(cwd, selectedPath) : "No file selected"}</p>
+              {fileSize !== null && selectedPath && (
+                <span className="text-[10px] text-cc-muted/60 shrink-0">{formatBytes(fileSize)}</span>
+              )}
+            </div>
             {dirty && <p className="text-[10px] text-amber-500">Unsaved changes</p>}
             {saved && <p className="text-[10px] text-cc-success">Saved</p>}
           </div>
-          <button
-            type="button"
-            onClick={saveCurrentFile}
-            disabled={!selectedPath || saving || loadingFile || !dirty}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              !selectedPath || saving || loadingFile || !dirty
-                ? "bg-cc-hover text-cc-muted cursor-not-allowed"
-                : "bg-cc-primary text-white hover:bg-cc-primary-hover cursor-pointer"
-            }`}
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={saveCurrentFile}
+              disabled={!selectedPath || saving || loadingFile || !dirty}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                !selectedPath || saving || loadingFile || !dirty
+                  ? "bg-cc-hover text-cc-muted cursor-not-allowed"
+                  : "bg-cc-primary text-white hover:bg-cc-primary-hover cursor-pointer"
+              }`}
+            >
+              {saving ? "Saving..." : "Save"}
+            </button>
+            {selectedPath && (
+              <button
+                type="button"
+                onClick={closeFile}
+                className="p-1.5 rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+                aria-label="Close file"
+                title="Close file and free memory"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3.5 3.5L10.5 10.5M10.5 3.5L3.5 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
         {error && (
@@ -254,7 +342,33 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
         )}
 
         <div className="flex-1 min-h-0">
-          {loadingFile ? (
+          {pendingLargeFile ? (
+            <div className="h-full flex flex-col items-center justify-center gap-4 p-8 text-center">
+              <div className="text-4xl">&#x26a0;</div>
+              <div>
+                <p className="text-sm text-cc-fg font-medium">Large file: {formatBytes(pendingLargeFile.size)}</p>
+                <p className="text-xs text-cc-muted mt-1">
+                  Loading large files into the editor may slow down your browser.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={loadLargeFile}
+                  className="px-4 py-2 rounded-md text-xs font-medium bg-cc-primary text-white hover:bg-cc-primary-hover cursor-pointer transition-colors"
+                >
+                  Open anyway
+                </button>
+                <button
+                  type="button"
+                  onClick={closeFile}
+                  className="px-4 py-2 rounded-md text-xs font-medium bg-cc-hover text-cc-muted hover:text-cc-fg cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : loadingFile ? (
             <div className="h-full flex items-center justify-center text-sm text-cc-muted">Loading file...</div>
           ) : selectedPath ? (
             <CodeMirror

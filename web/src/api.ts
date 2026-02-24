@@ -796,6 +796,10 @@ export const api = {
     get<{ path: string; tree: TreeNode[] }>(
       `/fs/tree?path=${encodeURIComponent(path)}`,
     ),
+  statFile: (path: string) =>
+    get<{ path: string; size: number; isFile: boolean }>(
+      `/fs/stat?path=${encodeURIComponent(path)}`,
+    ),
   readFile: (path: string) =>
     get<{ path: string; content: string }>(
       `/fs/read?path=${encodeURIComponent(path)}`,
