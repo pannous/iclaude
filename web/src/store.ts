@@ -484,6 +484,7 @@ export const useStore = create<AppState>((set) => ({
   toggleSectionEnabled: (sectionId) =>
     set((s) => {
       const config: TaskPanelConfig = {
+        ...s.taskPanelConfig,
         order: [...s.taskPanelConfig.order],
         enabled: { ...s.taskPanelConfig.enabled, [sectionId]: !s.taskPanelConfig.enabled[sectionId] },
       };

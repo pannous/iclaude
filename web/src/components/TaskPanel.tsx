@@ -755,7 +755,43 @@ function LinearIssueSection({ sessionId }: { sessionId: string }) {
 // ─── Extracted Section Components ─────────────────────────────────────────────
 
 /** Session stats — cost, context usage bar, 5h/7d usage, and turn count */
-function SessionStatsSection({ sessionId }: { sessionId: string }) {
+function SessionCostSection({ sessionId }: { sessionId: string }) {
+  const session = useStore((s) => s.sessions.get(sessionId));
+  if (!session) return null;
+  return (
+    <div className="shrink-0 px-4 py-2.5 border-b border-cc-border flex items-center justify-between gap-4">
+      <div className="flex items-center gap-3">
+        <span className="text-[11px] text-cc-muted uppercase tracking-wider">Cost</span>
+        <span className="text-[13px] font-medium text-cc-fg tabular-nums">
+          ${session.total_cost_usd.toFixed(2)}
+        </span>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="text-[11px] text-cc-muted uppercase tracking-wider">Turns</span>
+        <span className="text-[13px] font-medium text-cc-fg tabular-nums">{session.num_turns}</span>
+      </div>
+    </div>
+  );
+}
+
+function ProgressBar({ label, pct }: { label: string; pct: number }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-cc-muted uppercase tracking-wider">{label}</span>
+        <span className="text-[11px] text-cc-muted tabular-nums">{pct}%</span>
+      </div>
+      <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${barColor(pct)}`}
+          style={{ width: `${Math.min(pct, 100)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SessionContextSection({ sessionId }: { sessionId: string }) {
   const session = useStore((s) => s.sessions.get(sessionId));
   const [limits, setLimits] = useState<UsageLimits | null>(null);
 
@@ -778,57 +814,10 @@ function SessionStatsSection({ sessionId }: { sessionId: string }) {
   const hourlyPct = limits?.five_hour?.utilization ?? null;
   const weeklyPct = limits?.seven_day?.utilization ?? null;
   return (
-    <div className="shrink-0 px-4 py-3 border-b border-cc-border space-y-2.5">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] text-cc-muted uppercase tracking-wider">Cost</span>
-        <span className="text-[13px] font-medium text-cc-fg tabular-nums">
-          ${session.total_cost_usd.toFixed(2)}
-        </span>
-      </div>
-      <div className="space-y-1">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] text-cc-muted uppercase tracking-wider">Context</span>
-          <span className="text-[11px] text-cc-muted tabular-nums">{contextPct}%</span>
-        </div>
-        <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${barColor(contextPct)}`}
-            style={{ width: `${Math.min(contextPct, 100)}%` }}
-          />
-        </div>
-      </div>
-      {hourlyPct !== null && (
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted uppercase tracking-wider">5h Limit</span>
-            <span className="text-[11px] text-cc-muted tabular-nums">{hourlyPct}%</span>
-          </div>
-          <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${barColor(hourlyPct)}`}
-              style={{ width: `${Math.min(hourlyPct, 100)}%` }}
-            />
-          </div>
-        </div>
-      )}
-      {weeklyPct !== null && (
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted uppercase tracking-wider">7d Limit</span>
-            <span className="text-[11px] text-cc-muted tabular-nums">{weeklyPct}%</span>
-          </div>
-          <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${barColor(weeklyPct)}`}
-              style={{ width: `${Math.min(weeklyPct, 100)}%` }}
-            />
-          </div>
-        </div>
-      )}
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] text-cc-muted uppercase tracking-wider">Turns</span>
-        <span className="text-[13px] font-medium text-cc-fg tabular-nums">{session.num_turns}</span>
-      </div>
+    <div className="shrink-0 px-4 py-2.5 border-b border-cc-border space-y-2">
+      <ProgressBar label="Context" pct={contextPct} />
+      {hourlyPct !== null && <ProgressBar label="5h Limit" pct={hourlyPct} />}
+      {weeklyPct !== null && <ProgressBar label="7d Limit" pct={weeklyPct} />}
     </div>
   );
 }
@@ -1187,7 +1176,8 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
         <>
           <div data-testid="task-panel-content" className="min-h-0 flex-1 overflow-y-auto">
             {/* Session stats — cost, context, turns */}
-            <SessionStatsSection sessionId={sessionId} />
+            <SessionCostSection sessionId={sessionId} />
+            <SessionContextSection sessionId={sessionId} />
             <ClaudeConfigBrowser sessionId={sessionId} />
             {applicableSections
               .filter((id) => config.enabled[id] !== false)
