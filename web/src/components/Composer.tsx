@@ -764,6 +764,24 @@ export function Composer({ sessionId }: { sessionId: string }) {
 
             {/* Right: secondary actions + send */}
             <div className="flex items-center gap-1.5">
+              {text.trim() && (
+                <button
+                  onClick={() => {
+                    setText("");
+                    setImages([]);
+                    if (textareaRef.current) textareaRef.current.style.height = "auto";
+                    textareaRef.current?.focus();
+                  }}
+                  className="flex items-center justify-center w-6 h-6 rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+                  title="Clear input"
+                  aria-label="Clear input"
+                >
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
+                    <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+                  </svg>
+                </button>
+              )}
+
               <button
                 onClick={() => {
                   const defaultName = text.trim().slice(0, 32);
@@ -783,24 +801,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   <path d="M4 2.75h8A1.25 1.25 0 0113.25 4v9.25L8 10.5l-5.25 2.75V4A1.25 1.25 0 014 2.75z" />
                 </svg>
               </button>
-
-              {text.trim() && (
-                <button
-                  onClick={() => {
-                    setText("");
-                    setImages([]);
-                    if (textareaRef.current) textareaRef.current.style.height = "auto";
-                    textareaRef.current?.focus();
-                  }}
-                  className="flex items-center justify-center w-6 h-6 rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-                  title="Clear input"
-                  aria-label="Clear input"
-                >
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
-                    <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
-                  </svg>
-                </button>
-              )}
 
               <button
                 onClick={() => fileInputRef.current?.click()}
