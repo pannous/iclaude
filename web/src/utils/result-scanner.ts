@@ -5,10 +5,10 @@
 
 const IMAGE_EXTENSIONS = /\.(png|jpg|jpeg|gif|webp|svg|bmp|ico|heic|avif|tiff?)$/i;
 
-const URL_PATTERN = /https?:\/\/[^\s)<>"']+/g;
+const URL_PATTERN = /https?:\/\/[^\s)<>"'`]+/g;
 
 // Absolute paths: /Users/..., /tmp/..., ~/... (macOS/Linux)
-const LOCAL_PATH_PATTERN = /(?:~\/|\/)[^\s<>"'*?|:,;(){}\[\]]+/g;
+const LOCAL_PATH_PATTERN = /(?:~\/|\/)[^\s<>"'`*?|:,;(){}\[\]]+/g;
 
 /**
  * Extract HTML fragments from text. Supports:
