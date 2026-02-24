@@ -443,10 +443,23 @@ function ToolGroupBlock({ name, items }: { name: string; items: ToolGroupItem[] 
         <div className="border-t border-cc-border px-3 py-1.5">
           {items.map((item, i) => {
             const preview = getPreview(item.name, item.input);
+            const filePath = (item.name === "Read" || item.name === "Write" || item.name === "Edit") && item.input.file_path
+              ? String(item.input.file_path) : null;
             return (
-              <div key={item.id || i} className="flex items-center gap-2 py-1 text-xs text-cc-muted font-mono-code truncate">
+              <div key={item.id || i} className="flex items-center gap-2 py-1 text-xs font-mono-code truncate">
                 <span className="w-1 h-1 rounded-full bg-cc-muted/40 shrink-0" />
-                <span className="truncate">{preview || JSON.stringify(item.input).slice(0, 80)}</span>
+                {filePath ? (
+                  <button
+                    type="button"
+                    className="truncate text-cc-muted hover:text-cc-primary cursor-pointer underline decoration-cc-muted/30 hover:decoration-cc-primary/50 transition-colors text-left"
+                    onClick={() => useStore.getState().openFileInEditor(filePath)}
+                    title={`Open ${filePath} in editor`}
+                  >
+                    {preview || filePath}
+                  </button>
+                ) : (
+                  <span className="truncate text-cc-muted">{preview || JSON.stringify(item.input).slice(0, 80)}</span>
+                )}
               </div>
             );
           })}

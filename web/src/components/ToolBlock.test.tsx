@@ -260,9 +260,8 @@ describe("ToolBlock", () => {
       />
     );
 
-    // Click the button to expand
-    const button = screen.getByRole("button");
-    fireEvent.click(button);
+    // Click the label text to expand (whole header row is clickable)
+    fireEvent.click(screen.getByText("Terminal"));
 
     // After expanding, the detail area should be visible with a pre element
     const allLsLa = screen.getAllByText("ls -la");
@@ -281,14 +280,12 @@ describe("ToolBlock", () => {
       />
     );
 
-    const button = screen.getByRole("button");
-
-    // Expand - the detail area with the border-t class should appear
-    fireEvent.click(button);
+    // Click the label text to expand (whole header row is clickable)
+    fireEvent.click(screen.getByText("Terminal"));
     expect(container.querySelector(".border-t")).toBeTruthy();
 
-    // Collapse - the detail area should disappear
-    fireEvent.click(button);
+    // Collapse - click the label again
+    fireEvent.click(screen.getByText("Terminal"));
     expect(container.querySelector(".border-t")).toBeNull();
   });
 
@@ -301,7 +298,7 @@ describe("ToolBlock", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByText("Terminal"));
 
     // When expanded, the command appears in both the preview header and the code block.
     // Find the pre element containing the $ prefix.
@@ -382,7 +379,8 @@ describe("ToolBlock", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button"));
+    // Click the label text to expand (whole header row is clickable)
+    fireEvent.click(screen.getByText("CustomTool"));
     const preElement = document.querySelector("pre");
     expect(preElement?.textContent).toContain('"foo": "bar"');
     expect(preElement?.textContent).toContain('"count": 42');

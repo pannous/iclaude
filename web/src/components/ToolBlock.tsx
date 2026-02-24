@@ -62,41 +62,38 @@ export function ToolBlock({
   // Extract the most useful preview
   const preview = getPreview(name, input);
 
-  const hasClickablePath = (name === "Read" || name === "Write" || name === "Edit") && input.file_path;
+  // Resolve clickable path from file_path (Read/Write/Edit), path (Grep/Glob), or notebook_path
+  const clickablePath = (input.file_path || input.path || input.notebook_path) as string | undefined;
 
   return (
     <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
-      {/* Split header: expand toggle is a button, file path is a separate button for iOS touch */}
-      <div className="flex items-center gap-2.5 px-3 py-2 hover:bg-cc-hover transition-colors">
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          className="flex items-center gap-2.5 min-w-0 text-left cursor-pointer flex-shrink-0"
+      <div
+        className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-cc-hover/50 transition-colors"
+        onClick={() => setOpen(!open)}
+      >
+        <svg
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          className={`w-3 h-3 text-cc-muted transition-transform shrink-0 ${open ? "rotate-90" : ""}`}
         >
-          <svg
-            viewBox="0 0 16 16"
-            fill="currentColor"
-            className={`w-3 h-3 text-cc-muted transition-transform shrink-0 ${open ? "rotate-90" : ""}`}
-          >
-            <path d="M6 4l4 4-4 4" />
-          </svg>
-          <ToolIcon type={iconType} />
-          <span className="text-xs font-medium text-cc-fg">{label}</span>
-        </button>
-        {preview && hasClickablePath ? (
+          <path d="M6 4l4 4-4 4" />
+        </svg>
+        <ToolIcon type={iconType} />
+        <span className="text-xs font-medium text-cc-fg whitespace-nowrap">{label}</span>
+        {preview && clickablePath ? (
           <button
             type="button"
             className="text-xs text-cc-muted truncate flex-1 font-mono-code hover:text-cc-primary cursor-pointer underline decoration-cc-muted/30 hover:decoration-cc-primary/50 transition-colors text-left min-w-0"
-            onClick={() => useStore.getState().openFileInEditor(String(input.file_path))}
-            title={`Open ${String(input.file_path)} in editor`}
+            onClick={(e) => {
+              e.stopPropagation();
+              useStore.getState().openFileInEditor(String(clickablePath));
+            }}
+            title={`Open ${String(clickablePath)} in editor`}
           >
             {preview}
           </button>
         ) : preview ? (
-          <span
-            className="text-xs text-cc-muted truncate flex-1 font-mono-code cursor-pointer min-w-0"
-            onClick={() => setOpen(!open)}
-          >
+          <span className="text-xs text-cc-muted truncate flex-1 font-mono-code min-w-0">
             {preview}
           </span>
         ) : null}
