@@ -652,8 +652,11 @@ export function injectBridgeIntoHtml(html: string, fragmentId: string, yoloMode:
 function HtmlPreview({ html, preview, fragmentId }: { html: string; preview: string; fragmentId: string }) {
   const [open, setOpen] = useState(true);
   const [showSource, setShowSource] = useState(false);
+  const [editedHtml, setEditedHtml] = useState<string | null>(null);
   const yoloMode = useStore((s) => s.yoloMode);
-  const enrichedHtml = useMemo(() => injectBridgeIntoHtml(html, fragmentId, yoloMode), [html, fragmentId, yoloMode]);
+  const currentHtml = editedHtml ?? html;
+  const enrichedHtml = useMemo(() => injectBridgeIntoHtml(currentHtml, fragmentId, yoloMode), [currentHtml, fragmentId, yoloMode]);
+  const isEdited = editedHtml !== null;
 
   return (
     <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
@@ -677,21 +680,41 @@ function HtmlPreview({ html, preview, fragmentId }: { html: string; preview: str
             YOLO
           </span>
         )}
+        {isEdited && (
+          <button
+            onClick={() => setEditedHtml(null)}
+            className="text-[10px] px-1.5 py-0.5 rounded font-mono shrink-0 cursor-pointer text-cc-warning hover:text-cc-fg transition-colors"
+            title="Reset to original"
+          >
+            Reset
+          </button>
+        )}
         <button
           onClick={() => setShowSource(!showSource)}
           className={`text-[10px] px-1.5 py-0.5 rounded font-mono shrink-0 cursor-pointer transition-colors ${
             showSource ? "bg-cc-primary/10 text-cc-primary" : "text-cc-muted hover:text-cc-fg"
           }`}
         >
-          Source
+          {showSource ? "Preview" : "Edit"}
         </button>
       </div>
       {open && (
-        <div className="border-t border-cc-border">
+        <div className={showSource ? "flex border-t border-cc-border" : "border-t border-cc-border"}>
           {showSource ? (
-            <pre className="px-3 py-2 text-[11px] font-mono-code text-cc-muted bg-cc-code-bg max-h-[400px] overflow-auto whitespace-pre-wrap">
-              {html}
-            </pre>
+            <>
+              <textarea
+                value={currentHtml}
+                onChange={(e) => setEditedHtml(e.target.value)}
+                spellCheck={false}
+                className="w-1/2 px-3 py-2 text-[11px] font-mono-code text-cc-fg bg-cc-code-bg h-[400px] resize-none focus:outline-none border-r border-cc-border"
+              />
+              <iframe
+                srcDoc={enrichedHtml}
+                className="w-1/2 h-[400px] bg-white"
+                sandbox={yoloMode ? undefined : "allow-scripts"}
+                title="HTML preview"
+              />
+            </>
           ) : (
             <iframe
               srcDoc={enrichedHtml}
