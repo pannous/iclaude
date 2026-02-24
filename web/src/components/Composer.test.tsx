@@ -28,6 +28,7 @@ vi.mock("../api.js", () => ({
 
 // Mock useStore as a function that takes a selector
 const mockAppendMessage = vi.fn();
+const mockSetMessages = vi.fn();
 const mockUpdateSession = vi.fn();
 const mockSetPreviousPermissionMode = vi.fn();
 const mockSetSessionStatus = vi.fn();
@@ -77,11 +78,13 @@ function setupMockStore(overrides: {
   isConnected?: boolean;
   sessionStatus?: "idle" | "running" | "compacting" | null;
   session?: Partial<SessionState>;
+  messages?: Array<{ id: string; role: string; content: string; timestamp?: number }>;
 } = {}) {
   const {
     isConnected = true,
     sessionStatus = "idle",
     session = {},
+    messages = [],
   } = overrides;
 
   const sessionsMap = new Map<string, SessionState>();
@@ -101,7 +104,9 @@ function setupMockStore(overrides: {
     cliConnected: cliConnectedMap,
     sessionStatus: sessionStatusMap,
     previousPermissionMode: previousPermissionModeMap,
+    messages: new Map<string, unknown[]>([["s1", messages]]),
     appendMessage: mockAppendMessage,
+    setMessages: mockSetMessages,
     updateSession: mockUpdateSession,
     setPreviousPermissionMode: mockSetPreviousPermissionMode,
     setSessionStatus: mockSetSessionStatus,
@@ -589,6 +594,102 @@ describe("Composer save prompt", () => {
 });
 
 // ─── Speech recognition / dictation ─────────────────────────────────────────
+
+// ─── Amend message (speech correction with * prefix) ─────────────────────────
+
+describe("Composer amend message (* prefix)", () => {
+  it("strips * prefix and replaces the last user message in local store", () => {
+    // When a message starts with *, it should amend the previous user message
+    // rather than appending a new one. This is a speech-recognition UX feature.
+    const existingUserMsg = { id: "user-1", role: "user", content: "original text", timestamp: 1000 };
+    const assistantMsg = { id: "asst-1", role: "assistant", content: "reply", timestamp: 1001 };
+    setupMockStore({ messages: [existingUserMsg, assistantMsg] });
+
+    const { container } = render(<Composer sessionId="s1" />);
+    const textarea = container.querySelector("textarea")!;
+
+    fireEvent.change(textarea, { target: { value: "*corrected text" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    // Should send the corrected text (without *) to the backend
+    expect(mockSendToSession).toHaveBeenCalledWith("s1", expect.objectContaining({
+      type: "user_message",
+      content: "corrected text",
+    }));
+
+    // Should call setMessages to replace the last user message, not appendMessage
+    expect(mockSetMessages).toHaveBeenCalledWith("s1", expect.arrayContaining([
+      expect.objectContaining({ id: "user-1", content: "corrected text" }),
+      expect.objectContaining({ id: "asst-1", content: "reply" }),
+    ]));
+    expect(mockAppendMessage).not.toHaveBeenCalled();
+  });
+
+  it("falls back to append when no previous user message exists", () => {
+    // If there are no user messages to amend, treat it as a normal send
+    setupMockStore({ messages: [] });
+
+    const { container } = render(<Composer sessionId="s1" />);
+    const textarea = container.querySelector("textarea")!;
+
+    fireEvent.change(textarea, { target: { value: "*first message" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    expect(mockSendToSession).toHaveBeenCalledWith("s1", expect.objectContaining({
+      content: "first message",
+    }));
+    expect(mockAppendMessage).toHaveBeenCalled();
+    expect(mockSetMessages).not.toHaveBeenCalled();
+  });
+
+  it("does not send when * is followed only by whitespace", () => {
+    // A bare * with no meaningful content should not send anything
+    setupMockStore();
+
+    const { container } = render(<Composer sessionId="s1" />);
+    const textarea = container.querySelector("textarea")!;
+
+    fireEvent.change(textarea, { target: { value: "*   " } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    expect(mockSendToSession).not.toHaveBeenCalled();
+    expect(mockAppendMessage).not.toHaveBeenCalled();
+  });
+
+  it("handles * with leading space after prefix", () => {
+    // "* corrected text" should trim to "corrected text"
+    const existingUserMsg = { id: "user-1", role: "user", content: "typo text", timestamp: 1000 };
+    setupMockStore({ messages: [existingUserMsg] });
+
+    const { container } = render(<Composer sessionId="s1" />);
+    const textarea = container.querySelector("textarea")!;
+
+    fireEvent.change(textarea, { target: { value: "* corrected text" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    expect(mockSendToSession).toHaveBeenCalledWith("s1", expect.objectContaining({
+      content: "corrected text",
+    }));
+    expect(mockSetMessages).toHaveBeenCalled();
+  });
+
+  it("normal messages without * are sent as usual via appendMessage", () => {
+    // Regression: ensure non-* messages still work normally
+    setupMockStore();
+
+    const { container } = render(<Composer sessionId="s1" />);
+    const textarea = container.querySelector("textarea")!;
+
+    fireEvent.change(textarea, { target: { value: "normal message" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    expect(mockSendToSession).toHaveBeenCalledWith("s1", expect.objectContaining({
+      content: "normal message",
+    }));
+    expect(mockAppendMessage).toHaveBeenCalled();
+    expect(mockSetMessages).not.toHaveBeenCalled();
+  });
+});
 
 describe("Composer speech recognition", () => {
   it("hides mic button when Web Speech API is unavailable (e.g. iOS/iPadOS Safari)", () => {

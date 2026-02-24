@@ -266,27 +266,54 @@ export function Composer({ sessionId }: { sessionId: string }) {
     const msg = text.trim();
     if (!msg || !isConnected) return;
 
+    // Speech-correction: messages starting with * amend the previous user message
+    const isAmend = msg.startsWith("*");
+    const actualMsg = isAmend ? msg.slice(1).trimStart() : msg;
+    if (!actualMsg) return;
+
     sendToSession(sessionId, {
       type: "user_message",
-      content: msg,
+      content: actualMsg,
       session_id: sessionId,
       images: images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
     });
 
     const store = useStore.getState();
     const msgId = `user-${Date.now()}-${++idCounter}`;
-    const scanned = scanContent(msg);
+    const scanned = scanContent(actualMsg);
     const scannedHtml = scanned.html.length > 0
       ? scanned.html.map((h, i) => ({ ...h, fragmentId: `${msgId}:${i}` }))
       : undefined;
-    store.appendMessage(sessionId, {
-      id: msgId,
-      role: "user",
-      content: msg,
-      images: images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
-      scannedHtml,
-      timestamp: Date.now(),
-    });
+    const imageData = images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined;
+
+    if (isAmend) {
+      // Replace the last user message in the local message list
+      const existing = store.messages.get(sessionId) || [];
+      let lastUserIndex = -1;
+      for (let i = existing.length - 1; i >= 0; i--) {
+        if (existing[i].role === "user") { lastUserIndex = i; break; }
+      }
+      if (lastUserIndex >= 0) {
+        const updated = [...existing];
+        updated[lastUserIndex] = {
+          ...updated[lastUserIndex],
+          content: actualMsg,
+          images: imageData,
+          scannedHtml,
+          timestamp: Date.now(),
+        };
+        store.setMessages(sessionId, updated);
+      } else {
+        // No previous user message to amend — just append as new
+        store.appendMessage(sessionId, {
+          id: msgId, role: "user", content: actualMsg, images: imageData, scannedHtml, timestamp: Date.now(),
+        });
+      }
+    } else {
+      store.appendMessage(sessionId, {
+        id: msgId, role: "user", content: actualMsg, images: imageData, scannedHtml, timestamp: Date.now(),
+      });
+    }
 
     // Optimistically show "Generating..." indicator immediately
     store.setSessionStatus(sessionId, "running");
