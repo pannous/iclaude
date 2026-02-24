@@ -87,6 +87,7 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     || s.sdkSessions.find((sdk) => sdk.sessionId === sessionId)?.cwd
     || null,
   );
+  const storeActiveFile = useStore((s) => s.editorActiveFilePath);
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [loadingTree, setLoadingTree] = useState(true);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -100,6 +101,19 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
   const dirty = content !== originalContent;
   const files = useMemo(() => flattenFiles(tree), [tree]);
 
+  // When a file is opened via openFileInEditor (e.g. clicking a path in chat),
+  // resolve it against cwd and switch to it
+  useEffect(() => {
+    if (!storeActiveFile) return;
+    const resolved = storeActiveFile.startsWith("/")
+      ? storeActiveFile
+      : cwd ? `${cwd}/${storeActiveFile}` : storeActiveFile;
+    if (resolved !== selectedPath) {
+      if (dirty && !window.confirm("Discard unsaved changes?")) return;
+      setSelectedPath(resolved);
+    }
+  }, [storeActiveFile]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!cwd) {
       setLoadingTree(false);
@@ -111,8 +125,11 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     api.getFileTree(cwd).then((res) => {
       if (cancelled) return;
       setTree(res.tree);
-      const firstFile = flattenFiles(res.tree)[0];
-      setSelectedPath(firstFile?.path ?? null);
+      // Only auto-select the first file if no file was explicitly requested
+      if (!selectedPath && !storeActiveFile) {
+        const firstFile = flattenFiles(res.tree)[0];
+        setSelectedPath(firstFile?.path ?? null);
+      }
     }).catch((err) => {
       if (cancelled) return;
       setError(err instanceof Error ? err.message : "Failed to load file tree");
@@ -124,7 +141,7 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     return () => {
       cancelled = true;
     };
-  }, [cwd]);
+  }, [cwd]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!selectedPath) {
