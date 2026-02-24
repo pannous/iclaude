@@ -368,7 +368,7 @@ export const useStore = create<AppState>((set) => ({
   darkMode: resolveThemeDark(initTheme()),
   notificationSound: initBool("cc-notification-sound", true),
   yoloMode: initBool("cc-yolo-mode", true),
-  notificationDesktop: initBool("cc-notification-desktop", false),
+  notificationDesktop: initBool("cc-notification-desktop", true),
   sidebarOpen: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
   taskPanelOpen: typeof window !== "undefined" ? window.innerWidth >= 1024 : true,
   taskPanelConfig: getInitialTaskPanelConfig(),
