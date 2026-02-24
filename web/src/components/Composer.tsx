@@ -6,6 +6,7 @@ import { api, type SavedPrompt } from "../api.js";
 import type { ModeOption } from "../utils/backends.js";
 
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
+import { scanContent } from "../utils/result-scanner.js";
 
 // LOCAL: slugify for skill names
 function slugify(input: string): string {
@@ -273,11 +274,17 @@ export function Composer({ sessionId }: { sessionId: string }) {
     });
 
     const store = useStore.getState();
+    const msgId = `user-${Date.now()}-${++idCounter}`;
+    const scanned = scanContent(msg);
+    const scannedHtml = scanned.html.length > 0
+      ? scanned.html.map((h, i) => ({ ...h, fragmentId: `${msgId}:${i}` }))
+      : undefined;
     store.appendMessage(sessionId, {
-      id: `user-${Date.now()}-${++idCounter}`,
+      id: msgId,
       role: "user",
       content: msg,
       images: images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
+      scannedHtml,
       timestamp: Date.now(),
     });
 

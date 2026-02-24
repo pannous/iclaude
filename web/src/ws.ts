@@ -784,11 +784,14 @@ function handleParsedMessage(
       for (let i = 0; i < data.messages.length; i++) {
         const histMsg = data.messages[i];
         if (histMsg.type === "user_message") {
+          const userMsgId = histMsg.id || nextId();
+          const userScanned = scanForImagesAndHtml(histMsg.content, userMsgId);
           chatMessages.push({
-            id: histMsg.id || nextId(),
+            id: userMsgId,
             role: "user",
             content: histMsg.content,
             timestamp: histMsg.timestamp,
+            scannedHtml: userScanned.html,
           });
         } else if (histMsg.type === "assistant") {
           const msg = histMsg.message;
