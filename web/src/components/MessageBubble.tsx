@@ -153,6 +153,13 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
               ))}
             </div>
           )}
+          {message.scannedHtmlFiles && message.scannedHtmlFiles.length > 0 && (
+            <div className="flex gap-2 flex-wrap mt-3">
+              {message.scannedHtmlFiles.map((file, i) => (
+                <HtmlFileLink key={i} filename={file.filename} url={file.url} path={file.path} />
+              ))}
+            </div>
+          )}
           {message.scannedHtml && message.scannedHtml.length > 0 && (
             <div className="space-y-2 mt-3">
               {message.scannedHtml.map((htmlFragment, i) => (
@@ -192,6 +199,13 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
                 className="max-w-[400px] max-h-[300px] rounded-lg border border-cc-border object-contain"
                 loading="lazy"
               />
+            ))}
+          </div>
+        )}
+        {message.scannedHtmlFiles && message.scannedHtmlFiles.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {message.scannedHtmlFiles.map((file, i) => (
+              <HtmlFileLink key={i} filename={file.filename} url={file.url} path={file.path} />
             ))}
           </div>
         )}
@@ -647,6 +661,26 @@ export function injectBridgeIntoHtml(html: string, fragmentId: string, yoloMode:
   // Insert before </head> if present, otherwise prepend
   if (html.includes("</head>")) return html.replace("</head>", `${scripts}</head>`);
   return scripts + html;
+}
+
+function HtmlFileLink({ filename, url, path }: { filename: string; url: string; path: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-cc-border bg-cc-card hover:bg-cc-hover transition-colors text-xs font-mono-code group"
+      title={path}
+    >
+      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-cc-primary shrink-0">
+        <path d="M2 3h12v2H2V3zm0 4h12v2H2V7zm0 4h8v2H2v-2z" />
+      </svg>
+      <span className="text-cc-fg group-hover:text-cc-primary transition-colors">{filename}</span>
+      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-muted group-hover:text-cc-primary transition-colors shrink-0">
+        <path d="M12 3H8.5l1 1H12v8H4V8.5l-1-1V12a1 1 0 001 1h8a1 1 0 001-1V4a1 1 0 00-1-1zM3 2l4 0v1H4.7l5.15 5.15-.7.7L4 3.7V6H3V2z" />
+      </svg>
+    </a>
+  );
 }
 
 function HtmlPreview({ html, preview, fragmentId }: { html: string; preview: string; fragmentId: string }) {

@@ -4,6 +4,7 @@
  */
 
 const IMAGE_EXTENSIONS = /\.(png|jpg|jpeg|gif|webp|svg|bmp|ico|heic|avif|tiff?)$/i;
+const HTML_FILE_EXTENSIONS = /\.html?$/i;
 
 const URL_PATTERN = /https?:\/\/[^\s)<>"'`]+/g;
 
@@ -54,6 +55,15 @@ function extractHtmlFragments(text: string): ExtractedFragment[] {
 export interface ScannedImage {
   src: string;
   kind: "url" | "local";
+  /** Original text matched in the content */
+  original: string;
+}
+
+export interface ScannedHtmlFile {
+  /** Absolute or ~/... path to the HTML file */
+  path: string;
+  /** Filename for display */
+  filename: string;
   /** Original text matched in the content */
   original: string;
 }
@@ -110,6 +120,30 @@ export class ResultScanner {
   }
 
   /**
+   * Scan text for local HTML file paths (e.g. /Users/.../index.html, ~/project/page.htm).
+   */
+  scanHtmlFiles(text: string): ScannedHtmlFile[] {
+    const seen = new Set<string>();
+    const files: ScannedHtmlFile[] = [];
+
+    for (const match of text.matchAll(LOCAL_PATH_PATTERN)) {
+      const raw = cleanTrailing(match[0]);
+      if (!HTML_FILE_EXTENSIONS.test(raw)) continue;
+      if (seen.has(raw)) continue;
+      seen.add(raw);
+      const filename = raw.split("/").pop() || raw;
+      files.push({ path: raw, filename, original: match[0] });
+    }
+
+    return files;
+  }
+
+  /** Convert a ScannedHtmlFile path to a proxied URL for viewing in a tab */
+  toHtmlFileUrl(file: ScannedHtmlFile): string {
+    return `/api/fs/html?path=${encodeURIComponent(file.path)}`;
+  }
+
+  /**
    * Scan text content for HTML fragments.
    * Returns deduplicated list of HTML blocks found.
    */
@@ -161,11 +195,12 @@ function extractPathFromUrl(url: string): string {
 /**
  * Scan text for both images and HTML fragments.
  */
-export function scanContent(text: string): { images: ScannedImage[]; html: ScannedHtml[] } {
+export function scanContent(text: string): { images: ScannedImage[]; html: ScannedHtml[]; htmlFiles: ScannedHtmlFile[] } {
   const scanner = new ResultScanner();
   return {
     images: scanner.scanImages(text),
     html: scanner.scanHtml(text),
+    htmlFiles: scanner.scanHtmlFiles(text),
   };
 }
 

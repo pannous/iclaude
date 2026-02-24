@@ -20,6 +20,7 @@ export interface ChatMessage {
   images?: { media_type: string; data: string }[];
   scannedImages?: { src: string; original: string }[];
   scannedHtml?: { html: string; original: string; preview: string; fragmentId: string }[];
+  scannedHtmlFiles?: { path: string; filename: string; url: string }[];
   timestamp: number;
   parentToolUseId?: string | null;
   isStreaming?: boolean;

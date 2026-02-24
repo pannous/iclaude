@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resultScanner } from "./result-scanner";
+import { resultScanner, scanContent } from "./result-scanner";
 
 describe("ResultScanner", () => {
   describe("scanImages", () => {
@@ -97,6 +97,51 @@ describe("ResultScanner", () => {
     it("skips trivial fragments", () => {
       const text = "```html\n...\n```";
       expect(resultScanner.scanHtml(text)).toHaveLength(0);
+    });
+  });
+
+  describe("scanHtmlFiles", () => {
+    it("detects absolute HTML file paths", () => {
+      const text = "Check /Users/me/project/index.html for the output";
+      const files = resultScanner.scanHtmlFiles(text);
+      expect(files).toHaveLength(1);
+      expect(files[0].path).toBe("/Users/me/project/index.html");
+      expect(files[0].filename).toBe("index.html");
+    });
+
+    it("detects tilde-prefixed .htm paths", () => {
+      const text = "Open ~/Sites/page.htm in your browser";
+      const files = resultScanner.scanHtmlFiles(text);
+      expect(files).toHaveLength(1);
+      expect(files[0].path).toBe("~/Sites/page.htm");
+      expect(files[0].filename).toBe("page.htm");
+    });
+
+    it("ignores non-HTML file paths", () => {
+      const text = "/Users/me/project/main.py and ~/readme.md";
+      expect(resultScanner.scanHtmlFiles(text)).toHaveLength(0);
+    });
+
+    it("deduplicates identical paths", () => {
+      const text = "/tmp/out.html and again /tmp/out.html";
+      expect(resultScanner.scanHtmlFiles(text)).toHaveLength(1);
+    });
+
+    it("toHtmlFileUrl generates correct proxy URL", () => {
+      const files = resultScanner.scanHtmlFiles("See ~/project/index.html");
+      expect(resultScanner.toHtmlFileUrl(files[0])).toBe(
+        `/api/fs/html?path=${encodeURIComponent("~/project/index.html")}`,
+      );
+    });
+  });
+
+  describe("scanContent", () => {
+    it("returns htmlFiles alongside images and html", () => {
+      const text = "Image: /tmp/photo.png, page: /tmp/output.html";
+      const result = scanContent(text);
+      expect(result.images).toHaveLength(1);
+      expect(result.htmlFiles).toHaveLength(1);
+      expect(result.htmlFiles[0].filename).toBe("output.html");
     });
   });
 });

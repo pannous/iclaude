@@ -318,6 +318,7 @@ function finalizeOrClearStreamingDraft(sessionId: string) {
         isStreaming: false,
         scannedImages: scanned.images,
         scannedHtml: scanned.html,
+        scannedHtmlFiles: scanned.htmlFiles,
       });
       return;
     }
@@ -394,6 +395,7 @@ function extractTextFromBlocks(blocks: ContentBlock[]): string {
 function scanForImagesAndHtml(text: string, messageId?: string): {
   images?: { src: string; original: string }[];
   html?: { html: string; original: string; preview: string; fragmentId: string }[];
+  htmlFiles?: { path: string; filename: string; url: string }[];
 } {
   const scanned = scanContent(text);
   const idBase = messageId || `msg-${Date.now()}`;
@@ -406,6 +408,13 @@ function scanForImagesAndHtml(text: string, messageId?: string): {
       : undefined,
     html: scanned.html.length > 0
       ? scanned.html.map((h, i) => ({ ...h, fragmentId: `${idBase}:${i}` }))
+      : undefined,
+    htmlFiles: scanned.htmlFiles.length > 0
+      ? scanned.htmlFiles.map((f) => ({
+          path: f.path,
+          filename: f.filename,
+          url: resultScanner.toHtmlFileUrl(f),
+        }))
       : undefined,
   };
 }
@@ -447,6 +456,7 @@ function mergeAssistantMessage(previous: ChatMessage, incoming: ChatMessage): Ch
     contentBlocks: mergedBlocks,
     scannedImages: scanned.images,
     scannedHtml: scanned.html,
+    scannedHtmlFiles: scanned.htmlFiles,
     // Keep the original timestamp position when this is an in-place assistant update.
     timestamp: previous.timestamp ?? incoming.timestamp,
     // Explicitly clear stale streaming marker when incoming is final.
@@ -530,6 +540,7 @@ function handleParsedMessage(
         contentBlocks: msg.content,
         scannedImages: scanned.images,
         scannedHtml: scanned.html,
+        scannedHtmlFiles: scanned.htmlFiles,
         timestamp: data.timestamp || Date.now(),
         parentToolUseId: data.parent_tool_use_id,
         model: msg.model,
@@ -844,6 +855,7 @@ function handleParsedMessage(
             content: histMsg.content,
             timestamp: histMsg.timestamp,
             scannedHtml: userScanned.html,
+            scannedHtmlFiles: userScanned.htmlFiles,
           });
         } else if (histMsg.type === "assistant") {
           const msg = histMsg.message;
@@ -856,6 +868,7 @@ function handleParsedMessage(
             contentBlocks: msg.content,
             scannedImages: scanned.images,
             scannedHtml: scanned.html,
+            scannedHtmlFiles: scanned.htmlFiles,
             timestamp: histMsg.timestamp || Date.now(),
             parentToolUseId: histMsg.parent_tool_use_id,
             model: msg.model,
@@ -905,6 +918,7 @@ function handleParsedMessage(
                 content: resultText,
                 scannedImages: scanned.images,
                 scannedHtml: scanned.html,
+                scannedHtmlFiles: scanned.htmlFiles,
                 timestamp: Date.now(),
               });
             }
