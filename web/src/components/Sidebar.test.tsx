@@ -60,6 +60,7 @@ interface MockStoreState {
   clearRecentlyRenamed: ReturnType<typeof vi.fn>;
   setSdkSessions: ReturnType<typeof vi.fn>;
   closeTerminal: ReturnType<typeof vi.fn>;
+  setActiveTab: ReturnType<typeof vi.fn>;
   setAllProjectsCollapsed: ReturnType<typeof vi.fn>;
 }
 
@@ -127,6 +128,7 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     clearRecentlyRenamed: vi.fn(),
     setSdkSessions: vi.fn(),
     closeTerminal: vi.fn(),
+    setActiveTab: vi.fn(),
     setAllProjectsCollapsed: vi.fn(),
     ...overrides,
   };

@@ -150,6 +150,7 @@ export function Sidebar() {
 
   function handleSelectSession(sessionId: string) {
     useStore.getState().closeTerminal();
+    useStore.getState().setActiveTab("chat");
     // Navigate to session hash — App.tsx hash effect handles setCurrentSession + connectSession
     navigateToSession(sessionId);
     // Close sidebar on mobile
