@@ -20,15 +20,32 @@ interface TerminalViewProps {
   hideHeader?: boolean;
 }
 
+function cssVar(style: CSSStyleDeclaration, name: string, fallback: string) {
+  return style.getPropertyValue(name).trim() || fallback;
+}
+
+// ANSI palette tuned for light backgrounds — readable without being garish
+const LIGHT_ANSI = {
+  black: "#141413", red: "#c53030", green: "#2d7d46", yellow: "#b7791f",
+  blue: "#2b6cb0", magenta: "#805ad5", cyan: "#0e7490", white: "#d4d4d4",
+  brightBlack: "#6f6e69", brightRed: "#e53e3e", brightGreen: "#38a169",
+  brightYellow: "#d69e2e", brightBlue: "#3182ce", brightMagenta: "#9f7aea",
+  brightCyan: "#0891b2", brightWhite: "#faf9f5",
+};
+
 function getTerminalTheme() {
   const style = getComputedStyle(document.documentElement);
-  const bg = style.getPropertyValue("--color-cc-code-bg").trim() || "#1e1e1e";
-  const fg = style.getPropertyValue("--color-cc-code-fg").trim() || "#d4d4d4";
+  const bg = cssVar(style, "--color-cc-terminal-bg", "#141413");
+  const fg = cssVar(style, "--color-cc-terminal-fg", "#d4d4d4");
+  const cursor = cssVar(style, "--color-cc-terminal-cursor", fg);
+  const selection = cssVar(style, "--color-cc-terminal-selection", "rgba(255,255,255,0.2)");
+  const isDark = document.documentElement.classList.contains("dark");
   return {
     background: bg,
     foreground: fg,
-    cursor: fg,
-    selectionBackground: "rgba(255, 255, 255, 0.2)",
+    cursor,
+    selectionBackground: selection,
+    ...(isDark ? {} : LIGHT_ANSI),
   };
 }
 
@@ -183,7 +200,7 @@ export function TerminalView({
       className={`flex flex-col shadow-2xl overflow-hidden border border-cc-border ${
         embedded ? "h-full" : "w-[90vw] max-w-4xl h-[70vh]"
       }`}
-      style={{ background: "var(--color-cc-code-bg)" }}
+      style={{ background: "var(--color-cc-terminal-bg)" }}
       onClick={(e) => e.stopPropagation()}
     >
       {!hideHeader && (

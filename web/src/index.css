@@ -37,6 +37,10 @@
   --color-cc-warning: #b7791f;
   --color-cc-sidebar-footer: #edece5;
   --color-cc-separator: rgba(31,30,29,0.06);
+  --color-cc-terminal-bg: #f5f4ef;
+  --color-cc-terminal-fg: #141413;
+  --color-cc-terminal-cursor: #141413;
+  --color-cc-terminal-selection: rgba(31,30,29,0.15);
 }
 
 @keyframes fadeSlideIn {
@@ -140,6 +144,10 @@
   --color-cc-warning: #f6e05e;
   --color-cc-sidebar-footer: #141413;
   --color-cc-separator: rgba(222,220,209,0.08);
+  --color-cc-terminal-bg: #141413;
+  --color-cc-terminal-fg: #d4d4d4;
+  --color-cc-terminal-cursor: #d4d4d4;
+  --color-cc-terminal-selection: rgba(255,255,255,0.2);
 }
 
 /* Scrollbar styling */
