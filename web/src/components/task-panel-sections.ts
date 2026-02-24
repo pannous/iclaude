@@ -40,6 +40,12 @@ export const SECTION_DEFINITIONS: TaskPanelSectionDef[] = [
     backends: null,
   },
   {
+    id: "mcp-servers",
+    label: "MCP Servers",
+    description: "Model Context Protocol server connections",
+    backends: null,
+  },
+  {
     id: "git-branch",
     label: "Git Branch",
     description: "Current branch, ahead/behind, and line changes",
@@ -55,12 +61,6 @@ export const SECTION_DEFINITIONS: TaskPanelSectionDef[] = [
     id: "linear-issue",
     label: "Linear Issue",
     description: "Linked Linear ticket and comments",
-    backends: null,
-  },
-  {
-    id: "mcp-servers",
-    label: "MCP Servers",
-    description: "Model Context Protocol server connections",
     backends: null,
   },
   {
