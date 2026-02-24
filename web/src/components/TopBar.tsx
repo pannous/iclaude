@@ -247,11 +247,12 @@ export function TopBar() {
                   onClose={() => closeSkill(slug)}
                 />
               ))}
-              <SkillPicker />
           </div>
         )}
 
         <div className="flex items-center gap-0.5 shrink-0">
+        {/* LOCAL: Skill picker — always visible */}
+        <SkillPicker />
         {/* LOCAL: Folder + Branch info */}
         {currentSessionId && isSessionView && cwd && (
           <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-cc-muted mr-1">
