@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useContext, useMemo, useCallback, type ComponentProps } from "react";
+import { useState, useRef, useContext, useMemo, useCallback, type ComponentProps } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage, ContentBlock } from "../types.js";
@@ -582,7 +582,7 @@ function ThinkingBlock({ text }: { text: string }) {
   );
 }
 
-// Bridge code injected into every HTML fragment iframe (console capture + state query/push)
+/** Bridge injected into every HTML fragment iframe: console forwarding + vibeReportState push */
 function buildFragmentBridge(fragmentId: string): string {
   return `(function(){
   var FID='${fragmentId}';
@@ -600,12 +600,6 @@ function buildFragmentBridge(fragmentId: string): string {
   window.addEventListener('error',function(e){
     _post({type:'vibe:console',fragmentId:FID,level:'error',args:[e.message+' at '+e.filename+':'+e.lineno]});
   });
-  window.addEventListener('message',function(e){
-    if(e.data&&e.data.type==='vibe:query_state'&&e.data.fragmentId===FID){
-      var state=typeof window.vibeGetState==='function'?window.vibeGetState():null;
-      _post({type:'vibe:state_response',fragmentId:FID,requestId:e.data.requestId,state:state});
-    }
-  });
   window.vibeReportState=function(state){
     _post({type:'vibe:state_update',fragmentId:FID,state:state});
   };
@@ -618,16 +612,11 @@ function HtmlPreview({ html, preview, fragmentId }: { html: string; preview: str
   const yoloMode = useStore((s) => s.yoloMode);
   const currentIframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  useEffect(() => {
-    return () => { useStore.getState().unregisterFragment(fragmentId); };
-  }, [fragmentId]);
-
   const handleIframeLoad = (iframe: HTMLIFrameElement) => {
     if (!iframe.contentWindow) return;
     currentIframeRef.current = iframe;
-    useStore.getState().registerFragment(fragmentId, iframe);
 
-    // Always inject bridge (console capture + state query/push)
+    // Inject bridge: console forwarding + vibeReportState push
     try { (iframe.contentWindow as any).eval(buildFragmentBridge(fragmentId)); } catch { /* sandboxed */ }
 
     // YOLO mode: also inject vibe command API

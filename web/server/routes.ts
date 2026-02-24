@@ -1034,13 +1034,19 @@ export function createRoutes(
 
   // ─── HTML Fragment bridge (state + console) ──────────────────
 
-  // Live-query a specific fragment's state (waits up to 3s for iframe to respond)
-  api.get("/sessions/:id/fragments/:fid/state", async (c) => {
+  // Return all cached fragment states for a session
+  api.get("/sessions/:id/fragments", (c) => {
+    const id = c.req.param("id");
+    if (!wsBridge.getSession(id)) return c.json({ error: "Session not found" }, 404);
+    return c.json(wsBridge.getAllFragmentStates(id));
+  });
+
+  // Return last state pushed by a fragment via vibeReportState
+  api.get("/sessions/:id/fragments/:fid/state", (c) => {
     const id = c.req.param("id");
     const fid = c.req.param("fid");
     if (!wsBridge.getSession(id)) return c.json({ error: "Session not found" }, 404);
-    const state = await wsBridge.queryFragmentState(id, fid);
-    return c.json({ fragmentId: fid, state });
+    return c.json({ fragmentId: fid, state: wsBridge.getFragmentState(id, fid) });
   });
 
   // ─── Available backends ─────────────────────────────────────

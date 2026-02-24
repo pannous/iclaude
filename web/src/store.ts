@@ -125,8 +125,7 @@ interface AppState {
   // Tool progress (session → tool_use_id → progress info)
   toolProgress: Map<string, Map<string, { toolName: string; elapsedSeconds: number }>>;
 
-  // HTML fragment bridge (iframe refs, state, console logs)
-  fragmentIframes: Map<string, HTMLIFrameElement>;
+  // HTML fragment state cache (last pushed via vibeReportState) and console logs
   fragmentState: Map<string, Record<string, unknown>>;
   fragmentConsole: Map<string, ConsoleLogEntry[]>;
 
@@ -243,8 +242,6 @@ interface AppState {
   clearToolProgress: (sessionId: string, toolUseId?: string) => void;
 
   // Fragment bridge actions
-  registerFragment: (fragmentId: string, iframe: HTMLIFrameElement) => void;
-  unregisterFragment: (fragmentId: string) => void;
   updateFragmentState: (fragmentId: string, state: Record<string, unknown>) => void;
   appendConsoleLog: (fragmentId: string, entry: ConsoleLogEntry) => void;
 
@@ -373,7 +370,6 @@ export const useStore = create<AppState>((set) => ({
   linkedLinearIssues: new Map(),
   mcpServers: new Map(),
   toolProgress: new Map(),
-  fragmentIframes: new Map(),
   fragmentState: new Map(),
   fragmentConsole: new Map(),
   collapsedProjects: initParsed("cc-collapsed-projects", (r) => new Set(JSON.parse(r) as string[]), new Set<string>()),
@@ -725,16 +721,6 @@ export const useStore = create<AppState>((set) => ({
       return { toolProgress: setInMap(s.toolProgress, sessionId, deleteFromMap(sessionProgress, toolUseId)) };
     }),
 
-  registerFragment: (fragmentId, iframe) =>
-    set((s) => ({ fragmentIframes: setInMap(s.fragmentIframes, fragmentId, iframe) })),
-
-  unregisterFragment: (fragmentId) =>
-    set((s) => ({
-      fragmentIframes: deleteFromMap(s.fragmentIframes, fragmentId),
-      fragmentState: deleteFromMap(s.fragmentState, fragmentId),
-      fragmentConsole: deleteFromMap(s.fragmentConsole, fragmentId),
-    })),
-
   updateFragmentState: (fragmentId, state) =>
     set((s) => ({ fragmentState: setInMap(s.fragmentState, fragmentId, state) })),
 
@@ -935,7 +921,6 @@ export const useStore = create<AppState>((set) => ({
       recentlyRenamed: new Set(),
       mcpServers: new Map(),
       toolProgress: new Map(),
-      fragmentIframes: new Map(),
       fragmentState: new Map(),
       fragmentConsole: new Map(),
       prStatus: new Map(),

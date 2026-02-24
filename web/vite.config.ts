@@ -10,6 +10,7 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 2345,
+    strictPort: true,
     allowedHosts: [".trycloudflare.com","mac.fritz.box"],
     proxy: {
       "/api": "http://localhost:3457",

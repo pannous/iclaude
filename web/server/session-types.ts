@@ -261,7 +261,7 @@ export type BrowserOutgoingMessage =
   | { type: "mcp_toggle"; serverName: string; enabled: boolean; client_msg_id?: string }
   | { type: "mcp_reconnect"; serverName: string; client_msg_id?: string }
   | { type: "mcp_set_servers"; servers: Record<string, McpServerConfig>; client_msg_id?: string }
-  | { type: "fragment_state_response"; requestId: string; fragmentId: string; state: unknown };
+  | { type: "fragment_state_update"; fragmentId: string; state: unknown };
 
 /** Messages the bridge sends to the browser */
 export type BrowserIncomingMessageBase =
@@ -299,7 +299,7 @@ export type BrowserIncomingMessageBase =
   | { type: "pr_status_update"; pr: import("./github-pr.js").GitHubPRInfo | null; available: boolean }
   | { type: "mcp_status"; servers: McpServerDetail[] }
   | { type: "session_archived" }
-  | { type: "query_fragment_state"; requestId: string; fragmentId: string };
+;
 
 export type BrowserIncomingMessage = BrowserIncomingMessageBase & { seq?: number };
 

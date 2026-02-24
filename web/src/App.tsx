@@ -1,11 +1,9 @@
 import { lazy, Suspense, useEffect, useState, useMemo, useRef, useSyncExternalStore } from "react";
 import { useStore } from "./store.js";
-import { connectSession } from "./ws.js";
-import { disconnectSession } from "./ws.js";
+import { connectSession, disconnectSession, sendToSession } from "./ws.js";
 import { api } from "./api.js";
 import { parseHash, navigateToSession, navigateHome } from "./utils/routing.js";
 import { handleKeyDown, createMouseHandler } from "./utils/keybindings.js";
-import { resolveStateQuery } from "./utils/fragment-query.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
@@ -201,14 +199,16 @@ export default function App() {
           if (Notification.permission === "granted") new Notification(d.title, { body: d.body });
           break;
         case "vibe:console":
+          // Forward console logs to store for dev tooling
           useStore.getState().appendConsoleLog(d.fragmentId, { level: d.level, args: d.args, timestamp: Date.now() });
           break;
-        case "vibe:state_update":
+        case "vibe:state_update": {
+          // Cache locally and push to server so agents can query via REST
           useStore.getState().updateFragmentState(d.fragmentId, d.state);
+          const sessionId = useStore.getState().currentSessionId;
+          if (sessionId) sendToSession(sessionId, { type: "fragment_state_update", fragmentId: d.fragmentId, state: d.state });
           break;
-        case "vibe:state_response":
-          resolveStateQuery(d.requestId, d.state);
-          break;
+        }
       }
     }
     window.addEventListener("message", handleMessage);

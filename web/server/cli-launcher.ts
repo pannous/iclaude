@@ -526,6 +526,9 @@ export class CliLauncher {
       }
       // Ensure CLAUDECODE is unset inside container
       dockerArgs.push("-e", "CLAUDECODE=");
+      // Inject Companion metadata so the agent can talk back to its session
+      dockerArgs.push("-e", `COMPANION_SESSION_ID=${sessionId}`);
+      dockerArgs.push("-e", `COMPANION_PORT=${this.port}`);
 
       dockerArgs.push(options.containerId!);
       // Use a login shell so ~/.bashrc is sourced and nvm/bun/deno/etc are on PATH
@@ -543,6 +546,8 @@ export class CliLauncher {
         ...process.env,
         CLAUDECODE: undefined,
         ...options.env,
+        COMPANION_SESSION_ID: sessionId,
+        COMPANION_PORT: String(this.port),
         PATH: getEnrichedPath(),
       };
       spawnCwd = info.cwd;

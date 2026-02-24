@@ -1,7 +1,6 @@
 import { useStore } from "./store.js";
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, SdkSessionInfo, McpServerConfig } from "./types.js";
 import { resultScanner, scanContent } from "./utils/result-scanner.js";
-import { queryFragmentState } from "./utils/fragment-query.js";
 import { safeStorage } from "./utils/safe-storage.js";
 
 import { playNotificationSound } from "./utils/notification-sound.js";
@@ -764,14 +763,6 @@ function handleParsedMessage(
 
     case "mcp_status": {
       store.setMcpServers(sessionId, data.servers);
-      break;
-    }
-
-    case "query_fragment_state": {
-      // Server is asking us to query an iframe's current state and send it back
-      queryFragmentState(data.fragmentId).then((state) => {
-        sendToSession(sessionId, { type: "fragment_state_response", requestId: data.requestId, fragmentId: data.fragmentId, state });
-      });
       break;
     }
 

@@ -175,15 +175,52 @@ gh pr edit --body-file /tmp/pr_body.md
 ## Tests
 - All new features must include one or more tests where applicable. Tests should be added under `web/server/` for backend code and `web/src/` for frontend code.
 
+## Inline HTML Fragments
+
+Output HTML in a ` ```html ` code block and it auto-renders as an interactive iframe in the chat. No setup needed.
+
+```html
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:16px;font-family:system-ui">
+  <input type="color" value="#f5f4ef" oninput="update(this.value)">
+  <span id="out">#f5f4ef</span>
+  <script>
+    function update(v) {
+      document.getElementById('out').textContent = v;
+      window.vibeReportState({ color: v }); // push state to parent
+    }
+  </script>
+</body>
+</html>
+```
+
+### Injected APIs
+
+| API | What it does |
+|-----|-------------|
+| `window.vibeReportState(obj)` | Push state to the parent chat; server caches it for the agent to query. |
+| `console.log/warn/error/info` | Automatically captured and available in the session state. |
+| `window.vibe.command(cmd)` | Execute shell commands (YOLO mode only). |
+| `window.vibe.notify(title, body)` | Send a desktop notification. |
+
+Fragment state is queryable via REST:
+```bash
+curl localhost:3456/api/sessions/<sessionId>/fragments/<fragmentId>/state
+```
+
 ## Legacy: HTML Skills System
 
-**Note**: Upstream removed the HTML Skills plugin system in favor of MCP server management. Our implementation is preserved in:
 - `web/server/skill-manager-legacy.ts` — Skill manager module
 - `web/server/skill-routes-legacy.ts` — API routes for skills
 
 The skills system provided:
 - Tab skills (via "+" picker): Full panels like htop with `window.vibe` API
 - Inline HTML fragments in chat with `window.vibeCommand()` access in YOLO mode
+- Inline HTML fragments shall report back via `window.vibeReportState()` and respond to `window.vibeGetState()` for reactive state queries
+
+
+
 
 See git history (`git log --grep=skill`) for full implementation details.
 
