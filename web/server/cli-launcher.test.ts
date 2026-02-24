@@ -353,6 +353,14 @@ describe("launch", () => {
     expect(options.env.CLAUDECODE).toBeUndefined();
   });
 
+  it("injects COMPANION_SESSION_ID and COMPANION_PORT into spawn env", () => {
+    const info = launcher.launch({ cwd: "/tmp" });
+
+    const [, options] = mockSpawn.mock.calls[0];
+    expect(options.env.COMPANION_SESSION_ID).toBe(info.sessionId);
+    expect(options.env.COMPANION_PORT).toBe("3456");
+  });
+
   it("enables Codex web search when codexInternetAccess=true", () => {
     // Use a fake path where no sibling `node` exists, so the spawn uses
     // the codex binary directly (the explicit-node path is tested separately).

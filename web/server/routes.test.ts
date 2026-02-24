@@ -242,6 +242,8 @@ function createMockBridge() {
     markContainerized: vi.fn(),
     broadcastToSession: vi.fn(),
     initializeResumedSession: vi.fn(),
+    getFragmentState: vi.fn(() => null),
+    getAllFragmentStates: vi.fn(() => ({})),
   } as any;
 }
 
@@ -3782,5 +3784,42 @@ describe("POST /api/sessions/create-stream", () => {
 
     // CLI should NOT be launched
     expect(launcher.launch).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Fragment state endpoints ──────────────────────────────────────────────
+
+describe("GET /api/sessions/:id/fragments", () => {
+  it("returns all fragment states for a valid session", async () => {
+    bridge.getSession.mockReturnValue({ state: {} });
+    bridge.getAllFragmentStates.mockReturnValue({
+      "msg-1:0": { color: "#ff0000" },
+      "msg-2:0": { value: 42 },
+    });
+
+    const res = await app.request("/api/sessions/s1/fragments");
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data).toEqual({
+      "msg-1:0": { color: "#ff0000" },
+      "msg-2:0": { value: 42 },
+    });
+  });
+
+  it("returns 404 for unknown session", async () => {
+    bridge.getSession.mockReturnValue(null);
+
+    const res = await app.request("/api/sessions/unknown/fragments");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns empty object when no fragments have reported state", async () => {
+    bridge.getSession.mockReturnValue({ state: {} });
+    bridge.getAllFragmentStates.mockReturnValue({});
+
+    const res = await app.request("/api/sessions/s1/fragments");
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data).toEqual({});
   });
 });
