@@ -517,11 +517,11 @@ export const useStore = create<AppState>((set) => ({
   },
   newSession: () => {
     safeStorage.removeItem("cc-current-session");
-    set((s) => ({ currentSessionId: null, homeResetKey: s.homeResetKey + 1 }));
+    set((s) => ({ currentSessionId: null, activeTab: "chat", homeResetKey: s.homeResetKey + 1 }));
   },
   newSessionInFolder: (cwd) => {
     safeStorage.removeItem("cc-current-session");
-    set((s) => ({ currentSessionId: null, newSessionCwd: cwd, homeResetKey: s.homeResetKey + 1 }));
+    set((s) => ({ currentSessionId: null, activeTab: "chat", newSessionCwd: cwd, homeResetKey: s.homeResetKey + 1 }));
   },
 
   setCurrentSession: (id) => {
