@@ -857,25 +857,28 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 </svg>
               </button>
 
-              {/* LOCAL: Dictation/mic button */}
-              <button
-                onClick={toggleListening}
-                disabled={!isConnected}
-                className={`hidden sm:flex items-center justify-center w-9 h-9 rounded-lg border transition-colors ${
-                  isListening
-                    ? "text-cc-error border-cc-error/40 bg-cc-error/10 hover:bg-cc-error/20 cursor-pointer animate-pulse"
-                    : isConnected
-                      ? "text-cc-muted border-cc-border hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
-                      : "text-cc-muted opacity-30 border-cc-border/60 cursor-not-allowed"
-                }`}
-                title={isListening ? "Stop dictation" : "Start dictation"}
-              >
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
-                  <rect x="5.5" y="1.5" width="5" height="8" rx="2.5" />
-                  <path d="M3.5 7.5a4.5 4.5 0 009 0" />
-                  <path d="M8 12.5v2" />
-                </svg>
-              </button>
+              {/* LOCAL: Dictation/mic button — only shown when Web Speech API is available
+                 (not on iOS/iPadOS Safari where it doesn't work and crowds the send button) */}
+              {SpeechRecognitionAPI && (
+                <button
+                  onClick={toggleListening}
+                  disabled={!isConnected}
+                  className={`hidden sm:flex items-center justify-center w-9 h-9 rounded-lg border transition-colors ${
+                    isListening
+                      ? "text-cc-error border-cc-error/40 bg-cc-error/10 hover:bg-cc-error/20 cursor-pointer animate-pulse"
+                      : isConnected
+                        ? "text-cc-muted border-cc-border hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
+                        : "text-cc-muted opacity-30 border-cc-border/60 cursor-not-allowed"
+                  }`}
+                  title={isListening ? "Stop dictation" : "Start dictation"}
+                >
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+                    <rect x="5.5" y="1.5" width="5" height="8" rx="2.5" />
+                    <path d="M3.5 7.5a4.5 4.5 0 009 0" />
+                    <path d="M8 12.5v2" />
+                  </svg>
+                </button>
+              )}
 
               {/* Send/stop: always visible */}
               {/* iOS/iPadOS: onTouchEnd fires before blur/focus changes, so we
