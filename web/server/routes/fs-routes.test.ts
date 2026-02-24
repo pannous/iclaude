@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 // Mock Bun.file so the /fs/image handler works under Vitest (Node)
 const mockExists = vi.fn();
-const mockFile = vi.fn(() => ({
+const mockFile = vi.fn((_path: string) => ({
   exists: mockExists,
   type: "image/jpeg",
   // Bun.file returns a Blob-compatible object
@@ -45,7 +45,7 @@ describe("/fs/image", () => {
     );
     expect(res.status).toBe(200);
     // Verify Bun.file was called with the expanded path, not the raw tilde
-    const calledPath = mockFile.mock.calls[0][0] as string;
+    const calledPath = (mockFile.mock.calls.at(-1) as string[])?.[0];
     expect(calledPath).toBe(join(homedir(), "Pictures/cat.jpg"));
     expect(calledPath).not.toContain("~");
   });
@@ -57,6 +57,6 @@ describe("/fs/image", () => {
       `/fs/image?path=${encodeURIComponent(absPath)}`,
     );
     expect(res.status).toBe(200);
-    expect(mockFile.mock.calls[0][0]).toBe(absPath);
+    expect((mockFile.mock.calls.at(-1) as string[])?.[0]).toBe(absPath);
   });
 });
