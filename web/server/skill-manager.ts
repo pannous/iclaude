@@ -247,7 +247,8 @@ export function wrapWithVibeApi(html: string, slug: string): string {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ command: command, cwd: options && options.cwd })
     });
-    return res.json();
+    var r = await res.json();
+    return { success: r.ok, output: r.stdout || '', error: r.stderr || '', exitCode: r.exitCode };
   }
 
   window.vibe = {
