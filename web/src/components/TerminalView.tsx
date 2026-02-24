@@ -20,11 +20,14 @@ interface TerminalViewProps {
   hideHeader?: boolean;
 }
 
-function getTerminalTheme(dark: boolean) {
+function getTerminalTheme() {
+  const style = getComputedStyle(document.documentElement);
+  const bg = style.getPropertyValue("--color-cc-code-bg").trim() || "#1e1e1e";
+  const fg = style.getPropertyValue("--color-cc-code-fg").trim() || "#d4d4d4";
   return {
-    background: dark ? "#141413" : "#1e1e1e",
-    foreground: "#d4d4d4",
-    cursor: "#d4d4d4",
+    background: bg,
+    foreground: fg,
+    cursor: fg,
     selectionBackground: "rgba(255, 255, 255, 0.2)",
   };
 }
@@ -63,7 +66,7 @@ export function TerminalView({
         cursorBlink: true,
         fontSize: FONT_SIZE,
         fontFamily: FONT_FAMILY,
-        theme: getTerminalTheme(useStore.getState().darkMode),
+        theme: getTerminalTheme(),
       });
 
       const fit = new FitAddon();
@@ -149,7 +152,7 @@ export function TerminalView({
   // Separate effect: update theme without recreating the terminal
   useEffect(() => {
     if (xtermRef.current) {
-      xtermRef.current.options.theme = getTerminalTheme(darkMode);
+      xtermRef.current.options.theme = getTerminalTheme();
     }
   }, [darkMode]);
 
@@ -180,7 +183,7 @@ export function TerminalView({
       className={`flex flex-col shadow-2xl overflow-hidden border border-cc-border ${
         embedded ? "h-full" : "w-[90vw] max-w-4xl h-[70vh]"
       }`}
-      style={{ background: darkMode ? "#141413" : "#1e1e1e" }}
+      style={{ background: "var(--color-cc-code-bg)" }}
       onClick={(e) => e.stopPropagation()}
     >
       {!hideHeader && (
