@@ -15,6 +15,7 @@ export interface SkillInfo {
 // ─── Paths ──────────────────────────────────────────────────────────────────
 
 const GLOBAL_SKILLS_DIR = join(homedir(), ".companion", "skills");
+const CLAUDE_SKILLS_DIR = join(homedir(), ".claude", "skills");
 
 function projectSkillsDir(cwd: string): string {
   return join(cwd, "skills");
@@ -82,13 +83,54 @@ function scanSkillsDir(baseDir: string): SkillInfo[] {
   }
 }
 
-/** List skills from global (~/.companion/skills/) and optionally project-local (<cwd>/skills/) directories. */
+/** Scan ~/.claude/skills/ for SKILL.md markdown skills (YAML frontmatter). */
+function scanMarkdownSkillsDir(baseDir: string): SkillInfo[] {
+  if (!existsSync(baseDir)) return [];
+  try {
+    const entries = readdirSync(baseDir);
+    const skills: SkillInfo[] = [];
+    for (const entry of entries) {
+      const dir = join(baseDir, entry);
+      try {
+        if (!statSync(dir).isDirectory()) continue;
+        const mdPath = join(dir, "SKILL.md");
+        if (!existsSync(mdPath)) continue;
+        const content = readFileSync(mdPath, "utf-8");
+        const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+        let name = entry;
+        let description = "";
+        if (fmMatch) {
+          for (const line of fmMatch[1].split("\n")) {
+            const nm = line.match(/^name:\s*["']?(.+?)["']?\s*$/);
+            if (nm) name = nm[1];
+            const dm = line.match(/^description:\s*["']?(.+?)["']?\s*$/);
+            if (dm) description = dm[1];
+          }
+        }
+        skills.push({ slug: entry, name, description, icon: "file-text", refreshInterval: null });
+      } catch {
+        // Skip malformed entries
+      }
+    }
+    return skills;
+  } catch {
+    return [];
+  }
+}
+
+/** List skills from ~/.claude/skills/ (markdown), ~/.companion/skills/ (HTML panels), and optionally project-local (<cwd>/skills/). HTML panel skills take priority on slug collision. */
 export function listSkills(cwd?: string): SkillInfo[] {
   ensureGlobalDir();
   const bySlug = new Map<string, SkillInfo>();
+  // Markdown skills from ~/.claude/skills/ (lowest priority)
+  for (const skill of scanMarkdownSkillsDir(CLAUDE_SKILLS_DIR)) {
+    bySlug.set(skill.slug, skill);
+  }
+  // HTML panel skills from ~/.companion/skills/ (higher priority)
   for (const skill of scanSkillsDir(GLOBAL_SKILLS_DIR)) {
     bySlug.set(skill.slug, skill);
   }
+  // Project-local skills (highest priority)
   if (cwd) {
     for (const skill of scanSkillsDir(projectSkillsDir(cwd))) {
       bySlug.set(skill.slug, skill);

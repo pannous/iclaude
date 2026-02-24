@@ -1,100 +1,79 @@
-import { existsSync } from "node:fs";
-import { readdir, readFile, writeFile, rm, mkdir } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import type { Hono } from "hono";
+/**
+ * HTML Skills routes — serves panel.html skills from ~/.companion/skills/
+ * with window.vibe API injection for tab-based skill panels.
+ *
+ * Also provides /api/exec for vibe.command() from skill iframes.
+ */
 
-const SKILLS_DIR = join(homedir(), ".claude", "skills");
+import { execSync } from "node:child_process";
+import type { Hono } from "hono";
+import * as skillManager from "../skill-manager.js";
 
 export function registerSkillRoutes(api: Hono): void {
-  api.get("/skills", async (c) => {
+  // ─── List all HTML skills ──────────────────────────────────────────────────
+  api.get("/skills", (c) => {
     try {
-      if (!existsSync(SKILLS_DIR)) return c.json([]);
-      const entries = await readdir(SKILLS_DIR, { withFileTypes: true });
-      const skills = [];
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const skillMdPath = join(SKILLS_DIR, entry.name, "SKILL.md");
-        if (!existsSync(skillMdPath)) continue;
-        const content = await readFile(skillMdPath, "utf-8");
-        const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-        let name = entry.name;
-        let description = "";
-        if (fmMatch) {
-          for (const line of fmMatch[1].split("\n")) {
-            const nameMatch = line.match(/^name:\s*(.+)/);
-            if (nameMatch) name = nameMatch[1].trim().replace(/^["']|["']$/g, "");
-            const descMatch = line.match(/^description:\s*["']?(.+?)["']?\s*$/);
-            if (descMatch) description = descMatch[1];
-          }
-        }
-        skills.push({ slug: entry.name, name, description, path: skillMdPath });
-      }
-      return c.json(skills);
-    } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json(skillManager.listSkills());
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
     }
   });
 
-  api.get("/skills/:slug", async (c) => {
+  // ─── Get skill metadata ────────────────────────────────────────────────────
+  api.get("/skills/:slug", (c) => {
+    const skill = skillManager.getSkill(c.req.param("slug"));
+    if (!skill) return c.json({ error: "Skill not found" }, 404);
+    return c.json(skill);
+  });
+
+  // ─── Serve panel.html with injected window.vibe API ────────────────────────
+  api.get("/skills/:slug/panel", (c) => {
     const slug = c.req.param("slug");
-    if (!slug || slug.includes("..") || slug.includes("/") || slug.includes("\\")) {
-      return c.json({ error: "Invalid slug" }, 400);
-    }
-    const skillMdPath = join(SKILLS_DIR, slug, "SKILL.md");
-    if (!existsSync(skillMdPath)) return c.json({ error: "Skill not found" }, 404);
-    const content = await readFile(skillMdPath, "utf-8");
-    return c.json({ slug, path: skillMdPath, content });
+    const skill = skillManager.getSkill(slug);
+    if (!skill) return c.json({ error: "Skill not found" }, 404);
+    const rawHtml = skillManager.getSkillPanel(slug);
+    if (!rawHtml) return c.json({ error: "Panel HTML not found" }, 404);
+    return new Response(skillManager.wrapWithVibeApi(rawHtml, slug), {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
   });
 
-  api.post("/skills", async (c) => {
+  // ─── Skill persistent state ────────────────────────────────────────────────
+  api.get("/skills/:slug/state", (c) => {
+    return c.json(skillManager.getSkillState(c.req.param("slug")));
+  });
+
+  api.put("/skills/:slug/state", async (c) => {
+    const slug = c.req.param("slug");
+    if (!skillManager.getSkill(slug)) return c.json({ error: "Skill not found" }, 404);
     const body = await c.req.json().catch(() => ({}));
-    const { name, description, content } = body;
-    if (!name || typeof name !== "string") {
-      return c.json({ error: "name is required" }, 400);
-    }
-
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    if (!slug) return c.json({ error: "Invalid name" }, 400);
-
-    const skillDir = join(SKILLS_DIR, slug);
-    const skillMdPath = join(skillDir, "SKILL.md");
-    if (existsSync(skillMdPath)) {
-      return c.json({ error: `Skill "${slug}" already exists` }, 409);
-    }
-
-    await mkdir(SKILLS_DIR, { recursive: true });
-    await mkdir(skillDir, { recursive: true });
-
-    const md = `---\nname: ${slug}\ndescription: ${JSON.stringify(description || `Skill: ${name}`)}\n---\n\n${content || `# ${name}\n\nDescribe what this skill does and how to use it.\n`}`;
-    await writeFile(skillMdPath, md, "utf-8");
-
-    return c.json({ slug, name, description: description || `Skill: ${name}`, path: skillMdPath });
+    skillManager.setSkillState(slug, body);
+    return c.json({ ok: true });
   });
 
-  api.put("/skills/:slug", async (c) => {
-    const slug = c.req.param("slug");
-    if (!slug || slug.includes("..") || slug.includes("/") || slug.includes("\\")) {
-      return c.json({ error: "Invalid slug" }, 400);
-    }
-    const skillMdPath = join(SKILLS_DIR, slug, "SKILL.md");
-    if (!existsSync(skillMdPath)) return c.json({ error: "Skill not found" }, 404);
+  // ─── Shell exec for window.vibe.command() ──────────────────────────────────
+  api.post("/exec", async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    if (typeof body.content !== "string") {
-      return c.json({ error: "content is required" }, 400);
+    const { command, cwd } = body;
+    if (!command || typeof command !== "string") {
+      return c.json({ error: "command is required" }, 400);
     }
-    await writeFile(skillMdPath, body.content, "utf-8");
-    return c.json({ ok: true, slug, path: skillMdPath });
-  });
-
-  api.delete("/skills/:slug", async (c) => {
-    const slug = c.req.param("slug");
-    if (!slug || slug.includes("..") || slug.includes("/") || slug.includes("\\")) {
-      return c.json({ error: "Invalid slug" }, 400);
+    try {
+      const stdout = execSync(command, {
+        cwd: cwd || undefined,
+        encoding: "utf-8",
+        timeout: 30_000,
+        maxBuffer: 5 * 1024 * 1024,
+      });
+      return c.json({ ok: true, stdout });
+    } catch (e: unknown) {
+      const err = e as { stdout?: string; stderr?: string; status?: number };
+      return c.json({
+        ok: false,
+        stdout: err.stdout || "",
+        stderr: err.stderr || "",
+        exitCode: err.status ?? 1,
+      });
     }
-    const skillDir = join(SKILLS_DIR, slug);
-    if (!existsSync(skillDir)) return c.json({ error: "Skill not found" }, 404);
-    await rm(skillDir, { recursive: true, force: true });
-    return c.json({ ok: true, slug });
   });
 }
