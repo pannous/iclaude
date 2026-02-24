@@ -212,7 +212,7 @@ export function registerAgentRoutes(
 
   // ── Webhook Trigger ────────────────────────────────────────────────────
 
-  api.post("/agents/:id/webhook/:secret", async (c) => {
+  api.all("/agents/:id/webhook/:secret", async (c) => {
     const id = c.req.param("id");
     const secret = c.req.param("secret");
 
