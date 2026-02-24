@@ -27,7 +27,7 @@ Return the following HTML fragment directly in your response (not as a code bloc
 async function go() {
   if (!window.vibe) { document.getElementById('out').textContent = 'need YOLO'; return; }
   var r = await vibe.command('date "+%H:%M:%S"');
-  document.getElementById('out').textContent = r.success ? r.output.trim() : 'err';
+  document.getElementById('out').textContent = r.success ? r.output.trim() : 'err '+r;
   var d = await vibe.command('date "+%A %d %B"');
   if (d.success) document.getElementById('sub').textContent = d.output.trim();
 }
