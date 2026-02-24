@@ -266,10 +266,24 @@ function ToolMessageGroup({ group }: { group: ToolMsgGroup }) {
               <div className="border-t border-cc-border px-3 py-1.5">
                 {group.items.map((item, i) => {
                   const preview = getPreview(item.name, item.input);
+                  const filePath = (item.name === "Read" || item.name === "Write" || item.name === "Edit" || item.name === "Glob" || item.name === "Grep")
+                    && (item.input.file_path || item.input.path || item.input.notebook_path)
+                    ? String(item.input.file_path || item.input.path || item.input.notebook_path) : null;
                   return (
-                    <div key={item.id || i} className="flex items-center gap-2 py-1 text-xs text-cc-muted font-mono-code truncate">
+                    <div key={item.id || i} className="flex items-center gap-2 py-1 text-xs font-mono-code truncate">
                       <span className="w-1 h-1 rounded-full bg-cc-muted/40 shrink-0" />
-                      <span className="truncate">{preview || JSON.stringify(item.input).slice(0, 80)}</span>
+                      {filePath ? (
+                        <button
+                          type="button"
+                          className="truncate text-cc-muted hover:text-cc-primary cursor-pointer underline decoration-cc-muted/30 hover:decoration-cc-primary/50 transition-colors text-left"
+                          onClick={(e) => { e.stopPropagation(); useStore.getState().openFileInEditor(filePath); }}
+                          title={`Open ${filePath} in editor`}
+                        >
+                          {preview || filePath}
+                        </button>
+                      ) : (
+                        <span className="truncate text-cc-muted">{preview || JSON.stringify(item.input).slice(0, 80)}</span>
+                      )}
                     </div>
                   );
                 })}
@@ -354,6 +368,9 @@ function ToolActivityLine({ activity }: { activity: ToolActivity }) {
   const [loading, setLoading] = useState(false);
   const preview = getPreview(activity.name, activity.input);
   const iconType = getToolIcon(activity.name);
+  const filePath = (activity.name === "Read" || activity.name === "Write" || activity.name === "Edit" || activity.name === "Glob" || activity.name === "Grep")
+    && (activity.input.file_path || activity.input.path || activity.input.notebook_path)
+    ? String(activity.input.file_path || activity.input.path || activity.input.notebook_path) : null;
 
   const handleClick = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -385,9 +402,20 @@ function ToolActivityLine({ activity }: { activity: ToolActivity }) {
         )}
         {!activity.hasResult && <span className="w-2.5 shrink-0" />}
         <ToolIcon type={iconType} />
-        <span className={`text-[11px] font-mono-code truncate ${activity.isError ? "text-cc-error" : "text-cc-muted"}`}>
-          {activity.name === "Bash" ? `$ ${activity.input.command || ""}` : preview}
-        </span>
+        {filePath ? (
+          <span
+            className="text-[11px] font-mono-code truncate text-cc-muted hover:text-cc-primary cursor-pointer underline decoration-cc-muted/30 hover:decoration-cc-primary/50 transition-colors"
+            onClick={(e) => { e.stopPropagation(); useStore.getState().openFileInEditor(filePath); }}
+            role="link"
+            title={`Open ${filePath} in editor`}
+          >
+            {preview}
+          </span>
+        ) : (
+          <span className={`text-[11px] font-mono-code truncate ${activity.isError ? "text-cc-error" : "text-cc-muted"}`}>
+            {activity.name === "Bash" ? `$ ${activity.input.command || ""}` : preview}
+          </span>
+        )}
       </button>
       {showResult && (
         <div className="ml-6 mt-0.5 mb-1">
