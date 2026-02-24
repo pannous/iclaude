@@ -784,6 +784,24 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 </svg>
               </button>
 
+              {text.trim() && (
+                <button
+                  onClick={() => {
+                    setText("");
+                    setImages([]);
+                    if (textareaRef.current) textareaRef.current.style.height = "auto";
+                    textareaRef.current?.focus();
+                  }}
+                  className="flex items-center justify-center w-6 h-6 rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+                  title="Clear input"
+                  aria-label="Clear input"
+                >
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
+                    <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+                  </svg>
+                </button>
+              )}
+
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={!isConnected}
