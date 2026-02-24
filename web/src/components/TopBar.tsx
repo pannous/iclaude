@@ -4,7 +4,6 @@ import { useStore } from "../store.js";
 // LOCAL: Additional features
 import { api } from "../api.js";
 import { CopyButton } from "./CopyButton.js";
-import { SkillPicker } from "./SkillPicker.js";
 import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
 import { conversationToText } from "../utils/message-text.js";
 import { parseHash } from "../utils/routing.js";
@@ -37,8 +36,6 @@ export function TopBar() {
   const activeTab = useStore((s) => s.activeTab);
   const editorTabEnabled = useStore((s) => s.editorTabEnabled);
   const setActiveTab = useStore((s) => s.setActiveTab);
-  const openSkills = useStore((s) => s.openSkills);
-  const closeSkill = useStore((s) => s.closeSkill);
   const markChatTabReentry = useStore((s) => s.markChatTabReentry);
   const quickTerminalOpen = useStore((s) => s.quickTerminalOpen);
   const quickTerminalTabs = useStore((s) => s.quickTerminalTabs);
@@ -237,22 +234,10 @@ export function TopBar() {
                   Editor
                 </button>
               )}
-              {/* LOCAL: Skill panel tabs */}
-              {openSkills.map((slug) => (
-                <TabBtn
-                  key={slug}
-                  label={slug}
-                  active={activeTab === `skill:${slug}`}
-                  onClick={() => setActiveTab(`skill:${slug}`)}
-                  onClose={() => closeSkill(slug)}
-                />
-              ))}
           </div>
         )}
 
         <div className="flex items-center gap-0.5 shrink-0">
-        {/* LOCAL: Skill picker */}
-        <SkillPicker />
         {/* LOCAL: Folder + Branch info */}
         {currentSessionId && isSessionView && cwd && (
           <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-cc-muted mr-1">
@@ -331,34 +316,5 @@ export function TopBar() {
         />
       )}
     </header>
-  );
-}
-
-function TabBtn({ label, active, onClick, onClose, badge }: {
-  label: string; active: boolean; onClick: () => void;
-  onClose?: () => void; badge?: number;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer flex items-center gap-1 ${
-        active ? "bg-cc-card text-cc-fg shadow-sm" : "text-cc-muted hover:text-cc-fg"
-      }`}
-    >
-      {label}
-      {badge !== undefined && badge > 0 && (
-        <span className="text-[9px] bg-cc-warning text-white rounded-full w-4 h-4 flex items-center justify-center font-semibold leading-none">
-          {badge}
-        </span>
-      )}
-      {onClose && (
-        <span
-          onClick={(e) => { e.stopPropagation(); onClose(); }}
-          className="ml-0.5 text-cc-muted hover:text-cc-fg"
-        >
-          &times;
-        </span>
-      )}
-    </button>
   );
 }
