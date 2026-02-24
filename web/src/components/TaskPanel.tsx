@@ -10,6 +10,7 @@ import { formatResetTime, formatCodexResetTime, formatWindowDuration, formatToke
 import { timeAgo } from "../utils/time-ago.js";
 import { captureException } from "../analytics.js";
 import { SectionErrorBoundary } from "./SectionErrorBoundary.js";
+import { SKILL_ICON_PATHS, PUZZLE_ICON_PATH } from "../utils/skill-icons.js";
 
 const EMPTY_TASKS: TaskItem[] = [];
 const COUNTDOWN_REFRESH_MS = 30_000;
@@ -947,6 +948,56 @@ function TasksSection({ sessionId }: { sessionId: string }) {
   );
 }
 
+// ─── Plugins Section ────────────────────────────────────────────────────────
+
+function PluginsSection({ sessionId: _sessionId }: { sessionId: string }) {
+  const [skills, setSkills] = useState<{ slug: string; name: string; icon?: string; type?: string }[]>([]);
+  const [expanded, setExpanded] = useState(false);
+  const openSkill = useStore((s) => s.openSkill);
+
+  useEffect(() => {
+    api.listSkills()
+      .then((list) => setSkills(list.filter((s) => s.type !== "markdown")))
+      .catch(() => setSkills([]));
+  }, []);
+
+  if (skills.length === 0) return null;
+
+  return (
+    <div className="shrink-0 border-b border-cc-border">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full px-4 py-2.5 text-[11px] font-medium text-cc-muted uppercase tracking-wider flex items-center gap-1.5 hover:text-cc-fg transition-colors cursor-pointer"
+      >
+        <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 transition-transform ${expanded ? "rotate-90" : ""}`}>
+          <path d="M6 4l4 4-4 4" />
+        </svg>
+        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-60">
+          <path d={PUZZLE_ICON_PATH} />
+        </svg>
+        Plugins ({skills.length})
+      </button>
+      {expanded && (
+        <div className="px-4 pb-3 space-y-0.5">
+          {skills.map((s) => (
+            <button
+              key={s.slug}
+              onClick={() => openSkill(s.slug)}
+              className="w-full text-left px-2 py-1.5 rounded-md text-[12px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-cc-muted shrink-0">
+                <path d={SKILL_ICON_PATHS[s.icon || ""] || SKILL_ICON_PATHS.terminal} />
+              </svg>
+              <span className="truncate">{s.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Section Component Map ───────────────────────────────────────────────────
 
 const SECTION_COMPONENTS: Record<string, ComponentType<{ sessionId: string }>> = {
@@ -956,6 +1007,7 @@ const SECTION_COMPONENTS: Record<string, ComponentType<{ sessionId: string }>> =
   "linear-issue": LinearIssueSection,
   "mcp-servers": McpSection,
   "tasks": TasksSection,
+  "plugins": PluginsSection,
 };
 
 // ─── Panel Config View ───────────────────────────────────────────────────────

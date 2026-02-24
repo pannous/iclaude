@@ -31,6 +31,7 @@ describe("getInitialTaskPanelConfig", () => {
 
   it("restores a valid saved config from localStorage", () => {
     // Save a config with a custom order and one section disabled
+    // (missing "plugins" — it was added later and will be appended by merge logic)
     const saved = {
       order: ["tasks", "git-branch", "usage-limits", "github-pr", "linear-issue", "mcp-servers"],
       enabled: {
@@ -45,11 +46,13 @@ describe("getInitialTaskPanelConfig", () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
 
     const config = getInitialTaskPanelConfig();
-    // Order should be preserved as-is since all IDs are still valid
-    expect(config.order).toEqual(saved.order);
+    // Order preserved, with new "plugins" section appended
+    expect(config.order).toEqual([...saved.order, "plugins"]);
     // Disabled state should be preserved
     expect(config.enabled["github-pr"]).toBe(false);
     expect(config.enabled["tasks"]).toBe(true);
+    // New section enabled by default
+    expect(config.enabled["plugins"]).toBe(true);
   });
 
   it("appends new sections that were added since the config was saved", () => {
@@ -66,14 +69,15 @@ describe("getInitialTaskPanelConfig", () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
 
     const config = getInitialTaskPanelConfig();
-    // The two missing sections should be appended at the end
+    // The missing sections should be appended at the end
     expect(config.order).toEqual([
       "usage-limits", "git-branch", "github-pr", "linear-issue",
-      "mcp-servers", "tasks",
+      "mcp-servers", "tasks", "plugins",
     ]);
     // New sections should be enabled by default
     expect(config.enabled["mcp-servers"]).toBe(true);
     expect(config.enabled["tasks"]).toBe(true);
+    expect(config.enabled["plugins"]).toBe(true);
     // Existing disabled state should be preserved
     expect(config.enabled["git-branch"]).toBe(false);
   });
@@ -97,9 +101,9 @@ describe("getInitialTaskPanelConfig", () => {
     const config = getInitialTaskPanelConfig();
     // "old-removed-section" should be filtered out
     expect(config.order).not.toContain("old-removed-section");
-    // All valid sections should remain in their saved order
+    // All valid sections should remain in their saved order (plugins already present)
     expect(config.order).toEqual([
-      "usage-limits", "git-branch", "github-pr", "linear-issue", "mcp-servers", "tasks",
+      "usage-limits", "git-branch", "github-pr", "linear-issue", "mcp-servers", "tasks", "plugins",
     ]);
   });
 
@@ -125,7 +129,8 @@ describe("getInitialTaskPanelConfig", () => {
     expect(config.order).toContain("linear-issue");
     expect(config.order).toContain("mcp-servers");
     expect(config.order).toContain("tasks");
-    expect(config.order.length).toBe(6);
+    expect(config.order).toContain("plugins");
+    expect(config.order.length).toBe(7);
   });
 
   it("returns defaults when localStorage contains corrupted JSON", () => {

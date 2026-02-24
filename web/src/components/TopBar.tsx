@@ -4,6 +4,7 @@ import { useStore } from "../store.js";
 // LOCAL: Additional features
 import { api } from "../api.js";
 import { CopyButton } from "./CopyButton.js";
+import { SkillPicker } from "./SkillPicker.js";
 import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
 import { conversationToText } from "../utils/message-text.js";
 import { parseHash } from "../utils/routing.js";
@@ -250,6 +251,8 @@ export function TopBar() {
         )}
 
         <div className="flex items-center gap-0.5 shrink-0">
+        {/* LOCAL: Skill picker */}
+        <SkillPicker />
         {/* LOCAL: Folder + Branch info */}
         {currentSessionId && isSessionView && cwd && (
           <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-cc-muted mr-1">
