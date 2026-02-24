@@ -11,17 +11,17 @@ describe("messageToText", () => {
     expect(messageToText(msg({ role: "user", content: "hello" }))).toBe("hello");
   });
 
-  it("extracts text from contentBlocks", () => {
+  it("extracts text and tool_use from contentBlocks", () => {
     const m = msg({
       role: "assistant",
       content: "",
       contentBlocks: [
         { type: "text", text: "first" },
-        { type: "tool_use", id: "t1", name: "Bash", input: {} },
+        { type: "tool_use", id: "t1", name: "Bash", input: { command: "ls" } },
         { type: "text", text: "second" },
       ],
     });
-    expect(messageToText(m)).toBe("first\n\nsecond");
+    expect(messageToText(m)).toBe("first\n\n[Terminal] $ ls\n\nsecond");
   });
 
   it("includes thinking blocks", () => {
@@ -36,13 +36,36 @@ describe("messageToText", () => {
     expect(messageToText(m)).toBe("hmm\n\nanswer");
   });
 
-  it("falls back to content when contentBlocks has no text", () => {
+  it("formats Bash tool_use with description and command", () => {
+    const m = msg({
+      role: "assistant",
+      content: "",
+      contentBlocks: [
+        { type: "tool_use", id: "t1", name: "Bash", input: { command: "bun run test", description: "Run tests" } },
+      ],
+    });
+    expect(messageToText(m)).toBe("[Terminal] Run tests\n$ bun run test");
+  });
+
+  it("formats file tool_use blocks", () => {
+    const m = msg({
+      role: "assistant",
+      content: "",
+      contentBlocks: [
+        { type: "tool_use", id: "t1", name: "Read", input: { file_path: "/src/app.ts" } },
+      ],
+    });
+    expect(messageToText(m)).toBe("[Read File] /src/app.ts");
+  });
+
+  it("falls back to content when tool_use blocks have no extractable info", () => {
     const m = msg({
       role: "assistant",
       content: "fallback",
-      contentBlocks: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }],
+      contentBlocks: [{ type: "tool_use", id: "t1", name: "Unknown", input: {} }],
     });
-    expect(messageToText(m)).toBe("fallback");
+    // tool_use produces "[Unknown]", so content blocks win over fallback
+    expect(messageToText(m)).toBe("[Unknown]");
   });
 });
 
@@ -72,12 +95,13 @@ describe("conversationToText", () => {
     expect(result).toContain("answer");
   });
 
-  it("skips messages with empty text", () => {
+  it("includes tool_use blocks in conversation output", () => {
     const msgs = [
-      msg({ id: "1", role: "assistant", content: "", contentBlocks: [{ type: "tool_use", id: "t1", name: "Bash", input: {} }] }),
+      msg({ id: "1", role: "assistant", content: "", contentBlocks: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "git status" } }] }),
       msg({ id: "2", role: "user", content: "hi" }),
     ];
     const result = conversationToText(msgs);
-    expect(result).toBe("User:\nhi");
+    expect(result).toContain("[Terminal] $ git status");
+    expect(result).toContain("User:\nhi");
   });
 });
