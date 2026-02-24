@@ -180,13 +180,24 @@ export function Composer({ sessionId }: { sessionId: string }) {
     }
   }, [slashMenuOpen, mentionContext, mentionMenuOpen]);
 
+  // Auto-send queued speech input after text state updates
+  const [pendingAutoSend, setPendingAutoSend] = useState(false);
+  useEffect(() => {
+    if (pendingAutoSend && text.trim()) {
+      setPendingAutoSend(false);
+      handleSend();
+    }
+  }, [pendingAutoSend, text]);
+
   // Receive speech input injected from native iOS app via WKWebView.evaluateJavaScript
   useEffect(() => {
     const handler = (e: Event) => {
-      const text = (e as CustomEvent<{ text: string }>).detail?.text;
-      if (!text) return;
-      setText((prev) => (prev ? prev + " " + text : text));
+      const detail = (e as CustomEvent<{ text: string; autoSend?: boolean }>).detail;
+      if (!detail?.text) return;
+      (window as any).__speechInputReceived = true;
+      setText((prev) => (prev ? prev + " " + detail.text : detail.text));
       textareaRef.current?.focus();
+      if (detail.autoSend) setPendingAutoSend(true);
     };
     window.addEventListener("speech-input", handler);
     return () => window.removeEventListener("speech-input", handler);
