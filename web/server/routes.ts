@@ -1049,6 +1049,21 @@ export function createRoutes(
     return c.json({ fragmentId: fid, state: wsBridge.getFragmentState(session.id, fid) });
   });
 
+  // Return all console logs for all fragments in a session
+  api.get("/sessions/:id/fragments/console", (c) => {
+    const session = wsBridge.resolveSession(c.req.param("id"));
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return c.json(wsBridge.getAllFragmentConsole(session.id));
+  });
+
+  // Return console logs for a specific fragment
+  api.get("/sessions/:id/fragments/:fid/console", (c) => {
+    const session = wsBridge.resolveSession(c.req.param("id"));
+    const fid = c.req.param("fid");
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return c.json({ fragmentId: fid, logs: wsBridge.getFragmentConsole(session.id, fid) });
+  });
+
   // ─── Available backends ─────────────────────────────────────
 
   api.get("/backends", (c) => {

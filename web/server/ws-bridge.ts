@@ -111,6 +111,9 @@ export class WsBridge {
   private pendingRelaunches = new Map<string, ReturnType<typeof setTimeout>>();
   /** Cached fragment states received from browsers via fragment_state_update */
   private fragmentStateCache = new Map<string, Map<string, unknown>>();
+  /** Cached fragment console logs received from browsers via fragment_console_log */
+  private static readonly MAX_CONSOLE_LOGS = 200;
+  private fragmentConsoleCache = new Map<string, Map<string, Array<{ level: string; args: string[]; ts: number }>>>();
   private userMsgCounter = 0;
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
   private sessionInfoLookup: ((sessionId: string) => { cliSessionId?: string; cwd?: string } | null) | null = null;
@@ -180,6 +183,18 @@ export class WsBridge {
   /** Return all cached fragment states for a session. */
   getAllFragmentStates(sessionId: string): Record<string, unknown> {
     const cache = this.fragmentStateCache.get(sessionId);
+    if (!cache) return {};
+    return Object.fromEntries(cache);
+  }
+
+  /** Return console logs for a specific fragment. */
+  getFragmentConsole(sessionId: string, fragmentId: string): Array<{ level: string; args: string[]; ts: number }> {
+    return this.fragmentConsoleCache.get(sessionId)?.get(fragmentId) ?? [];
+  }
+
+  /** Return all console logs for all fragments in a session. */
+  getAllFragmentConsole(sessionId: string): Record<string, Array<{ level: string; args: string[]; ts: number }>> {
+    const cache = this.fragmentConsoleCache.get(sessionId);
     if (!cache) return {};
     return Object.fromEntries(cache);
   }
@@ -1438,6 +1453,16 @@ export class WsBridge {
         const sessionCache = this.fragmentStateCache.get(session.id) ?? new Map<string, unknown>();
         sessionCache.set(msg.fragmentId, msg.state);
         this.fragmentStateCache.set(session.id, sessionCache);
+        break;
+      }
+
+      case "fragment_console_log": {
+        const consoleCache = this.fragmentConsoleCache.get(session.id) ?? new Map();
+        const logs = consoleCache.get(msg.fragmentId) ?? [];
+        logs.push({ level: msg.level, args: msg.args, ts: Date.now() });
+        if (logs.length > WsBridge.MAX_CONSOLE_LOGS) logs.shift();
+        consoleCache.set(msg.fragmentId, logs);
+        this.fragmentConsoleCache.set(session.id, consoleCache);
         break;
       }
     }

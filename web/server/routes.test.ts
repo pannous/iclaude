@@ -245,6 +245,8 @@ function createMockBridge() {
     initializeResumedSession: vi.fn(),
     getFragmentState: vi.fn(() => null),
     getAllFragmentStates: vi.fn(() => ({})),
+    getFragmentConsole: vi.fn(() => []),
+    getAllFragmentConsole: vi.fn(() => ({})),
   } as any;
 }
 
@@ -3863,5 +3865,62 @@ describe("GET /api/sessions/:id/fragments/:fid/state", () => {
     expect(res.status).toBe(200);
     expect(bridge.resolveSession).toHaveBeenCalledWith("cli-session-abc");
     expect(bridge.getFragmentState).toHaveBeenCalledWith("companion-uuid", "msg-1:0");
+  });
+});
+
+// ─── Fragment console log endpoints ───────────────────────────────────────
+
+describe("GET /api/sessions/:id/fragments/console", () => {
+  it("returns all console logs for a valid session", async () => {
+    bridge.resolveSession.mockReturnValue({ id: "s1", state: {} });
+    bridge.getAllFragmentConsole.mockReturnValue({
+      "msg-1:0": [{ level: "log", args: ["hello"], ts: 1000 }],
+      "msg-2:0": [{ level: "error", args: ["oops"], ts: 2000 }],
+    });
+
+    const res = await app.request("/api/sessions/s1/fragments/console");
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data["msg-1:0"]).toHaveLength(1);
+    expect(data["msg-2:0"][0].level).toBe("error");
+  });
+
+  it("returns 404 for unknown session", async () => {
+    bridge.resolveSession.mockReturnValue(null);
+    const res = await app.request("/api/sessions/unknown/fragments/console");
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /api/sessions/:id/fragments/:fid/console", () => {
+  it("returns console logs for a specific fragment", async () => {
+    bridge.resolveSession.mockReturnValue({ id: "s1", state: {} });
+    bridge.getFragmentConsole.mockReturnValue([
+      { level: "log", args: ["picked", "#ff0000"], ts: 1000 },
+      { level: "warn", args: ["low contrast"], ts: 2000 },
+    ]);
+
+    const res = await app.request("/api/sessions/s1/fragments/msg-1:0/console");
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.fragmentId).toBe("msg-1:0");
+    expect(data.logs).toHaveLength(2);
+    expect(data.logs[0].args).toEqual(["picked", "#ff0000"]);
+  });
+
+  it("resolves console logs by CLI session ID", async () => {
+    bridge.resolveSession.mockReturnValue({ id: "companion-uuid", state: {} });
+    bridge.getFragmentConsole.mockReturnValue([{ level: "info", args: ["test"], ts: 3000 }]);
+
+    const res = await app.request("/api/sessions/cli-session-abc/fragments/frag-1/console");
+    expect(res.status).toBe(200);
+    expect(bridge.resolveSession).toHaveBeenCalledWith("cli-session-abc");
+    expect(bridge.getFragmentConsole).toHaveBeenCalledWith("companion-uuid", "frag-1");
+  });
+
+  it("returns 404 for unknown session", async () => {
+    bridge.resolveSession.mockReturnValue(null);
+    const res = await app.request("/api/sessions/unknown/fragments/frag-1/console");
+    expect(res.status).toBe(404);
   });
 });

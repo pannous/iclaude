@@ -198,10 +198,14 @@ export default function App() {
         case "vibe:notify":
           if (Notification.permission === "granted") new Notification(d.title, { body: d.body });
           break;
-        case "vibe:console":
+        case "vibe:console": {
           // Forward console logs to store for dev tooling
           useStore.getState().appendConsoleLog(d.fragmentId, { level: d.level, args: d.args, timestamp: Date.now() });
+          // Push to server so agents can query via REST
+          const sid = useStore.getState().currentSessionId;
+          if (sid) sendToSession(sid, { type: "fragment_console_log", fragmentId: d.fragmentId, level: d.level, args: d.args });
           break;
+        }
         case "vibe:state_update": {
           // Cache locally and push to server so agents can query via REST
           useStore.getState().updateFragmentState(d.fragmentId, d.state);

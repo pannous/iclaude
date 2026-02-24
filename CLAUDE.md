@@ -128,6 +128,12 @@ curl localhost:$COMPANION_PORT/api/sessions/$COMPANION_SESSION_ID/fragments
 
 # Query a specific fragment's last reported state
 curl localhost:$COMPANION_PORT/api/sessions/$COMPANION_SESSION_ID/fragments/<fragmentId>/state
+
+# Query all fragment console logs (log/warn/error/info)
+curl localhost:$COMPANION_PORT/api/sessions/$COMPANION_SESSION_ID/fragments/console
+
+# Query console logs for a specific fragment
+curl localhost:$COMPANION_PORT/api/sessions/$COMPANION_SESSION_ID/fragments/<fragmentId>/console
 ```
 
 ## Pull Requests

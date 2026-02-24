@@ -261,7 +261,8 @@ export type BrowserOutgoingMessage =
   | { type: "mcp_toggle"; serverName: string; enabled: boolean; client_msg_id?: string }
   | { type: "mcp_reconnect"; serverName: string; client_msg_id?: string }
   | { type: "mcp_set_servers"; servers: Record<string, McpServerConfig>; client_msg_id?: string }
-  | { type: "fragment_state_update"; fragmentId: string; state: unknown };
+  | { type: "fragment_state_update"; fragmentId: string; state: unknown }
+  | { type: "fragment_console_log"; fragmentId: string; level: string; args: string[] };
 
 /** Messages the bridge sends to the browser */
 export type BrowserIncomingMessageBase =
