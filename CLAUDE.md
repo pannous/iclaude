@@ -195,19 +195,30 @@ Output HTML in a ` ```html ` code block and it auto-renders as an interactive if
 </html>
 ```
 
-### Injected APIs
+### Injected APIs (always available, no YOLO required)
 
 | API | What it does |
 |-----|-------------|
-| `window.vibeReportState(obj)` | Push state to the parent chat; server caches it for the agent to query. |
-| `console.log/warn/error/info` | Automatically captured and available in the session state. |
+| `window.vibeReportState(obj)` | Push state to the parent chat; server caches it for the agent to query via REST. |
+| `console.log/warn/error/info` | Automatically captured — stored in Zustand `fragmentConsole` map. |
 | `window.vibe.command(cmd)` | Execute shell commands (YOLO mode only). |
 | `window.vibe.notify(title, body)` | Send a desktop notification. |
 
-Fragment state is queryable via REST:
+### Querying fragment state from outside (e.g. as the assistant)
+
+Each fragment gets a stable `fragmentId` = `"<messageId>:<index>"` (e.g. `"msg-abc123:0"`).
+
 ```bash
+# Get all fragment states for a session
+curl localhost:3456/api/sessions/<sessionId>/fragments
+# → { "msg-abc123:0": { "color": "#f5c842" }, ... }
+
+# Get a single fragment's last pushed state
 curl localhost:3456/api/sessions/<sessionId>/fragments/<fragmentId>/state
+# → { "fragmentId": "msg-abc123:0", "state": { "color": "#f5c842" } }
 ```
+
+The session ID is visible in the URL hash (`#/<sessionId>`). The fragment ID is in the message's `scannedHtml` array.
 
 ## Legacy: HTML Skills System
 
