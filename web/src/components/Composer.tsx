@@ -183,11 +183,11 @@ export function Composer({ sessionId }: { sessionId: string }) {
   // Auto-send queued speech input after text state updates
   const [pendingAutoSend, setPendingAutoSend] = useState(false);
   useEffect(() => {
-    if (pendingAutoSend && text.trim()) {
+    if (pendingAutoSend && text.trim() && isConnected) {
       setPendingAutoSend(false);
       handleSend();
     }
-  }, [pendingAutoSend, text]);
+  }, [pendingAutoSend, text, isConnected]);
 
   // Receive speech input injected from native iOS app via WKWebView.evaluateJavaScript
   useEffect(() => {
