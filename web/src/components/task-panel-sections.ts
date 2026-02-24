@@ -30,10 +30,22 @@ export interface TaskPanelConfig {
 /** Canonical list of all sections in their default order. */
 export const SECTION_DEFINITIONS: TaskPanelSectionDef[] = [
   {
-    id: "usage-limits",
-    label: "Usage Limits",
-    description: "API usage and rate limit meters",
+    id: "session-cost",
+    label: "Cost & Turns",
+    description: "Session cost and turn count",
     backends: null,
+  },
+  {
+    id: "context",
+    label: "Context",
+    description: "Context window usage percentage",
+    backends: null,
+  },
+  {
+    id: "project-user",
+    label: "Project & User",
+    description: "Project and user configuration from CLAUDE.md",
+    backends: ["claude"],
   },
   {
     id: "plugins",
@@ -45,6 +57,12 @@ export const SECTION_DEFINITIONS: TaskPanelSectionDef[] = [
     id: "mcp-servers",
     label: "MCP Servers",
     description: "Model Context Protocol server connections",
+    backends: null,
+  },
+  {
+    id: "usage-limits",
+    label: "Usage Limits",
+    description: "API usage and rate limit meters",
     backends: null,
   },
   {
@@ -77,7 +95,7 @@ export const DEFAULT_SECTION_ORDER: string[] = SECTION_DEFINITIONS.map((s) => s.
 
 const STORAGE_KEY = "cc-task-panel-config";
 /** Bump this when the default section order changes to force a layout reset */
-export const CONFIG_VERSION = 2;
+export const CONFIG_VERSION = 3;
 
 export function getDefaultConfig(): TaskPanelConfig {
   return {

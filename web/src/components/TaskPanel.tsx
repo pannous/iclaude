@@ -793,33 +793,17 @@ function ProgressBar({ label, pct }: { label: string; pct: number }) {
 
 function SessionContextSection({ sessionId }: { sessionId: string }) {
   const session = useStore((s) => s.sessions.get(sessionId));
-  const [limits, setLimits] = useState<UsageLimits | null>(null);
-
-  const fetchLimits = useCallback(async () => {
-    try {
-      setLimits(await api.getSessionUsageLimits(sessionId));
-    } catch {
-      // silent
-    }
-  }, [sessionId]);
-
-  useEffect(() => {
-    fetchLimits();
-    const id = setInterval(fetchLimits, 60_000);
-    return () => clearInterval(id);
-  }, [fetchLimits]);
-
   if (!session) return null;
   const contextPct = Math.round(session.context_used_percent ?? 0);
-  const hourlyPct = limits?.five_hour?.utilization ?? null;
-  const weeklyPct = limits?.seven_day?.utilization ?? null;
   return (
-    <div className="shrink-0 px-4 py-2.5 border-b border-cc-border space-y-2">
+    <div className="shrink-0 px-4 py-2.5 border-b border-cc-border">
       <ProgressBar label="Context" pct={contextPct} />
-      {hourlyPct !== null && <ProgressBar label="5h Limit" pct={hourlyPct} />}
-      {weeklyPct !== null && <ProgressBar label="7d Limit" pct={weeklyPct} />}
     </div>
   );
+}
+
+function ProjectUserSection({ sessionId }: { sessionId: string }) {
+  return <ClaudeConfigBrowser sessionId={sessionId} />;
 }
 
 /** Wrapper that renders the correct usage/rate-limit component based on backend type */
@@ -990,6 +974,9 @@ function PluginsSection({ sessionId: _sessionId }: { sessionId: string }) {
 // ─── Section Component Map ───────────────────────────────────────────────────
 
 const SECTION_COMPONENTS: Record<string, ComponentType<{ sessionId: string }>> = {
+  "session-cost": SessionCostSection,
+  "context": SessionContextSection,
+  "project-user": ProjectUserSection,
   "usage-limits": UsageLimitsRenderer,
   "git-branch": GitBranchSection,
   "github-pr": GitHubPRSection,
@@ -1175,10 +1162,6 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
       ) : (
         <>
           <div data-testid="task-panel-content" className="min-h-0 flex-1 overflow-y-auto">
-            {/* Session stats — cost, context, turns */}
-            <SessionCostSection sessionId={sessionId} />
-            <SessionContextSection sessionId={sessionId} />
-            <ClaudeConfigBrowser sessionId={sessionId} />
             {applicableSections
               .filter((id) => config.enabled[id] !== false)
               .map((sectionId) => {
