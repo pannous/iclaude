@@ -297,30 +297,138 @@ function FeedEntries({ entries }: { entries: FeedEntry[] }) {
   );
 }
 
+// ─── Subagent tool activity extraction ───────────────────────────────────────
+
+interface ToolActivity {
+  toolUseId: string;
+  name: string;
+  input: Record<string, unknown>;
+  resultContent?: string;
+  isError?: boolean;
+}
+
+/** Walk all children entries and extract tool_use + tool_result pairs */
+function extractToolActivity(children: FeedEntry[]): ToolActivity[] {
+  const activities: ToolActivity[] = [];
+  const resultMap = new Map<string, { content: string; isError: boolean }>();
+
+  // First pass: collect all tool_results from messages
+  for (const entry of children) {
+    if (entry.kind === "message" && entry.msg.contentBlocks) {
+      for (const b of entry.msg.contentBlocks) {
+        if (b.type === "tool_result") {
+          const content = typeof b.content === "string" ? b.content : JSON.stringify(b.content);
+          resultMap.set(b.tool_use_id, { content, isError: b.is_error ?? false });
+        }
+      }
+    }
+  }
+
+  // Second pass: collect tool_use blocks and pair with results
+  for (const entry of children) {
+    if (entry.kind === "tool_msg_group") {
+      for (const item of entry.items) {
+        const result = resultMap.get(item.id);
+        activities.push({
+          toolUseId: item.id,
+          name: item.name,
+          input: item.input,
+          resultContent: result?.content,
+          isError: result?.isError,
+        });
+      }
+    } else if (entry.kind === "message" && entry.msg.contentBlocks) {
+      for (const b of entry.msg.contentBlocks) {
+        if (b.type === "tool_use") {
+          const result = resultMap.get(b.id);
+          activities.push({
+            toolUseId: b.id,
+            name: b.name,
+            input: b.input,
+            resultContent: result?.content,
+            isError: result?.isError,
+          });
+        }
+      }
+    }
+    // Recurse into nested subagents
+    if (entry.kind === "subagent") {
+      activities.push(...extractToolActivity(entry.children));
+    }
+  }
+  return activities;
+}
+
+const ACTIVITY_COLLAPSED_LIMIT = 8;
+
+function ToolActivityLine({ activity }: { activity: ToolActivity }) {
+  const [showResult, setShowResult] = useState(false);
+  const hasResult = !!activity.resultContent;
+  const preview = getPreview(activity.name, activity.input);
+  const iconType = getToolIcon(activity.name);
+
+  return (
+    <div>
+      <button
+        onClick={(e) => { e.stopPropagation(); if (hasResult) setShowResult(!showResult); }}
+        className={`w-full flex items-center gap-1.5 py-0.5 text-left group ${hasResult ? "cursor-pointer" : "cursor-default"}`}
+      >
+        {hasResult && (
+          <svg viewBox="0 0 16 16" fill="currentColor" className={`w-2.5 h-2.5 text-cc-muted/50 transition-transform shrink-0 ${showResult ? "rotate-90" : ""}`}>
+            <path d="M6 4l4 4-4 4" />
+          </svg>
+        )}
+        {!hasResult && <span className="w-2.5 shrink-0" />}
+        <ToolIcon type={iconType} />
+        <span className={`text-[11px] font-mono-code truncate ${activity.isError ? "text-cc-error" : "text-cc-muted"}`}>
+          {activity.name === "Bash" ? `$ ${activity.input.command || ""}` : preview}
+        </span>
+      </button>
+      {showResult && activity.resultContent && (
+        <div className="ml-6 mt-0.5 mb-1">
+          <ToolResultPreview content={activity.resultContent} isError={activity.isError ?? false} toolName={activity.name} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolResultPreview({ content, isError, toolName }: { content: string; isError: boolean; toolName: string }) {
+  const lines = content.split(/\r?\n/);
+  const hasMore = lines.length > 12;
+  const [showFull, setShowFull] = useState(false);
+  const rendered = showFull || !hasMore ? content : lines.slice(-12).join("\n");
+
+  return (
+    <div className={`rounded-md border text-[11px] ${isError ? "bg-cc-error/5 border-cc-error/20" : "bg-cc-code-bg border-cc-border"}`}>
+      {hasMore && (
+        <div className="flex justify-end px-2 py-0.5 border-b border-cc-border">
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowFull(!showFull); }}
+            className="text-[10px] text-cc-primary hover:underline cursor-pointer"
+          >
+            {showFull ? "Show tail" : `Show all ${lines.length} lines`}
+          </button>
+        </div>
+      )}
+      <pre className={`font-mono-code px-2 py-1.5 whitespace-pre-wrap max-h-40 overflow-y-auto ${isError ? "text-cc-error" : "text-cc-muted"}`}>
+        {rendered}
+      </pre>
+    </div>
+  );
+}
+
 function SubagentContainer({ group }: { group: SubagentGroup }) {
   const [open, setOpen] = useState(false);
+  const [showAllActivity, setShowAllActivity] = useState(false);
   const label = group.description || "Subagent";
   const agentType = group.agentType;
   const childCount = group.children.length;
 
-  // Get the last visible entry for a compact preview
-  const lastEntry = group.children[group.children.length - 1];
-  const lastPreview = useMemo(() => {
-    if (!lastEntry) return "";
-    if (lastEntry.kind === "tool_msg_group") {
-      const item = lastEntry.items[lastEntry.items.length - 1];
-      return `${getToolLabel(lastEntry.toolName)}${lastEntry.items.length > 1 ? ` ×${lastEntry.items.length}` : ""}`;
-    }
-    if (lastEntry.kind === "message" && lastEntry.msg.role === "assistant") {
-      const text = lastEntry.msg.content?.trim();
-      if (text) return text.length > 60 ? text.slice(0, 60) + "..." : text;
-      const toolBlock = lastEntry.msg.contentBlocks?.find(
-        (b): b is Extract<ContentBlock, { type: "tool_use" }> => b.type === "tool_use"
-      );
-      if (toolBlock) return getToolLabel(toolBlock.name);
-    }
-    return "";
-  }, [lastEntry]);
+  // Extract all tool operations from children
+  const activities = useMemo(() => extractToolActivity(group.children), [group.children]);
+  const visibleActivities = showAllActivity ? activities : activities.slice(0, ACTIVITY_COLLAPSED_LIMIT);
+  const hasMoreActivities = activities.length > ACTIVITY_COLLAPSED_LIMIT;
 
   return (
     <div className="animate-[fadeSlideIn_0.2s_ease-out]">
@@ -342,15 +450,32 @@ function SubagentContainer({ group }: { group: SubagentGroup }) {
               {agentType}
             </span>
           )}
-          {!open && lastPreview && (
-            <span className="text-[11px] text-cc-muted truncate ml-1 font-mono-code">
-              {lastPreview}
+          {activities.length > 0 && !open && (
+            <span className="text-[10px] text-cc-muted bg-cc-hover rounded-full px-1.5 py-0.5 tabular-nums shrink-0">
+              {activities.length} cmd{activities.length !== 1 ? "s" : ""}
             </span>
           )}
           <span className="text-[10px] text-cc-muted bg-cc-hover rounded-full px-1.5 py-0.5 tabular-nums shrink-0 ml-auto">
             {childCount}
           </span>
         </button>
+
+        {/* Compact tool activity log (visible when collapsed) */}
+        {!open && activities.length > 0 && (
+          <div className="mb-2">
+            {visibleActivities.map((a) => (
+              <ToolActivityLine key={a.toolUseId} activity={a} />
+            ))}
+            {hasMoreActivities && !showAllActivity && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowAllActivity(true); }}
+                className="text-[10px] text-cc-primary hover:underline cursor-pointer ml-6 py-0.5"
+              >
+                +{activities.length - ACTIVITY_COLLAPSED_LIMIT} more...
+              </button>
+            )}
+          </div>
+        )}
 
         {open && (
           <div className="space-y-3 pb-2">
