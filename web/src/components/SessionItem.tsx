@@ -76,8 +76,10 @@ export function SessionItem({
   const shortId = s.id.slice(0, 8);
   // LOCAL: s.title takes priority — upstream only uses sessionName || s.model || shortId
   const rawLabel = s.title || sessionName || s.model || shortId;
-  // Strip "agent: " prefix — agent sessions already appear in a dedicated section
-  const label = s.agentId && rawLabel.startsWith("agent: ") ? rawLabel.slice(7) : rawLabel;
+  // For agent sessions: prefer agentName, strip "agent: " prefix (already in dedicated section)
+  const label = s.agentName
+    ? s.agentName
+    : s.agentId && rawLabel.startsWith("agent: ") ? rawLabel.slice(7) : rawLabel;
   const isEditing = editingSessionId === s.id;
 
   const derivedStatus = archived ? ("exited" as DerivedStatus) : deriveStatus(s);
