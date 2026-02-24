@@ -608,6 +608,12 @@ export const api = {
   setSessionTitle: (sessionId: string, title: string) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/title`, { title }),
 
+  /** Fetch a tool_result on demand (stripped from subagent messages to save memory) */
+  getToolResult: (sessionId: string, toolUseId: string) =>
+    get<{ content: string; is_error: boolean }>(
+      `/sessions/${encodeURIComponent(sessionId)}/tool-result/${encodeURIComponent(toolUseId)}`,
+    ),
+
   listResumableSessions: () =>
     get<ResumableSession[]>("/sessions/resumable"),
 

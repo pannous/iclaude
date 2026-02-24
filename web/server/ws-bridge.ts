@@ -509,6 +509,24 @@ export class WsBridge {
     return undefined;
   }
 
+  /** Retrieve full tool_result content from session history (for lazy loading) */
+  getToolResult(sessionId: string, toolUseId: string): { content: string; is_error: boolean } | null {
+    const session = this.sessions.get(sessionId);
+    if (!session) return null;
+    for (const msg of session.messageHistory) {
+      if (msg.type !== "assistant") continue;
+      const content = (msg as any).message?.content;
+      if (!Array.isArray(content)) continue;
+      for (const block of content) {
+        if (block.type === "tool_result" && block.tool_use_id === toolUseId) {
+          const text = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
+          return { content: text, is_error: block.is_error ?? false };
+        }
+      }
+    }
+    return null;
+  }
+
   getCodexRateLimits(sessionId: string) {
     const session = this.sessions.get(sessionId);
     return session?.codexAdapter?.getRateLimits() ?? null;
@@ -1090,8 +1108,26 @@ export class WsBridge {
     )) {
       return;
     }
+    // Store full message in history (for on-demand API retrieval)
     session.messageHistory.push(browserMsg);
-    this.broadcastToBrowsers(session, browserMsg);
+
+    // For subagent messages, strip tool_result content to save browser memory.
+    // Results can be fetched on demand via GET /api/sessions/:id/tool-result/:toolUseId
+    if (msg.parent_tool_use_id && msg.message?.content?.length) {
+      const lightContent = msg.message.content.map((block: any) => {
+        if (block.type === "tool_result" && block.content) {
+          return { ...block, content: "__LAZY_RESULT__" };
+        }
+        return block;
+      });
+      const lightMsg: BrowserIncomingMessage = {
+        ...browserMsg,
+        message: { ...msg.message, content: lightContent },
+      };
+      this.broadcastToBrowsers(session, lightMsg);
+    } else {
+      this.broadcastToBrowsers(session, browserMsg);
+    }
     this.persistSession(session);
   }
 

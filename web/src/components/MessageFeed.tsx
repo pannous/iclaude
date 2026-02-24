@@ -1,10 +1,11 @@
-import { useEffect, useRef, useMemo, useState, useCallback } from "react";
+import { useContext, useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { MessageBubble } from "./MessageBubble.js";
 import { ToolBlock, getToolIcon, getToolLabel, getPreview, ToolIcon } from "./ToolBlock.js";
 import type { ChatMessage, ContentBlock, SdkSessionInfo } from "../types.js";
 import { formatElapsed, formatTokenCount } from "../utils/format.js";
+import { FeedSessionIdContext } from "./feed-context.js";
 
 const FEED_PAGE_SIZE = 100;
 const RESUME_HISTORY_PAGE_SIZE = 40;
@@ -303,55 +304,40 @@ interface ToolActivity {
   toolUseId: string;
   name: string;
   input: Record<string, unknown>;
-  resultContent?: string;
+  /** true when the message had a tool_result (even if content was stripped) */
+  hasResult: boolean;
   isError?: boolean;
 }
 
-/** Walk all children entries and extract tool_use + tool_result pairs */
+/** Walk all children entries and extract tool_use blocks (results are fetched on demand) */
 function extractToolActivity(children: FeedEntry[]): ToolActivity[] {
   const activities: ToolActivity[] = [];
-  const resultMap = new Map<string, { content: string; isError: boolean }>();
-
-  // First pass: collect all tool_results from messages
+  // Collect tool_use_ids that have a tool_result (even with stripped content)
+  const resultMeta = new Map<string, { isError: boolean }>();
   for (const entry of children) {
     if (entry.kind === "message" && entry.msg.contentBlocks) {
       for (const b of entry.msg.contentBlocks) {
         if (b.type === "tool_result") {
-          const content = typeof b.content === "string" ? b.content : JSON.stringify(b.content);
-          resultMap.set(b.tool_use_id, { content, isError: b.is_error ?? false });
+          resultMeta.set(b.tool_use_id, { isError: b.is_error ?? false });
         }
       }
     }
   }
 
-  // Second pass: collect tool_use blocks and pair with results
   for (const entry of children) {
     if (entry.kind === "tool_msg_group") {
       for (const item of entry.items) {
-        const result = resultMap.get(item.id);
-        activities.push({
-          toolUseId: item.id,
-          name: item.name,
-          input: item.input,
-          resultContent: result?.content,
-          isError: result?.isError,
-        });
+        const meta = resultMeta.get(item.id);
+        activities.push({ toolUseId: item.id, name: item.name, input: item.input, hasResult: !!meta, isError: meta?.isError });
       }
     } else if (entry.kind === "message" && entry.msg.contentBlocks) {
       for (const b of entry.msg.contentBlocks) {
         if (b.type === "tool_use") {
-          const result = resultMap.get(b.id);
-          activities.push({
-            toolUseId: b.id,
-            name: b.name,
-            input: b.input,
-            resultContent: result?.content,
-            isError: result?.isError,
-          });
+          const meta = resultMeta.get(b.id);
+          activities.push({ toolUseId: b.id, name: b.name, input: b.input, hasResult: !!meta, isError: meta?.isError });
         }
       }
     }
-    // Recurse into nested subagents
     if (entry.kind === "subagent") {
       activities.push(...extractToolActivity(entry.children));
     }
@@ -362,31 +348,51 @@ function extractToolActivity(children: FeedEntry[]): ToolActivity[] {
 const ACTIVITY_COLLAPSED_LIMIT = 8;
 
 function ToolActivityLine({ activity }: { activity: ToolActivity }) {
+  const sessionId = useContext(FeedSessionIdContext);
   const [showResult, setShowResult] = useState(false);
-  const hasResult = !!activity.resultContent;
+  const [resultData, setResultData] = useState<{ content: string; is_error: boolean } | null>(null);
+  const [loading, setLoading] = useState(false);
   const preview = getPreview(activity.name, activity.input);
   const iconType = getToolIcon(activity.name);
+
+  const handleClick = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!activity.hasResult) return;
+    if (showResult) { setShowResult(false); return; }
+    setShowResult(true);
+    if (resultData) return; // already fetched
+    setLoading(true);
+    try {
+      const data = await api.getToolResult(sessionId, activity.toolUseId);
+      setResultData(data);
+    } catch {
+      setResultData({ content: "(failed to load result)", is_error: true });
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId, activity.toolUseId, activity.hasResult, showResult, resultData]);
 
   return (
     <div>
       <button
-        onClick={(e) => { e.stopPropagation(); if (hasResult) setShowResult(!showResult); }}
-        className={`w-full flex items-center gap-1.5 py-0.5 text-left group ${hasResult ? "cursor-pointer" : "cursor-default"}`}
+        onClick={handleClick}
+        className={`w-full flex items-center gap-1.5 py-0.5 text-left group ${activity.hasResult ? "cursor-pointer" : "cursor-default"}`}
       >
-        {hasResult && (
+        {activity.hasResult && (
           <svg viewBox="0 0 16 16" fill="currentColor" className={`w-2.5 h-2.5 text-cc-muted/50 transition-transform shrink-0 ${showResult ? "rotate-90" : ""}`}>
             <path d="M6 4l4 4-4 4" />
           </svg>
         )}
-        {!hasResult && <span className="w-2.5 shrink-0" />}
+        {!activity.hasResult && <span className="w-2.5 shrink-0" />}
         <ToolIcon type={iconType} />
         <span className={`text-[11px] font-mono-code truncate ${activity.isError ? "text-cc-error" : "text-cc-muted"}`}>
           {activity.name === "Bash" ? `$ ${activity.input.command || ""}` : preview}
         </span>
       </button>
-      {showResult && activity.resultContent && (
+      {showResult && (
         <div className="ml-6 mt-0.5 mb-1">
-          <ToolResultPreview content={activity.resultContent} isError={activity.isError ?? false} toolName={activity.name} />
+          {loading && <span className="text-[10px] text-cc-muted animate-pulse">Loading...</span>}
+          {resultData && <ToolResultPreview content={resultData.content} isError={resultData.is_error} toolName={activity.name} />}
         </div>
       )}
     </div>
@@ -811,7 +817,9 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
               </button>
             </div>
           )}
-          <FeedEntries entries={visibleEntries} />
+          <FeedSessionIdContext.Provider value={sessionId}>
+            <FeedEntries entries={visibleEntries} />
+          </FeedSessionIdContext.Provider>
 
           {/* Tool progress indicator */}
           {toolProgress && toolProgress.size > 0 && !hasStreamingAssistant && (

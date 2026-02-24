@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, type ComponentProps } from "react";
+import { useState, useContext, useMemo, useCallback, type ComponentProps } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage, ContentBlock } from "../types.js";
@@ -6,6 +6,8 @@ import { ToolBlock, getToolIcon, getToolLabel, getPreview, ToolIcon } from "./To
 import { CopyButton } from "./CopyButton.js";
 import { messageToText } from "../utils/message-text.js";
 import { useStore } from "../store.js";
+import { api } from "../api.js";
+import { FeedSessionIdContext } from "./feed-context.js";
 
 export function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.role === "system") {
@@ -357,12 +359,18 @@ function ContentBlockRenderer({
   }
 
   if (block.type === "tool_result") {
-    const content = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
+    const rawContent = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
     const linkedTool = toolUseById.get(block.tool_use_id);
     const toolName = linkedTool?.name;
     const isError = block.is_error ?? false;
+
+    // Lazy result: content was stripped server-side for subagent messages
+    if (rawContent === "__LAZY_RESULT__") {
+      return <LazyToolResult toolUseId={block.tool_use_id} toolName={toolName} />;
+    }
+
     if (toolName === "Bash") {
-      return <BashResultBlock text={content} isError={isError} />;
+      return <BashResultBlock text={rawContent} isError={isError} />;
     }
     return (
       <div className={`text-xs font-mono-code rounded-lg px-3 py-2 border ${
@@ -370,7 +378,7 @@ function ContentBlockRenderer({
           ? "bg-cc-error/5 border-cc-error/20 text-cc-error"
           : "bg-cc-card border-cc-border text-cc-muted"
       } max-h-40 overflow-y-auto whitespace-pre-wrap`}>
-        {content}
+        {rawContent}
       </div>
     );
   }
@@ -411,6 +419,49 @@ function BashResultBlock({ text, isError }: { text: string; isError: boolean }) 
         {rendered}
       </pre>
     </div>
+  );
+}
+
+/** Lazy-loads tool_result content stripped from subagent messages */
+function LazyToolResult({ toolUseId, toolName }: { toolUseId: string; toolName?: string }) {
+  const sessionId = useContext(FeedSessionIdContext);
+  const [data, setData] = useState<{ content: string; is_error: boolean } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const load = useCallback(async () => {
+    if (data || loading) return;
+    setLoading(true);
+    try {
+      setData(await api.getToolResult(sessionId, toolUseId));
+    } catch {
+      setData({ content: "(failed to load result)", is_error: true });
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId, toolUseId, data, loading]);
+
+  const handleClick = useCallback(() => {
+    if (!expanded) load();
+    setExpanded(!expanded);
+  }, [expanded, load]);
+
+  return (
+    <button
+      onClick={handleClick}
+      className="w-full text-left text-[10px] text-cc-muted hover:text-cc-primary cursor-pointer py-1 transition-colors"
+    >
+      {!expanded && (loading ? "Loading output..." : "Show output")}
+      {expanded && data && (
+        toolName === "Bash"
+          ? <BashResultBlock text={data.content} isError={data.is_error} />
+          : <div className={`text-xs font-mono-code rounded-lg px-3 py-2 border ${
+              data.is_error ? "bg-cc-error/5 border-cc-error/20 text-cc-error" : "bg-cc-card border-cc-border text-cc-muted"
+            } max-h-40 overflow-y-auto whitespace-pre-wrap`}>{data.content}</div>
+      )}
+      {expanded && loading && <span className="animate-pulse">Loading output...</span>}
+      {expanded && !loading && !data && "Show output"}
+    </button>
   );
 }
 

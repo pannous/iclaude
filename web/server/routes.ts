@@ -756,6 +756,15 @@ export function createRoutes(
     return c.json(enriched);
   });
 
+  // Lazy-load tool result content (stripped from subagent messages to save browser memory)
+  api.get("/sessions/:id/tool-result/:toolUseId", (c) => {
+    const id = c.req.param("id");
+    const toolUseId = c.req.param("toolUseId");
+    const result = wsBridge.getToolResult(id, toolUseId);
+    if (!result) return c.json({ error: "Tool result not found" }, 404);
+    return c.json(result);
+  });
+
   api.get("/claude/sessions/discover", (c) => {
     const limitRaw = c.req.query("limit");
     const limit = limitRaw ? Number(limitRaw) : undefined;
