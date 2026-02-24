@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useStore } from "../store.js";
 import { api, type ClaudeConfigResponse } from "../api.js";
 import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
+import { sendToSession } from "../ws.js";
 
 interface ConfigItem {
   label: string;
@@ -67,36 +68,52 @@ function ConfigItemRow({
   sublabel,
   count,
   onClick,
+  onExecute,
 }: {
   label: string;
   sublabel?: string;
   count?: number;
   onClick: () => void;
+  onExecute?: () => void;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center gap-2 px-4 pl-10 py-1.5 text-left hover:bg-cc-hover/50 transition-colors cursor-pointer"
-    >
-      <span className="text-[12px] text-cc-fg truncate flex-1">
-        {label}
-        {count !== undefined && count > 0 && (
-          <span className="ml-1 text-[10px] text-cc-muted">({count})</span>
-        )}
-      </span>
-      {sublabel && (
-        <span className="text-[10px] text-cc-muted shrink-0">{sublabel}</span>
-      )}
-      <svg
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        className="w-3 h-3 text-cc-muted shrink-0"
+    <div className="flex items-center hover:bg-cc-hover/50 transition-colors">
+      <button
+        onClick={onClick}
+        className="flex-1 flex items-center gap-2 px-4 pl-10 py-1.5 text-left cursor-pointer min-w-0"
       >
-        <path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </button>
+        <span className="text-[12px] text-cc-fg truncate flex-1">
+          {label}
+          {count !== undefined && count > 0 && (
+            <span className="ml-1 text-[10px] text-cc-muted">({count})</span>
+          )}
+        </span>
+        {sublabel && (
+          <span className="text-[10px] text-cc-muted shrink-0">{sublabel}</span>
+        )}
+        <svg
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          className="w-3 h-3 text-cc-muted shrink-0"
+        >
+          <path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {onExecute && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onExecute(); }}
+          className="shrink-0 w-7 h-7 mr-2 flex items-center justify-center rounded-md text-cc-muted hover:text-cc-primary hover:bg-cc-primary/10 transition-colors cursor-pointer"
+          aria-label={`Run ${label}`}
+          title={`Run ${label}`}
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+            <path d="M4 2.5a.5.5 0 01.77-.42l8 5a.5.5 0 010 .84l-8 5A.5.5 0 014 12.5v-10z" />
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -329,6 +346,10 @@ export function ClaudeConfigBrowser({ sessionId }: { sessionId: string }) {
   const [userExpanded, setUserExpanded] = useState(false);
   const [activeItem, setActiveItem] = useState<ConfigItem | null>(null);
 
+  const executeCommand = useCallback((name: string) => {
+    sendToSession(sessionId, { type: "user_message", content: `/${name}` });
+  }, [sessionId]);
+
   const fetchConfig = useCallback(async () => {
     if (!cwd) return;
     try {
@@ -410,6 +431,7 @@ export function ClaudeConfigBrowser({ sessionId }: { sessionId: string }) {
                   key={cmd.path}
                   label={`/${cmd.name}`}
                   onClick={() => setActiveItem({ label: cmd.name, path: cmd.path, kind: "md" })}
+                  onExecute={() => executeCommand(cmd.name)}
                 />
               ))}
             </>
@@ -480,6 +502,7 @@ export function ClaudeConfigBrowser({ sessionId }: { sessionId: string }) {
                   key={cmd.path}
                   label={`/${cmd.name}`}
                   onClick={() => setActiveItem({ label: cmd.name, path: cmd.path, kind: "md" })}
+                  onExecute={() => executeCommand(cmd.name)}
                 />
               ))}
             </>
