@@ -282,9 +282,7 @@ function finalizeStreamingDraftMessage(sessionId: string, finalMessage: ChatMess
 
 function clearStreamingDraftMessage(sessionId: string) {
   const draftId = streamingDraftMessageIdBySession.get(sessionId);
-  if (!draftId) {
-      return;
-  }
+  if (!draftId) return;
 
   const store = useStore.getState();
   const existing = store.messages.get(sessionId) || [];
@@ -461,7 +459,7 @@ function upsertAssistantMessage(sessionId: string, incoming: ChatMessage) {
   const existing = store.messages.get(sessionId) || [];
   const index = existing.findIndex((m) => m.role === "assistant" && m.id === incoming.id);
   if (index === -1) {
-      store.appendMessage(sessionId, incoming);
+    store.appendMessage(sessionId, incoming);
     return;
   }
 
