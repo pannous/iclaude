@@ -277,9 +277,9 @@ function SendMessageDetail({ input }: { input: Record<string, unknown> }) {
 
 export function getPreview(name: string, input: Record<string, unknown>): string {
   if (name === "Bash" && typeof input.command === "string") {
-    // Prefer description if short enough, otherwise show command
-    if (input.description && typeof input.description === "string" && input.description.length <= 60) {
-      return input.description;
+    // Always prefer description in header; fall back to command
+    if (input.description && typeof input.description === "string") {
+      return input.description.length > 80 ? input.description.slice(0, 80) + "..." : input.description;
     }
     return input.command.length > 60 ? input.command.slice(0, 60) + "..." : input.command;
   }

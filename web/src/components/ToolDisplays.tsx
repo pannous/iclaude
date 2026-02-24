@@ -6,9 +6,6 @@ type ToolInput = Record<string, unknown>;
 export function BashDisplay({ input }: { input: ToolInput }) {
   return (
     <div className="space-y-1.5">
-      {!!input.description && (
-        <div className="text-[11px] text-cc-muted italic">{String(input.description)}</div>
-      )}
       <pre className="px-3 py-2 rounded-lg bg-cc-code-bg text-cc-code-fg text-[12px] font-mono-code leading-relaxed overflow-x-auto">
         <span className="text-cc-muted select-none">$ </span>
         {String(input.command || "")}

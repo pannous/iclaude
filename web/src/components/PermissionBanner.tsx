@@ -160,7 +160,14 @@ function ToolInputDisplay({
   description?: string;
 }) {
   if (toolName === "Bash") {
-    return <BashDisplay input={input} />;
+    return (
+      <div className="space-y-1.5">
+        {!!input.description && (
+          <div className="text-[11px] text-cc-muted italic">{String(input.description)}</div>
+        )}
+        <BashDisplay input={input} />
+      </div>
+    );
   }
   if (toolName === "Edit") {
     return <EditDisplay input={input} />;

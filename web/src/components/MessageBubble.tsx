@@ -494,6 +494,9 @@ function ToolGroupBlock({ name, items }: { name: string; items: ToolGroupItem[] 
         <div className="border-t border-cc-border px-3 py-1.5">
           {items.map((item, i) => {
             const preview = getPreview(item.name, item.input);
+            // For Bash tools, show the actual command when expanded (description is already in the header)
+            const expandedText = item.name === "Bash" && typeof item.input.command === "string"
+              ? item.input.command : preview;
             const filePath = (item.name === "Read" || item.name === "Write" || item.name === "Edit") && item.input.file_path
               ? String(item.input.file_path) : null;
             return (
@@ -509,7 +512,7 @@ function ToolGroupBlock({ name, items }: { name: string; items: ToolGroupItem[] 
                     {preview || filePath}
                   </button>
                 ) : (
-                  <span className="truncate text-cc-muted">{preview || JSON.stringify(item.input).slice(0, 80)}</span>
+                  <span className="truncate text-cc-muted">{expandedText || JSON.stringify(item.input).slice(0, 80)}</span>
                 )}
               </div>
             );
