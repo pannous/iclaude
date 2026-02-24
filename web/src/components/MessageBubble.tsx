@@ -1,4 +1,4 @@
-import { useState, useContext, useMemo, useCallback, type ComponentProps } from "react";
+import { useState, useRef, useEffect, useContext, useMemo, useCallback, type ComponentProps } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage, ContentBlock } from "../types.js";
@@ -144,7 +144,7 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
           {message.scannedHtml && message.scannedHtml.length > 0 && (
             <div className="space-y-2 mt-3">
               {message.scannedHtml.map((htmlFragment, i) => (
-                <HtmlPreview key={i} html={htmlFragment.html} preview={htmlFragment.preview} />
+                <HtmlPreview key={htmlFragment.fragmentId} html={htmlFragment.html} preview={htmlFragment.preview} fragmentId={htmlFragment.fragmentId} />
               ))}
             </div>
           )}
@@ -186,7 +186,7 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
         {message.scannedHtml && message.scannedHtml.length > 0 && (
           <div className="space-y-2">
             {message.scannedHtml.map((htmlFragment, i) => (
-              <HtmlPreview key={i} html={htmlFragment.html} preview={htmlFragment.preview} />
+              <HtmlPreview key={htmlFragment.fragmentId} html={htmlFragment.html} preview={htmlFragment.preview} fragmentId={htmlFragment.fragmentId} />
             ))}
           </div>
         )}
@@ -582,36 +582,79 @@ function ThinkingBlock({ text }: { text: string }) {
   );
 }
 
-function HtmlPreview({ html, preview }: { html: string; preview: string }) {
+// Bridge code injected into every HTML fragment iframe (console capture + state query/push)
+function buildFragmentBridge(fragmentId: string): string {
+  return `(function(){
+  var FID='${fragmentId}';
+  var _post=function(msg){window.parent.postMessage(msg,'*')};
+  ['log','warn','error','info'].forEach(function(lvl){
+    var orig=console[lvl];
+    console[lvl]=function(){
+      orig.apply(console,arguments);
+      var args=Array.from(arguments).map(function(a){
+        try{return typeof a==='string'?a:JSON.stringify(a)}catch(e){return String(a)}
+      });
+      _post({type:'vibe:console',fragmentId:FID,level:lvl,args:args});
+    };
+  });
+  window.addEventListener('error',function(e){
+    _post({type:'vibe:console',fragmentId:FID,level:'error',args:[e.message+' at '+e.filename+':'+e.lineno]});
+  });
+  window.addEventListener('message',function(e){
+    if(e.data&&e.data.type==='vibe:query_state'&&e.data.fragmentId===FID){
+      var state=typeof window.vibeGetState==='function'?window.vibeGetState():null;
+      _post({type:'vibe:state_response',fragmentId:FID,requestId:e.data.requestId,state:state});
+    }
+  });
+  window.vibeReportState=function(state){
+    _post({type:'vibe:state_update',fragmentId:FID,state:state});
+  };
+})();`;
+}
+
+function HtmlPreview({ html, preview, fragmentId }: { html: string; preview: string; fragmentId: string }) {
   const [open, setOpen] = useState(true);
   const [showSource, setShowSource] = useState(false);
   const yoloMode = useStore((s) => s.yoloMode);
-  const iframeRef = useState<HTMLIFrameElement | null>(null)[0];
+  const currentIframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  useEffect(() => {
+    return () => { useStore.getState().unregisterFragment(fragmentId); };
+  }, [fragmentId]);
 
   const handleIframeLoad = (iframe: HTMLIFrameElement) => {
-    if (!yoloMode || !iframe.contentWindow) return;
-    (iframe.contentWindow as any).eval(`
-      window.vibeCommand = async function(command, options = {}) {
-        try {
-          const response = await fetch('/api/exec', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command: command, cwd: options && options.cwd })
-          });
-          const result = await response.json();
-          return result.success
-            ? { success: true, output: result.output }
-            : { success: false, error: result.error, exitCode: result.exitCode, stderr: result.stderr, stdout: result.stdout };
-        } catch (err) { return { success: false, error: err.message }; }
-      };
-      window.vibe = {
-        command: window.vibeCommand,
-        playSound: (sound = 'Ping') => window.vibeCommand('afplay /System/Library/Sounds/' + (sound || 'Ping') + '.aiff'),
-        notify: (title, body) => {
-          window.parent.postMessage({ type: 'vibe:notify', title: title, body: body }, '*');
-        }
-      };
-    `);
+    if (!iframe.contentWindow) return;
+    currentIframeRef.current = iframe;
+    useStore.getState().registerFragment(fragmentId, iframe);
+
+    // Always inject bridge (console capture + state query/push)
+    try { (iframe.contentWindow as any).eval(buildFragmentBridge(fragmentId)); } catch { /* sandboxed */ }
+
+    // YOLO mode: also inject vibe command API
+    if (yoloMode) {
+      (iframe.contentWindow as any).eval(`
+        window.vibeCommand = async function(command, options = {}) {
+          try {
+            const response = await fetch('/api/exec', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ command: command, cwd: options && options.cwd })
+            });
+            const result = await response.json();
+            return result.success
+              ? { success: true, output: result.output }
+              : { success: false, error: result.error, exitCode: result.exitCode, stderr: result.stderr, stdout: result.stdout };
+          } catch (err) { return { success: false, error: err.message }; }
+        };
+        window.vibe = {
+          command: window.vibeCommand,
+          playSound: (sound = 'Ping') => window.vibeCommand('afplay /System/Library/Sounds/' + (sound || 'Ping') + '.aiff'),
+          notify: (title, body) => {
+            window.parent.postMessage({ type: 'vibe:notify', title: title, body: body }, '*');
+          }
+        };
+      `);
+    }
   };
 
   return (
@@ -653,7 +696,7 @@ function HtmlPreview({ html, preview }: { html: string; preview: string }) {
             </pre>
           ) : (
             <iframe
-              ref={(el) => { if (el && el !== iframeRef) handleIframeLoad(el); }}
+              ref={(el) => { if (el && el !== currentIframeRef.current) handleIframeLoad(el!); }}
               srcDoc={html}
               className="w-full h-[400px] bg-white"
               sandbox={yoloMode ? undefined : "allow-scripts"}

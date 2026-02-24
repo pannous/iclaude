@@ -1032,6 +1032,28 @@ export function createRoutes(
     return c.json({ recordings: recorder.listRecordings() });
   });
 
+  // ─── HTML Fragment bridge (state + console) ──────────────────
+
+  // Live-query a specific fragment's state (waits up to 3s for iframe to respond)
+  api.get("/sessions/:id/fragments/:fid/state", async (c) => {
+    const id = c.req.param("id");
+    const fid = c.req.param("fid");
+    if (!wsBridge.getSession(id)) return c.json({ error: "Session not found" }, 404);
+    const state = await wsBridge.queryFragmentState(id, fid);
+    return c.json({ fragmentId: fid, state });
+  });
+
+  // Get console logs for a specific fragment
+  api.get("/sessions/:id/fragments/:fid/console", (c) => {
+    const id = c.req.param("id");
+    const fid = c.req.param("fid");
+    if (!wsBridge.getSession(id)) return c.json({ error: "Session not found" }, 404);
+    // Console logs live in the browser's Zustand store — not available server-side.
+    // This endpoint signals the browser to return them via a future enhancement.
+    // For now, query via the browser dev tools or the state query mechanism.
+    return c.json({ fragmentId: fid, note: "Console logs are stored client-side. Use the browser's Zustand store (fragmentConsole) or devtools to access them." });
+  });
+
   // ─── Available backends ─────────────────────────────────────
 
   api.get("/backends", (c) => {

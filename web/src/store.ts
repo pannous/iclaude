@@ -43,6 +43,12 @@ export interface QuickTerminalTab {
 export type QuickTerminalPlacement = "top" | "right" | "bottom" | "left";
 
 export type DiffBase = "last-commit" | "default-branch";
+
+export interface ConsoleLogEntry {
+  level: "log" | "warn" | "error" | "info";
+  args: string[];
+  timestamp: number;
+}
 export type ThemeMode = "system" | "dark" | "light";
 
 function resolveThemeDark(theme: ThemeMode): boolean {
@@ -118,6 +124,11 @@ interface AppState {
 
   // Tool progress (session → tool_use_id → progress info)
   toolProgress: Map<string, Map<string, { toolName: string; elapsedSeconds: number }>>;
+
+  // HTML fragment bridge (iframe refs, state, console logs)
+  fragmentIframes: Map<string, HTMLIFrameElement>;
+  fragmentState: Map<string, Record<string, unknown>>;
+  fragmentConsole: Map<string, ConsoleLogEntry[]>;
 
   // Sidebar project grouping
   collapsedProjects: Set<string>;
@@ -230,6 +241,12 @@ interface AppState {
   // Tool progress actions
   setToolProgress: (sessionId: string, toolUseId: string, data: { toolName: string; elapsedSeconds: number }) => void;
   clearToolProgress: (sessionId: string, toolUseId?: string) => void;
+
+  // Fragment bridge actions
+  registerFragment: (fragmentId: string, iframe: HTMLIFrameElement) => void;
+  unregisterFragment: (fragmentId: string) => void;
+  updateFragmentState: (fragmentId: string, state: Record<string, unknown>) => void;
+  appendConsoleLog: (fragmentId: string, entry: ConsoleLogEntry) => void;
 
   // Sidebar project grouping actions
   toggleProjectCollapse: (projectKey: string) => void;
@@ -356,6 +373,9 @@ export const useStore = create<AppState>((set) => ({
   linkedLinearIssues: new Map(),
   mcpServers: new Map(),
   toolProgress: new Map(),
+  fragmentIframes: new Map(),
+  fragmentState: new Map(),
+  fragmentConsole: new Map(),
   collapsedProjects: initParsed("cc-collapsed-projects", (r) => new Set(JSON.parse(r) as string[]), new Set<string>()),
   creationProgress: null,
   creationError: null,
@@ -691,6 +711,27 @@ export const useStore = create<AppState>((set) => ({
       return { toolProgress: setInMap(s.toolProgress, sessionId, deleteFromMap(sessionProgress, toolUseId)) };
     }),
 
+  registerFragment: (fragmentId, iframe) =>
+    set((s) => ({ fragmentIframes: setInMap(s.fragmentIframes, fragmentId, iframe) })),
+
+  unregisterFragment: (fragmentId) =>
+    set((s) => ({
+      fragmentIframes: deleteFromMap(s.fragmentIframes, fragmentId),
+      fragmentState: deleteFromMap(s.fragmentState, fragmentId),
+      fragmentConsole: deleteFromMap(s.fragmentConsole, fragmentId),
+    })),
+
+  updateFragmentState: (fragmentId, state) =>
+    set((s) => ({ fragmentState: setInMap(s.fragmentState, fragmentId, state) })),
+
+  appendConsoleLog: (fragmentId, entry) =>
+    set((s) => {
+      const MAX_LOGS = 200;
+      const existing = s.fragmentConsole.get(fragmentId) || [];
+      const updated = existing.length >= MAX_LOGS ? [...existing.slice(1), entry] : [...existing, entry];
+      return { fragmentConsole: setInMap(s.fragmentConsole, fragmentId, updated) };
+    }),
+
   toggleProjectCollapse: (projectKey) =>
     set((s) => {
       const collapsedProjects = new Set(s.collapsedProjects);
@@ -880,6 +921,9 @@ export const useStore = create<AppState>((set) => ({
       recentlyRenamed: new Set(),
       mcpServers: new Map(),
       toolProgress: new Map(),
+      fragmentIframes: new Map(),
+      fragmentState: new Map(),
+      fragmentConsole: new Map(),
       prStatus: new Map(),
       linkedLinearIssues: new Map(),
       taskPanelConfigMode: false,

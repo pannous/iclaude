@@ -109,6 +109,7 @@ export class WsBridge {
   private autoNamingAttempted = new Set<string>();
   /** Per-session timers for deferred relaunch requests (cancelled if CLI reconnects in time). */
   private pendingRelaunches = new Map<string, ReturnType<typeof setTimeout>>();
+  private pendingFragmentQueries = new Map<string, { resolve: (state: unknown) => void; timer: ReturnType<typeof setTimeout> }>();
   private userMsgCounter = 0;
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
   private sessionInfoLookup: ((sessionId: string) => { cliSessionId?: string; cwd?: string } | null) | null = null;
@@ -168,6 +169,36 @@ export class WsBridge {
     const session = this.sessions.get(sessionId);
     if (!session) return;
     this.broadcastToBrowsers(session, msg);
+  }
+
+  /**
+   * Send a state query to all browser clients for a session and wait for the first response.
+   * The browser will postMessage into the iframe and relay back the result.
+   * Returns null on timeout (3s) or if no browser is connected.
+   */
+  queryFragmentState(sessionId: string, fragmentId: string): Promise<unknown> {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.browserSockets.size === 0) return Promise.resolve(null);
+
+    const requestId = `sfq-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingFragmentQueries.delete(requestId);
+        resolve(null);
+      }, 3000);
+
+      this.pendingFragmentQueries.set(requestId, { resolve, timer });
+      this.broadcastToBrowsers(session, { type: "query_fragment_state", requestId, fragmentId });
+    });
+  }
+
+  private resolveFragmentQuery(requestId: string, _fragmentId: string, state: unknown): void {
+    const pending = this.pendingFragmentQueries.get(requestId);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.pendingFragmentQueries.delete(requestId);
+    pending.resolve(state);
   }
 
   /** Attach a persistent store. Call restoreFromDisk() after. */
@@ -1408,6 +1439,10 @@ export class WsBridge {
               this.broadcastToBrowsers.bind(this),
             ),
         );
+        break;
+
+      case "fragment_state_response":
+        this.resolveFragmentQuery(msg.requestId, msg.fragmentId, msg.state);
         break;
     }
   }

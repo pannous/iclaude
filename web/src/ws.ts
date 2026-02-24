@@ -1,6 +1,7 @@
 import { useStore } from "./store.js";
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, SdkSessionInfo, McpServerConfig } from "./types.js";
 import { resultScanner, scanContent } from "./utils/result-scanner.js";
+import { queryFragmentState } from "./utils/fragment-query.js";
 import { safeStorage } from "./utils/safe-storage.js";
 
 import { playNotificationSound } from "./utils/notification-sound.js";
@@ -358,11 +359,12 @@ function extractTextFromBlocks(blocks: ContentBlock[]): string {
 }
 
 // LOCAL: Scan result text for inline images and HTML fragments
-function scanForImagesAndHtml(text: string): {
+function scanForImagesAndHtml(text: string, messageId?: string): {
   images?: { src: string; original: string }[];
-  html?: { html: string; original: string; preview: string }[];
+  html?: { html: string; original: string; preview: string; fragmentId: string }[];
 } {
   const scanned = scanContent(text);
+  const idBase = messageId || `msg-${Date.now()}`;
   return {
     images: scanned.images.length > 0
       ? scanned.images.map((img) => ({
@@ -370,7 +372,9 @@ function scanForImagesAndHtml(text: string): {
           original: img.original,
         }))
       : undefined,
-    html: scanned.html.length > 0 ? scanned.html : undefined,
+    html: scanned.html.length > 0
+      ? scanned.html.map((h, i) => ({ ...h, fragmentId: `${idBase}:${i}` }))
+      : undefined,
   };
 }
 
@@ -480,7 +484,7 @@ function handleParsedMessage(
     case "assistant": {
       const msg = data.message;
       const textContent = extractTextFromBlocks(msg.content);
-      const scanned = scanForImagesAndHtml(textContent);
+      const scanned = scanForImagesAndHtml(textContent, msg.id);
       const chatMsg: ChatMessage = {
         id: msg.id,
         role: "assistant",
@@ -760,6 +764,14 @@ function handleParsedMessage(
       break;
     }
 
+    case "query_fragment_state": {
+      // Server is asking us to query an iframe's current state and send it back
+      queryFragmentState(data.fragmentId).then((state) => {
+        sendToSession(sessionId, { type: "fragment_state_response", requestId: data.requestId, fragmentId: data.fragmentId, state });
+      });
+      break;
+    }
+
     case "session_archived": {
       // Server has archived this session — disconnect immediately and stop reconnecting
       disconnectSession(sessionId);
@@ -787,7 +799,7 @@ function handleParsedMessage(
         } else if (histMsg.type === "assistant") {
           const msg = histMsg.message;
           const textContent = extractTextFromBlocks(msg.content);
-          const scanned = scanForImagesAndHtml(textContent);
+          const scanned = scanForImagesAndHtml(textContent, msg.id);
           const assistantMsg: ChatMessage = {
             id: msg.id,
             role: "assistant",
@@ -836,9 +848,10 @@ function handleParsedMessage(
               }
             }
             if (!coveredByAssistant) {
-              const scanned = scanForImagesAndHtml(resultText);
+              const resultMsgId = `hist-result-${i}`;
+              const scanned = scanForImagesAndHtml(resultText, resultMsgId);
               chatMessages.push({
-                id: `hist-result-${i}`,
+                id: resultMsgId,
                 role: "assistant",
                 content: resultText,
                 scannedImages: scanned.images,

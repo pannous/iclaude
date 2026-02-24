@@ -19,7 +19,7 @@ export interface ChatMessage {
   contentBlocks?: ContentBlock[];
   images?: { media_type: string; data: string }[];
   scannedImages?: { src: string; original: string }[];
-  scannedHtml?: { html: string; original: string; preview: string }[];
+  scannedHtml?: { html: string; original: string; preview: string; fragmentId: string }[];
   timestamp: number;
   parentToolUseId?: string | null;
   isStreaming?: boolean;

@@ -5,6 +5,7 @@ import { disconnectSession } from "./ws.js";
 import { api } from "./api.js";
 import { parseHash, navigateToSession, navigateHome } from "./utils/routing.js";
 import { handleKeyDown, createMouseHandler } from "./utils/keybindings.js";
+import { resolveStateQuery } from "./utils/fragment-query.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
@@ -190,11 +191,24 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Listen for postMessage from skill iframes (vibe.notify)
+  // Listen for postMessage from HTML fragment iframes and skill panels
   useEffect(() => {
     function handleMessage(e: MessageEvent) {
-      if (e.data?.type === "vibe:notify" && Notification.permission === "granted") {
-        new Notification(e.data.title, { body: e.data.body });
+      const d = e.data;
+      if (!d?.type) return;
+      switch (d.type) {
+        case "vibe:notify":
+          if (Notification.permission === "granted") new Notification(d.title, { body: d.body });
+          break;
+        case "vibe:console":
+          useStore.getState().appendConsoleLog(d.fragmentId, { level: d.level, args: d.args, timestamp: Date.now() });
+          break;
+        case "vibe:state_update":
+          useStore.getState().updateFragmentState(d.fragmentId, d.state);
+          break;
+        case "vibe:state_response":
+          resolveStateQuery(d.requestId, d.state);
+          break;
       }
     }
     window.addEventListener("message", handleMessage);
