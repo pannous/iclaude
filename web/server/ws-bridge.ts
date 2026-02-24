@@ -507,6 +507,16 @@ export class WsBridge {
     return this.sessions.get(sessionId);
   }
 
+  /** Resolve a session by Companion sessionId OR CLI session ID. */
+  resolveSession(id: string): Session | undefined {
+    const direct = this.sessions.get(id);
+    if (direct) return direct;
+    for (const session of this.sessions.values()) {
+      if (session.cliSessionId === id) return session;
+    }
+    return undefined;
+  }
+
   getAllSessions(): SessionState[] {
     return Array.from(this.sessions.values()).map((s) => s.state);
   }

@@ -114,6 +114,22 @@ Each entry captures:
 - `POST /api/sessions/:id/recording/start` / `stop` — enable/disable per session
 
 **Code**: `web/server/recorder.ts` (recorder + manager), `web/server/replay.ts` (load & filter utilities).
+
+### Agent Access to Fragment State
+
+Agents running inside the Companion can query fragment state using injected environment variables:
+- `$COMPANION_SESSION_ID` — your session ID (injected automatically into CLI processes)
+- `$COMPANION_PORT` — the server port (injected automatically)
+
+Fragment endpoints accept **either** the Companion session ID or the CLI's internal session ID:
+```bash
+# Query all fragment states for your session
+curl localhost:$COMPANION_PORT/api/sessions/$COMPANION_SESSION_ID/fragments
+
+# Query a specific fragment's last reported state
+curl localhost:$COMPANION_PORT/api/sessions/$COMPANION_SESSION_ID/fragments/<fragmentId>/state
+```
+
 ## Pull Requests
 
 When submitting a pull request:

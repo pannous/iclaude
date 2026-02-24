@@ -1034,19 +1034,19 @@ export function createRoutes(
 
   // ─── HTML Fragment bridge (state + console) ──────────────────
 
-  // Return all cached fragment states for a session
+  // Return all cached fragment states for a session (accepts Companion or CLI session ID)
   api.get("/sessions/:id/fragments", (c) => {
-    const id = c.req.param("id");
-    if (!wsBridge.getSession(id)) return c.json({ error: "Session not found" }, 404);
-    return c.json(wsBridge.getAllFragmentStates(id));
+    const session = wsBridge.resolveSession(c.req.param("id"));
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return c.json(wsBridge.getAllFragmentStates(session.id));
   });
 
-  // Return last state pushed by a fragment via vibeReportState
+  // Return last state pushed by a fragment via vibeReportState (accepts Companion or CLI session ID)
   api.get("/sessions/:id/fragments/:fid/state", (c) => {
-    const id = c.req.param("id");
+    const session = wsBridge.resolveSession(c.req.param("id"));
     const fid = c.req.param("fid");
-    if (!wsBridge.getSession(id)) return c.json({ error: "Session not found" }, 404);
-    return c.json({ fragmentId: fid, state: wsBridge.getFragmentState(id, fid) });
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return c.json({ fragmentId: fid, state: wsBridge.getFragmentState(session.id, fid) });
   });
 
   // ─── Available backends ─────────────────────────────────────
