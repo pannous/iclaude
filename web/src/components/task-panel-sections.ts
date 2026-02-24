@@ -34,6 +34,12 @@ export const SECTION_DEFINITIONS: TaskPanelSectionDef[] = [
     backends: null,
   },
   {
+    id: "plugins",
+    label: "Plugins",
+    description: "Interactive HTML panels",
+    backends: null,
+  },
+  {
     id: "git-branch",
     label: "Git Branch",
     description: "Current branch, ahead/behind, and line changes",
@@ -62,12 +68,6 @@ export const SECTION_DEFINITIONS: TaskPanelSectionDef[] = [
     label: "Tasks",
     description: "Agent task list and progress",
     backends: ["claude"],
-  },
-  {
-    id: "plugins",
-    label: "Plugins",
-    description: "Interactive HTML panels",
-    backends: null,
   },
 ];
 

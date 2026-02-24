@@ -69,10 +69,10 @@ describe("getInitialTaskPanelConfig", () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
 
     const config = getInitialTaskPanelConfig();
-    // The missing sections should be appended at the end
+    // The missing sections should be appended at the end (in definition order)
     expect(config.order).toEqual([
       "usage-limits", "git-branch", "github-pr", "linear-issue",
-      "mcp-servers", "tasks", "plugins",
+      "plugins", "mcp-servers", "tasks",
     ]);
     // New sections should be enabled by default
     expect(config.enabled["mcp-servers"]).toBe(true);
@@ -101,7 +101,7 @@ describe("getInitialTaskPanelConfig", () => {
     const config = getInitialTaskPanelConfig();
     // "old-removed-section" should be filtered out
     expect(config.order).not.toContain("old-removed-section");
-    // All valid sections should remain in their saved order (plugins already present)
+    // All valid sections should remain in their saved order (plugins appended)
     expect(config.order).toEqual([
       "usage-limits", "git-branch", "github-pr", "linear-issue", "mcp-servers", "tasks", "plugins",
     ]);
