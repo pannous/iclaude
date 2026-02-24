@@ -22,6 +22,8 @@ export interface SessionItem {
   permCount: number;
   cronJobId?: string;
   cronJobName?: string;
+  agentId?: string;
+  agentName?: string;
 }
 
 export interface ProjectGroup {
