@@ -701,81 +701,14 @@ export function Composer({ sessionId }: { sessionId: string }) {
             </div>
           )}
 
-          {/* Mobile toolbar: mode toggle + secondary actions (hidden on sm+) */}
-          <div className="flex items-center gap-1.5 px-3 pt-1.5 pb-0.5 sm:hidden">
+          {/* Toolbar: mode toggle + actions + send — ABOVE textarea so it's
+              never behind the iOS keyboard (Safari ignores interactive-widget) */}
+          <div className="flex items-center justify-between px-3 pt-2 pb-0.5">
+            {/* Left: mode toggle */}
             <button
               onClick={toggleMode}
               disabled={!isConnected}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[12px] font-semibold transition-all border select-none shrink-0 ${
-                !isConnected
-                  ? "opacity-30 cursor-not-allowed text-cc-muted border-transparent"
-                  : isPlan
-                    ? "text-cc-primary border-cc-primary/30 bg-cc-primary/8"
-                    : "text-cc-muted border-cc-border"
-              }`}
-              title="Toggle mode (Shift+Tab)"
-            >
-              {isPlan ? (
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                  <rect x="3" y="3" width="3.5" height="10" rx="0.75" />
-                  <rect x="9.5" y="3" width="3.5" height="10" rx="0.75" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                  <path d="M2.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                  <path d="M8.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                </svg>
-              )}
-              <span>{modeLabel}</span>
-            </button>
-
-            <div className="flex-1" />
-
-            <button
-              onClick={() => {
-                const defaultName = text.trim().slice(0, 32);
-                setSavePromptName(defaultName || "");
-                setSavePromptError(null);
-                setSavePromptOpen((v) => !v);
-              }}
-              disabled={!isConnected || !text.trim()}
-              className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
-                isConnected && text.trim()
-                  ? "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
-                  : "text-cc-muted opacity-30 cursor-not-allowed"
-              }`}
-              title="Save as prompt"
-            >
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
-                <path d="M4 2.75h8A1.25 1.25 0 0113.25 4v9.25L8 10.5l-5.25 2.75V4A1.25 1.25 0 014 2.75z" />
-              </svg>
-            </button>
-
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!isConnected}
-              className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
-                isConnected
-                  ? "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
-                  : "text-cc-muted opacity-30 cursor-not-allowed"
-              }`}
-              title="Upload image"
-            >
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
-                <rect x="2" y="2" width="12" height="12" rx="2" />
-                <circle cx="5.5" cy="5.5" r="1" fill="currentColor" stroke="none" />
-                <path d="M2 11l3-3 2 2 3-4 4 5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Main input row */}
-          <div className="flex items-end gap-2 px-3 sm:px-2.5 py-1 sm:py-2">
-            {/* Desktop mode toggle (hidden on mobile) */}
-            <button
-              onClick={toggleMode}
-              disabled={!isConnected}
-              className={`mb-0.5 hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-semibold transition-all border select-none shrink-0 ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-semibold transition-all border select-none shrink-0 ${
                 !isConnected
                   ? "opacity-30 cursor-not-allowed text-cc-muted border-transparent"
                   : isPlan
@@ -798,30 +731,8 @@ export function Composer({ sessionId }: { sessionId: string }) {
               <span>{modeLabel}</span>
             </button>
 
-            {/* Textarea — order-1: full-width top row */}
-            <textarea
-              ref={textareaRef}
-              value={text}
-              onChange={handleInput}
-              onKeyDown={handleKeyDown}
-              onClick={syncCaret}
-              onKeyUp={syncCaret}
-              onPaste={handlePaste}
-              aria-label="Message input"
-              placeholder={isConnected
-                ? "Type a message... (/ + @)"
-                : "Waiting for CLI connection..."}
-              disabled={!isConnected}
-              rows={1}
-              className="flex-1 min-w-0 px-2 py-2 text-base sm:text-sm bg-transparent resize-none outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted disabled:opacity-50 overflow-y-auto"
-              style={{ minHeight: "42px", maxHeight: "200px" }}
-            />
-
-            {/* Desktop secondary buttons + send/stop
-                select-none + touch-action:manipulation prevent iOS from treating
-                taps on these buttons as text-selection gestures from the textarea */}
-            <div className="mb-0.5 flex items-center gap-1.5 shrink-0 select-none" style={{ touchAction: "manipulation", WebkitTouchCallout: "none" } as React.CSSProperties}>
-              {/* Bookmark + image: desktop only */}
+            {/* Right: secondary actions + send */}
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => {
                   const defaultName = text.trim().slice(0, 32);
@@ -830,10 +741,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   setSavePromptOpen((v) => !v);
                 }}
                 disabled={!isConnected || !text.trim()}
-                className={`hidden sm:flex items-center justify-center w-9 h-9 rounded-lg border transition-colors ${
+                className={`hidden sm:flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
                   isConnected && text.trim()
-                    ? "text-cc-muted border-cc-border hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
-                    : "text-cc-muted opacity-30 border-cc-border/60 cursor-not-allowed"
+                    ? "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
+                    : "text-cc-muted opacity-30 cursor-not-allowed"
                 }`}
                 title="Save as prompt"
               >
@@ -845,10 +756,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={!isConnected}
-                className={`hidden sm:flex items-center justify-center w-9 h-9 rounded-lg border transition-colors ${
+                className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
                   isConnected
-                    ? "text-cc-muted border-cc-border hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
-                    : "text-cc-muted opacity-30 border-cc-border/60 cursor-not-allowed"
+                    ? "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
+                    : "text-cc-muted opacity-30 cursor-not-allowed"
                 }`}
                 title="Upload image"
               >
@@ -859,18 +770,16 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 </svg>
               </button>
 
-              {/* LOCAL: Dictation/mic button — only shown when Web Speech API is available
-                 (not on iOS/iPadOS Safari where it doesn't work and crowds the send button) */}
               {SpeechRecognitionAPI && (
                 <button
                   onClick={toggleListening}
                   disabled={!isConnected}
-                  className={`hidden sm:flex items-center justify-center w-9 h-9 rounded-lg border transition-colors ${
+                  className={`hidden sm:flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
                     isListening
-                      ? "text-cc-error border-cc-error/40 bg-cc-error/10 hover:bg-cc-error/20 cursor-pointer animate-pulse"
+                      ? "text-cc-error bg-cc-error/10 hover:bg-cc-error/20 cursor-pointer animate-pulse"
                       : isConnected
-                        ? "text-cc-muted border-cc-border hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
-                        : "text-cc-muted opacity-30 border-cc-border/60 cursor-not-allowed"
+                        ? "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
+                        : "text-cc-muted opacity-30 cursor-not-allowed"
                   }`}
                   title={isListening ? "Stop dictation" : "Start dictation"}
                 >
@@ -882,16 +791,11 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 </button>
               )}
 
-              {/* Send/stop: always visible */}
-              {/* iOS/iPadOS: onTouchStart preventDefault stops the browser from
-                  stealing the touch for text selection or textarea blur/keyboard
-                  dismiss. onTouchEnd fires the action. Desktop uses onClick. */}
+              {/* Send/stop */}
               {isRunning ? (
                 <button
-                  onTouchStart={(e) => e.preventDefault()}
-                  onTouchEnd={(e) => { e.preventDefault(); handleInterrupt(); }}
                   onClick={handleInterrupt}
-                  className="flex items-center justify-center w-10 h-10 sm:w-9 sm:h-9 rounded-lg bg-cc-error/10 hover:bg-cc-error/20 text-cc-error transition-colors cursor-pointer"
+                  className="flex items-center justify-center w-10 h-10 sm:w-8 sm:h-8 rounded-lg bg-cc-error/10 hover:bg-cc-error/20 text-cc-error transition-colors cursor-pointer"
                   title="Stop generation"
                 >
                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
@@ -900,11 +804,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 </button>
               ) : (
                 <button
-                  onTouchStart={(e) => e.preventDefault()}
-                  onTouchEnd={(e) => { e.preventDefault(); handleSend(); }}
                   onClick={handleSend}
                   disabled={!canSend}
-                  className={`flex items-center justify-center w-10 h-10 sm:w-9 sm:h-9 rounded-full transition-colors ${
+                  className={`flex items-center justify-center w-10 h-10 sm:w-8 sm:h-8 rounded-full transition-colors ${
                     canSend
                       ? "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer shadow-[0_6px_20px_rgba(0,0,0,0.18)]"
                       : "bg-cc-hover text-cc-muted cursor-not-allowed"
@@ -918,6 +820,23 @@ export function Composer({ sessionId }: { sessionId: string }) {
               )}
             </div>
           </div>
+
+          {/* Textarea — full width, at the bottom (closest to iOS keyboard) */}
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={handleInput}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            aria-label="Message input"
+            placeholder={isConnected
+              ? "Type a message... (/ + @)"
+              : "Waiting for CLI connection..."}
+            disabled={!isConnected}
+            rows={1}
+            className="w-full px-4 pt-1 pb-2 text-base sm:text-sm bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted disabled:opacity-50 overflow-y-auto"
+            style={{ minHeight: "42px", maxHeight: "200px" }}
+          />
 
         </div>
       </div>

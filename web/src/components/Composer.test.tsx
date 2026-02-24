@@ -550,15 +550,15 @@ describe("Composer layout", () => {
     // Verifies the send button has explicit sizing classes for consistent layout.
     render(<Composer sessionId="s1" />);
     const sendBtn = screen.getByTitle("Send message");
-    expect(sendBtn.className).toContain("w-9");
-    expect(sendBtn.className).toContain("h-9");
+    expect(sendBtn.className).toContain("w-10");
+    expect(sendBtn.className).toContain("h-10");
   });
 
-  it("textarea uses min-w-0 to fill flex container", () => {
-    // Verifies the textarea fills its flex parent container.
+  it("textarea uses w-full to fill container", () => {
+    // Verifies the textarea fills its parent (full-width layout, not flex row).
     const { container } = render(<Composer sessionId="s1" />);
     const textarea = container.querySelector("textarea")!;
-    expect(textarea.className).toContain("min-w-0");
+    expect(textarea.className).toContain("w-full");
   });
 });
 
