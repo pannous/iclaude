@@ -476,16 +476,45 @@ describe("recentlyRenamed", () => {
 // ─── UI state ───────────────────────────────────────────────────────────────
 
 describe("UI state", () => {
-  it("toggleDarkMode: flips the value and persists to localStorage", () => {
-    const initial = useStore.getState().darkMode;
-    useStore.getState().toggleDarkMode();
-
-    expect(useStore.getState().darkMode).toBe(!initial);
-    expect(localStorage.getItem("cc-dark-mode")).toBe(String(!initial));
+  it("toggleDarkMode: flips the value and persists theme to localStorage", () => {
+    useStore.getState().setTheme("light");
+    expect(useStore.getState().darkMode).toBe(false);
 
     useStore.getState().toggleDarkMode();
-    expect(useStore.getState().darkMode).toBe(initial);
-    expect(localStorage.getItem("cc-dark-mode")).toBe(String(initial));
+    expect(useStore.getState().darkMode).toBe(true);
+    expect(useStore.getState().theme).toBe("dark");
+    expect(localStorage.getItem("cc-theme")).toBe("dark");
+
+    useStore.getState().toggleDarkMode();
+    expect(useStore.getState().darkMode).toBe(false);
+    expect(useStore.getState().theme).toBe("light");
+    expect(localStorage.getItem("cc-theme")).toBe("light");
+  });
+
+  it("setTheme: persists and resolves darkMode correctly", () => {
+    useStore.getState().setTheme("dark");
+    expect(useStore.getState().theme).toBe("dark");
+    expect(useStore.getState().darkMode).toBe(true);
+    expect(localStorage.getItem("cc-theme")).toBe("dark");
+
+    useStore.getState().setTheme("light");
+    expect(useStore.getState().theme).toBe("light");
+    expect(useStore.getState().darkMode).toBe(false);
+    expect(localStorage.getItem("cc-theme")).toBe("light");
+  });
+
+  it("cycleTheme: cycles system → dark → light → system", () => {
+    useStore.getState().setTheme("system");
+    expect(useStore.getState().theme).toBe("system");
+
+    useStore.getState().cycleTheme();
+    expect(useStore.getState().theme).toBe("dark");
+
+    useStore.getState().cycleTheme();
+    expect(useStore.getState().theme).toBe("light");
+
+    useStore.getState().cycleTheme();
+    expect(useStore.getState().theme).toBe("system");
   });
 
   it("newSession: clears currentSessionId and increments homeResetKey", () => {

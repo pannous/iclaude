@@ -47,6 +47,7 @@ function useHash() {
 }
 
 export default function App() {
+  const theme = useStore((s) => s.theme);
   const darkMode = useStore((s) => s.darkMode);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const sidebarOpen = useStore((s) => s.sidebarOpen);
@@ -76,6 +77,17 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
   }, [darkMode]);
+
+  // When theme is "system", track OS preference changes in real time
+  useEffect(() => {
+    if (theme !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = (e: MediaQueryListEvent) => {
+      useStore.setState({ darkMode: e.matches });
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [theme]);
 
   useEffect(() => {
     api.getSettings().then((settings) => {

@@ -43,6 +43,25 @@ export interface QuickTerminalTab {
 export type QuickTerminalPlacement = "top" | "right" | "bottom" | "left";
 
 export type DiffBase = "last-commit" | "default-branch";
+export type ThemeMode = "system" | "dark" | "light";
+
+function resolveThemeDark(theme: ThemeMode): boolean {
+  if (theme === "dark") return true;
+  if (theme === "light") return false;
+  return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+/** Migrate legacy `cc-dark-mode` boolean to new `cc-theme` enum on first load */
+function initTheme(): ThemeMode {
+  const valid: ThemeMode[] = ["system", "dark", "light"];
+  const stored = typeof window !== "undefined" ? safeStorage.getItem("cc-theme") : null;
+  if (stored && valid.includes(stored as ThemeMode)) return stored as ThemeMode;
+  // Migrate from old boolean key
+  const legacy = typeof window !== "undefined" ? safeStorage.getItem("cc-dark-mode") : null;
+  if (legacy === "true") return "dark";
+  if (legacy === "false") return "light";
+  return "system";
+}
 
 interface AppState {
   // Sessions
@@ -122,6 +141,7 @@ interface AppState {
   setCreationError: (error: string | null) => void;
 
   // UI
+  theme: ThemeMode;
   darkMode: boolean;
   notificationSound: boolean;
   yoloMode: boolean;
@@ -145,6 +165,8 @@ interface AppState {
   editorActiveFilePath: string | null;
 
   // Actions
+  setTheme: (theme: ThemeMode) => void;
+  cycleTheme: () => void;
   setDarkMode: (v: boolean) => void;
   toggleDarkMode: () => void;
   setNotificationSound: (v: boolean) => void;
@@ -342,7 +364,8 @@ export const useStore = create<AppState>((set) => ({
   updateInfo: null,
   updateDismissedVersion: initString("cc-update-dismissed"),
   updateOverlayActive: false,
-  darkMode: initBool("cc-dark-mode", () => typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches),
+  theme: initTheme(),
+  darkMode: resolveThemeDark(initTheme()),
   notificationSound: initBool("cc-notification-sound", true),
   yoloMode: initBool("cc-yolo-mode", true),
   notificationDesktop: initBool("cc-notification-desktop", false),
@@ -386,15 +409,28 @@ export const useStore = create<AppState>((set) => ({
   setSessionCreating: (creating, backend) => set({ sessionCreating: creating, sessionCreatingBackend: backend ?? null }),
   setCreationError: (error) => set({ creationError: error }),
 
+  setTheme: (theme) => {
+    safeStorage.setItem("cc-theme", theme);
+    set({ theme, darkMode: resolveThemeDark(theme) });
+  },
+  cycleTheme: () =>
+    set((s) => {
+      const order: ThemeMode[] = ["system", "dark", "light"];
+      const next = order[(order.indexOf(s.theme) + 1) % order.length];
+      safeStorage.setItem("cc-theme", next);
+      return { theme: next, darkMode: resolveThemeDark(next) };
+    }),
   setDarkMode: (v) => {
-    safeStorage.setItem("cc-dark-mode", String(v));
-    set({ darkMode: v });
+    const theme = v ? "dark" : "light";
+    safeStorage.setItem("cc-theme", theme);
+    set({ theme, darkMode: v });
   },
   toggleDarkMode: () =>
     set((s) => {
       const next = !s.darkMode;
-      safeStorage.setItem("cc-dark-mode", String(next));
-      return { darkMode: next };
+      const theme = next ? "dark" : "light";
+      safeStorage.setItem("cc-theme", theme);
+      return { theme, darkMode: next };
     }),
   setNotificationSound: (v) => {
     safeStorage.setItem("cc-notification-sound", String(v));
@@ -730,7 +766,7 @@ export const useStore = create<AppState>((set) => ({
       const files = s.editorFiles.includes(filePath)
         ? s.editorFiles
         : [...s.editorFiles, filePath];
-      return { editorFiles: files, editorActiveFilePath: filePath, activeTab: "editor" };
+      return { editorFiles: files, editorActiveFilePath: filePath, activeTab: "editor", editorTabEnabled: true };
     }),
 
   closeEditorFile: (filePath) =>

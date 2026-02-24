@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
 interface MockStoreState {
-  darkMode: boolean;
+  theme: "system" | "dark" | "light";
   notificationSound: boolean;
   notificationDesktop: boolean;
   updateInfo: {
@@ -14,7 +14,7 @@ interface MockStoreState {
     updateInProgress: boolean;
     lastChecked: number;
   } | null;
-  toggleDarkMode: ReturnType<typeof vi.fn>;
+  cycleTheme: ReturnType<typeof vi.fn>;
   toggleNotificationSound: ReturnType<typeof vi.fn>;
   setNotificationDesktop: ReturnType<typeof vi.fn>;
   setUpdateInfo: ReturnType<typeof vi.fn>;
@@ -26,11 +26,11 @@ let mockState: MockStoreState;
 
 function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreState {
   return {
-    darkMode: false,
+    theme: "system",
     notificationSound: true,
     notificationDesktop: false,
     updateInfo: null,
-    toggleDarkMode: vi.fn(),
+    cycleTheme: vi.fn(),
     toggleNotificationSound: vi.fn(),
     setNotificationDesktop: vi.fn(),
     setUpdateInfo: vi.fn(),
@@ -282,13 +282,13 @@ describe("SettingsPage", () => {
     expect(mockState.toggleNotificationSound).toHaveBeenCalledTimes(1);
   });
 
-  it("toggles theme from settings", async () => {
-    mockState = createMockState({ darkMode: true });
+  it("cycles theme from settings", async () => {
+    mockState = createMockState({ theme: "system" });
     render(<SettingsPage />);
     await screen.findByText("OpenRouter key configured");
 
     fireEvent.click(screen.getByRole("button", { name: /Theme/i }));
-    expect(mockState.toggleDarkMode).toHaveBeenCalledTimes(1);
+    expect(mockState.cycleTheme).toHaveBeenCalledTimes(1);
   });
 
   it("navigates to environments page from settings", async () => {

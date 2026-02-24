@@ -16,8 +16,8 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
-  const darkMode = useStore((s) => s.darkMode);
-  const toggleDarkMode = useStore((s) => s.toggleDarkMode);
+  const theme = useStore((s) => s.theme);
+  const cycleTheme = useStore((s) => s.cycleTheme);
   const diffBase = useStore((s) => s.diffBase);
   const setDiffBase = useStore((s) => s.setDiffBase);
   const notificationSound = useStore((s) => s.notificationSound);
@@ -310,11 +310,13 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
           <h2 className="text-sm font-semibold text-cc-fg">Appearance</h2>
           <button
             type="button"
-            onClick={toggleDarkMode}
+            onClick={cycleTheme}
             className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
           >
             <span>Theme</span>
-            <span className="text-xs text-cc-muted">{darkMode ? "Dark" : "Light"}</span>
+            <span className="text-xs text-cc-muted">
+              {theme === "system" ? "System" : theme === "dark" ? "Dark" : "Light"}
+            </span>
           </button>
         </div>
 
