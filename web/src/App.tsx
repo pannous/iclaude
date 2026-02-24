@@ -26,8 +26,9 @@ const EnvManager = lazy(() => import("./components/EnvManager.js").then((m) => (
 const CronManager = lazy(() => import("./components/CronManager.js").then((m) => ({ default: m.CronManager })));
 const AgentsPage = lazy(() => import("./components/AgentsPage.js").then((m) => ({ default: m.AgentsPage })));
 const TerminalPage = lazy(() => import("./components/TerminalPage.js").then((m) => ({ default: m.TerminalPage })));
-// LOCAL: Skill panel and file editor lazy loads
+// LOCAL: Skill panel, skills page, and file editor lazy loads
 const SkillPanel = lazy(() => import("./components/SkillPanel.js").then((m) => ({ default: m.SkillPanel })));
+const SkillsPage = lazy(() => import("./components/SkillsPage.js").then((m) => ({ default: m.SkillsPage })));
 const FileEditor = lazy(() => import("./components/FileEditor.js").then((m) => ({ default: m.FileEditor })));
 
 function LazyFallback() {
@@ -73,6 +74,7 @@ export default function App() {
   const isEnvironmentsPage = route.page === "environments";
   const isScheduledPage = route.page === "scheduled";
   const isAgentsPage = route.page === "agents" || route.page === "agent-detail";
+  const isSkillsPage = route.page === "skills";
   const isSessionView = route.page === "session" || route.page === "home";
 
   useEffect(() => {
@@ -370,6 +372,12 @@ export default function App() {
           {isAgentsPage && (
             <div className="absolute inset-0">
               <Suspense fallback={<LazyFallback />}><AgentsPage route={route} /></Suspense>
+            </div>
+          )}
+
+          {isSkillsPage && (
+            <div className="absolute inset-0">
+              <Suspense fallback={<LazyFallback />}><SkillsPage /></Suspense>
             </div>
           )}
 
