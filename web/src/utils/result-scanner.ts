@@ -17,13 +17,19 @@ const LOCAL_PATH_PATTERN = /(?:~\/|\/)[^\s<>"'*?|:,;(){}\[\]]+/g;
  * 3. <html ...> ... </html> documents
  * 4. <body ...> ... </body> fragments
  */
-function extractHtmlFragments(text: string): string[] {
-  const fragments: string[] = [];
+interface ExtractedFragment {
+  html: string;
+  /** The full original text as it appeared in the message (for stripping) */
+  original: string;
+}
+
+function extractHtmlFragments(text: string): ExtractedFragment[] {
+  const fragments: ExtractedFragment[] = [];
 
   // 1. HTML from markdown code blocks: ```html ... ```
   const codeBlockRe = /```html\s*\n([\s\S]*?)```/gi;
   for (const m of text.matchAll(codeBlockRe)) {
-    fragments.push(m[1].trim());
+    fragments.push({ html: m[1].trim(), original: m[0] });
   }
 
   // 2. Bare HTML documents (not inside code blocks)
@@ -31,14 +37,14 @@ function extractHtmlFragments(text: string): string[] {
   const stripped = text.replace(/```[\s\S]*?```/g, "");
   const docRe = /(?:<!DOCTYPE\s+html[^>]*>|<html[\s>])[\s\S]*?(?:<\/html>|<\/body>)/gi;
   for (const m of stripped.matchAll(docRe)) {
-    fragments.push(m[0].trim());
+    fragments.push({ html: m[0].trim(), original: m[0] });
   }
 
   // 3. Bare <body> fragments (no doctype/html wrapper)
   if (fragments.length === 0) {
     const bodyRe = /<body[\s>][\s\S]*?<\/body>/gi;
     for (const m of stripped.matchAll(bodyRe)) {
-      fragments.push(m[0].trim());
+      fragments.push({ html: m[0].trim(), original: m[0] });
     }
   }
 
@@ -111,17 +117,17 @@ export class ResultScanner {
     const seen = new Set<string>();
     const htmlFragments: ScannedHtml[] = [];
 
-    for (const html of extractHtmlFragments(text)) {
-      if (seen.has(html)) continue;
-      seen.add(html);
+    for (const frag of extractHtmlFragments(text)) {
+      if (seen.has(frag.html)) continue;
+      seen.add(frag.html);
 
-      const preview = this.createHtmlPreview(html);
+      const preview = this.createHtmlPreview(frag.html);
 
       // Skip trivial fragments (just punctuation/whitespace)
       const meaningfulChars = preview.replace(/[.\s,;:!?-]+/g, "");
       if (meaningfulChars.length < 5) continue;
 
-      htmlFragments.push({ html, original: html, preview });
+      htmlFragments.push({ html: frag.html, original: frag.original, preview });
     }
 
     return htmlFragments;

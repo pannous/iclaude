@@ -17,6 +17,8 @@ const streamingPhaseBySession = new Map<string, "thinking" | "text">();
 const streamingDraftMessageIdBySession = new Map<string, string>();
 /** Track processed tool_use IDs to prevent duplicate task creation */
 const processedToolUseIds = new Map<string, Set<string>>();
+/** Whether an assistant message was finalized this turn (used to preserve post-thinking text) */
+const hadAssistantThisTurn = new Set<string>();
 
 function normalizePath(path: string): string {
   const isAbs = path.startsWith("/");
@@ -261,11 +263,13 @@ function setStreamingDraftMessage(sessionId: string, content: string) {
 
 function finalizeStreamingDraftMessage(sessionId: string, finalMessage: ChatMessage): boolean {
   const draftId = streamingDraftMessageIdBySession.get(sessionId);
+  console.log("[ws:TRACE] finalizeStreamingDraftMessage: draftId=", draftId, "finalMsg.id=", finalMessage.id, "finalMsg.scannedHtml=", finalMessage.scannedHtml?.length ?? 0);
   if (!draftId) return false;
 
   const store = useStore.getState();
   const existing = store.messages.get(sessionId) || [];
   const draftIndex = existing.findIndex((m) => m.id === draftId);
+  console.log("[ws:TRACE] finalizeStreamingDraftMessage: draftIndex=", draftIndex, "totalMsgs=", existing.length);
   if (draftIndex === -1) {
     streamingDraftMessageIdBySession.delete(sessionId);
     return false;
@@ -275,21 +279,59 @@ function finalizeStreamingDraftMessage(sessionId: string, finalMessage: ChatMess
   messages[draftIndex] = finalMessage;
   store.setMessages(sessionId, messages);
   streamingDraftMessageIdBySession.delete(sessionId);
+  console.log("[ws:TRACE] finalizeStreamingDraftMessage: SUCCESS, replaced draft at index", draftIndex);
   return true;
 }
 
 function clearStreamingDraftMessage(sessionId: string) {
   const draftId = streamingDraftMessageIdBySession.get(sessionId);
-  if (!draftId) return;
+  console.log("[ws:TRACE] clearStreamingDraftMessage: draftId=", draftId);
+  if (!draftId) {
+    console.log("[ws:TRACE] clearStreamingDraftMessage: no draft to clear (already finalized)");
+    return;
+  }
 
   const store = useStore.getState();
   const existing = store.messages.get(sessionId) || [];
+  const draft = existing.find(m => m.id === draftId);
+  console.log("[ws:TRACE] clearStreamingDraftMessage: REMOVING draft, content length=", draft?.content?.length ?? 0);
   const next = existing.filter((m) => m.id !== draftId);
   if (next.length !== existing.length) {
     store.setMessages(sessionId, next);
   }
 
   streamingDraftMessageIdBySession.delete(sessionId);
+}
+
+/**
+ * If a streaming draft still exists after an assistant message was already
+ * finalized this turn (extended thinking: thinking→assistant→text→result),
+ * preserve it as a proper message with image/HTML scanning.
+ * Otherwise, discard the transient draft.
+ */
+function finalizeOrClearStreamingDraft(sessionId: string) {
+  const assistantSeen = hadAssistantThisTurn.has(sessionId);
+  hadAssistantThisTurn.delete(sessionId);
+
+  const draftId = streamingDraftMessageIdBySession.get(sessionId);
+  if (!draftId) return;
+
+  if (assistantSeen) {
+    const store = useStore.getState();
+    const msgs = store.messages.get(sessionId) || [];
+    const draft = msgs.find(m => m.id === draftId);
+    if (draft?.content && draft.content.trim().length > 0) {
+      const scanned = scanForImagesAndHtml(draft.content, draftId);
+      finalizeStreamingDraftMessage(sessionId, {
+        ...draft,
+        isStreaming: false,
+        scannedImages: scanned.images,
+        scannedHtml: scanned.html,
+      });
+      return;
+    }
+  }
+  clearStreamingDraftMessage(sessionId);
 }
 
 function nextClientMsgId(): string {
@@ -403,11 +445,22 @@ function mergeAssistantMessage(previous: ChatMessage, incoming: ChatMessage): Ch
     ? extractTextFromBlocks(mergedBlocks)
     : (incoming.content || previous.content);
 
+  // Re-scan merged content so HTML fragments survive across partial assistant merges.
+  // Without this, a later tool_use-only message would overwrite scannedHtml with undefined.
+  const scanned = scanForImagesAndHtml(mergedContent, previous.id);
+  console.log("[ws:TRACE] mergeAssistantMessage:", previous.id,
+    "prevHtml=", previous.scannedHtml?.length ?? 0,
+    "incomingHtml=", incoming.scannedHtml?.length ?? 0,
+    "mergedHtml=", scanned.html?.length ?? 0,
+    "mergedContent length=", mergedContent.length);
+
   return {
     ...previous,
     ...incoming,
     content: mergedContent,
     contentBlocks: mergedBlocks,
+    scannedImages: scanned.images,
+    scannedHtml: scanned.html,
     // Keep the original timestamp position when this is an in-place assistant update.
     timestamp: previous.timestamp ?? incoming.timestamp,
     // Explicitly clear stale streaming marker when incoming is final.
@@ -420,12 +473,15 @@ function upsertAssistantMessage(sessionId: string, incoming: ChatMessage) {
   const existing = store.messages.get(sessionId) || [];
   const index = existing.findIndex((m) => m.role === "assistant" && m.id === incoming.id);
   if (index === -1) {
+    console.log("[ws:TRACE] upsertAssistantMessage: NEW message", incoming.id, "html=", incoming.scannedHtml?.length ?? 0, "content length=", incoming.content?.length);
     store.appendMessage(sessionId, incoming);
     return;
   }
 
+  console.log("[ws:TRACE] upsertAssistantMessage: MERGING into existing", incoming.id, "prevHtml=", existing[index].scannedHtml?.length ?? 0, "incomingHtml=", incoming.scannedHtml?.length ?? 0);
   const messages = [...existing];
   messages[index] = mergeAssistantMessage(messages[index], incoming);
+  console.log("[ws:TRACE] upsertAssistantMessage: MERGED html=", messages[index].scannedHtml?.length ?? 0);
   store.setMessages(sessionId, messages);
 }
 
@@ -452,6 +508,7 @@ function handleParsedMessage(
   options: { processSeq?: boolean; ackSeqMessage?: boolean } = {},
 ) {
   const { processSeq = true, ackSeqMessage = true } = options;
+  console.log(`[ws:TRACE] handleParsedMessage type="${data.type}" session=${sessionId.slice(0,8)}`);
   const store = useStore.getState();
 
   if (processSeq && typeof data.seq === "number") {
@@ -483,7 +540,14 @@ function handleParsedMessage(
     case "assistant": {
       const msg = data.message;
       const textContent = extractTextFromBlocks(msg.content);
+      console.log("[ws:TRACE] === ASSISTANT MESSAGE ===");
+      console.log("[ws:TRACE] msg.id:", msg.id);
+      console.log("[ws:TRACE] textContent length:", textContent.length);
+      console.log("[ws:TRACE] textContent preview:", textContent.slice(0, 300));
+      console.log("[ws:TRACE] contentBlocks count:", msg.content?.length, "types:", msg.content?.map((b: ContentBlock) => b.type));
       const scanned = scanForImagesAndHtml(textContent, msg.id);
+      console.log("[ws:TRACE] scan result — html:", scanned.html?.length ?? 0, "images:", scanned.images?.length ?? 0);
+      if (scanned.html) console.log("[ws:TRACE] html previews:", scanned.html.map(h => h.preview));
       const chatMsg: ChatMessage = {
         id: msg.id,
         role: "assistant",
@@ -500,6 +564,7 @@ function handleParsedMessage(
       if (!replacedDraft) {
         upsertAssistantMessage(sessionId, chatMsg);
       }
+      hadAssistantThisTurn.add(sessionId);
       store.setStreaming(sessionId, null);
       streamingPhaseBySession.delete(sessionId);
       // Clear progress only for completed tools (tool_result blocks), not all tools.
@@ -608,7 +673,10 @@ function handleParsedMessage(
         }
       }
       store.updateSession(sessionId, sessionUpdates);
-      clearStreamingDraftMessage(sessionId);
+      // Finalize any remaining streaming draft as a proper message.
+      // With extended thinking, the assistant message only contains the thinking
+      // block — the text output streams separately and must be preserved here.
+      finalizeOrClearStreamingDraft(sessionId);
       store.setStreaming(sessionId, null);
       streamingPhaseBySession.delete(sessionId);
       store.setStreamingStats(sessionId, null);
