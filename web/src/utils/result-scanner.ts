@@ -10,8 +10,40 @@ const URL_PATTERN = /https?:\/\/[^\s)<>"']+/g;
 // Absolute paths: /Users/..., /tmp/..., ~/... (macOS/Linux)
 const LOCAL_PATH_PATTERN = /(?:~\/|\/)[^\s<>"'*?|:,;(){}\[\]]+/g;
 
-// HTML fragments: full documents or blocks with nested tags
-const HTML_PATTERN = /(?:<!DOCTYPE\s+html[^>]*>[\s\S]*?<html[\s\S]*?<\/html>|<html[\s\S]*?<\/html>|(?:<(?:div|section|article|main|header|footer|nav|aside)[^>]*>[\s\S]*?<[^>]+>[\s\S]*?<\/(?:div|section|article|main|header|footer|nav|aside)>))/gi;
+/**
+ * Extract HTML fragments from text. Supports:
+ * 1. ```html code blocks (most common from LLM output)
+ * 2. <!DOCTYPE html> ... </html> or </body> documents
+ * 3. <html ...> ... </html> documents
+ * 4. <body ...> ... </body> fragments
+ */
+function extractHtmlFragments(text: string): string[] {
+  const fragments: string[] = [];
+
+  // 1. HTML from markdown code blocks: ```html ... ```
+  const codeBlockRe = /```html\s*\n([\s\S]*?)```/gi;
+  for (const m of text.matchAll(codeBlockRe)) {
+    fragments.push(m[1].trim());
+  }
+
+  // 2. Bare HTML documents (not inside code blocks)
+  // Strip code blocks first to avoid double-matching
+  const stripped = text.replace(/```[\s\S]*?```/g, "");
+  const docRe = /(?:<!DOCTYPE\s+html[^>]*>|<html[\s>])[\s\S]*?(?:<\/html>|<\/body>)/gi;
+  for (const m of stripped.matchAll(docRe)) {
+    fragments.push(m[0].trim());
+  }
+
+  // 3. Bare <body> fragments (no doctype/html wrapper)
+  if (fragments.length === 0) {
+    const bodyRe = /<body[\s>][\s\S]*?<\/body>/gi;
+    for (const m of stripped.matchAll(bodyRe)) {
+      fragments.push(m[0].trim());
+    }
+  }
+
+  return fragments;
+}
 
 export interface ScannedImage {
   src: string;
@@ -79,18 +111,17 @@ export class ResultScanner {
     const seen = new Set<string>();
     const htmlFragments: ScannedHtml[] = [];
 
-    for (const match of text.matchAll(HTML_PATTERN)) {
-      const html = match[0].trim();
+    for (const html of extractHtmlFragments(text)) {
       if (seen.has(html)) continue;
       seen.add(html);
 
       const preview = this.createHtmlPreview(html);
 
-      // Skip if preview is too short or meaningless (just punctuation/whitespace)
+      // Skip trivial fragments (just punctuation/whitespace)
       const meaningfulChars = preview.replace(/[.\s,;:!?-]+/g, "");
-      if (meaningfulChars.length < 10) continue;
+      if (meaningfulChars.length < 5) continue;
 
-      htmlFragments.push({ html, original: match[0], preview });
+      htmlFragments.push({ html, original: html, preview });
     }
 
     return htmlFragments;
