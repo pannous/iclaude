@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen, fireEvent } from "@testing-library/react";
 import type { ChatMessage, ContentBlock } from "../types.js";
+import { injectBridgeIntoHtml } from "./MessageBubble.js";
 
 // Mock react-markdown to avoid ESM/parsing issues in tests
 vi.mock("react-markdown", () => ({
@@ -325,5 +326,43 @@ describe("MessageBubble - content block grouping", () => {
     // The two Read tools should not be grouped since there is a text block between them
     const labels = screen.getAllByText("Read File");
     expect(labels.length).toBe(2);
+  });
+});
+
+// ─── Fragment bridge injection ──────────────────────────────────────────────
+
+describe("injectBridgeIntoHtml", () => {
+  const sampleHtml = `<!DOCTYPE html><html><head><title>Test</title></head><body><p>Hello</p></body></html>`;
+  const bareHtml = `<body><p>Hello</p></body>`;
+
+  it("injects vibeReportState bridge into HTML with <head>", () => {
+    const result = injectBridgeIntoHtml(sampleHtml, "frag-1", false);
+    expect(result).toContain("vibeReportState");
+    expect(result).toContain("vibe:state_update");
+    expect(result).toContain("frag-1");
+    // Bridge script should appear before </head>
+    const scriptEnd = result.indexOf("</script>");
+    const headEnd = result.indexOf("</head>");
+    expect(scriptEnd).toBeLessThan(headEnd);
+  });
+
+  it("prepends bridge when HTML has no <head> tag", () => {
+    const result = injectBridgeIntoHtml(bareHtml, "frag-2", false);
+    expect(result).toContain("vibeReportState");
+    // Script tag should be at the very start
+    expect(result.startsWith("<script>")).toBe(true);
+  });
+
+  it("includes YOLO API (vibeCommand + vibe.command) in yolo mode", () => {
+    const result = injectBridgeIntoHtml(sampleHtml, "frag-3", true);
+    expect(result).toContain("vibeCommand");
+    expect(result).toContain("window.vibe");
+    expect(result).toContain("/api/exec");
+  });
+
+  it("does NOT include YOLO API when yolo mode is off", () => {
+    const result = injectBridgeIntoHtml(sampleHtml, "frag-4", false);
+    expect(result).not.toContain("vibeCommand");
+    expect(result).not.toContain("/api/exec");
   });
 });

@@ -630,7 +630,7 @@ function buildYoloApi(): string {
 }
 
 /** Prepend bridge + optional YOLO API as <script> tags so they load with the document. */
-function injectBridgeIntoHtml(html: string, fragmentId: string, yoloMode: boolean): string {
+export function injectBridgeIntoHtml(html: string, fragmentId: string, yoloMode: boolean): string {
   const scripts = `<script>${buildFragmentBridge(fragmentId)}${yoloMode ? buildYoloApi() : ""}</script>`;
   // Insert before </head> if present, otherwise prepend
   if (html.includes("</head>")) return html.replace("</head>", `${scripts}</head>`);
