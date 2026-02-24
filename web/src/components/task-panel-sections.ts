@@ -23,6 +23,8 @@ export interface TaskPanelConfig {
   order: string[];
   /** Map of section ID → enabled/disabled */
   enabled: Record<string, boolean>;
+  /** Config layout version — when bumped, order resets to defaults (enabled states preserved) */
+  version?: number;
 }
 
 /** Canonical list of all sections in their default order. */
@@ -74,11 +76,14 @@ export const SECTION_DEFINITIONS: TaskPanelSectionDef[] = [
 export const DEFAULT_SECTION_ORDER: string[] = SECTION_DEFINITIONS.map((s) => s.id);
 
 const STORAGE_KEY = "cc-task-panel-config";
+/** Bump this when the default section order changes to force a layout reset */
+export const CONFIG_VERSION = 2;
 
 export function getDefaultConfig(): TaskPanelConfig {
   return {
     order: [...DEFAULT_SECTION_ORDER],
     enabled: Object.fromEntries(SECTION_DEFINITIONS.map((s) => [s.id, true])),
+    version: CONFIG_VERSION,
   };
 }
 
@@ -93,7 +98,17 @@ export function getInitialTaskPanelConfig(): TaskPanelConfig {
     const stored = safeStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored) as TaskPanelConfig;
-      // Add any new sections not yet in the saved order
+
+      // Version mismatch → reset order to defaults, preserve enabled/disabled
+      if ((parsed.version ?? 1) < CONFIG_VERSION) {
+        const fresh = getDefaultConfig();
+        for (const id of fresh.order) {
+          if (id in parsed.enabled) fresh.enabled[id] = parsed.enabled[id];
+        }
+        return fresh;
+      }
+
+      // Same version — merge as before (append new, remove stale)
       const knownIds = new Set(parsed.order);
       for (const def of SECTION_DEFINITIONS) {
         if (!knownIds.has(def.id)) {
@@ -101,7 +116,6 @@ export function getInitialTaskPanelConfig(): TaskPanelConfig {
           parsed.enabled[def.id] = true;
         }
       }
-      // Remove sections that no longer exist in the registry
       const validIds = new Set(SECTION_DEFINITIONS.map((d) => d.id));
       parsed.order = parsed.order.filter((id) => validIds.has(id));
       return parsed;

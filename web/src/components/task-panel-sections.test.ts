@@ -5,6 +5,7 @@ import {
   getDefaultConfig,
   SECTION_DEFINITIONS,
   DEFAULT_SECTION_ORDER,
+  CONFIG_VERSION,
 } from "./task-panel-sections.js";
 
 const STORAGE_KEY = "cc-task-panel-config";
@@ -33,6 +34,7 @@ describe("getInitialTaskPanelConfig", () => {
     // Save a config with a custom order and one section disabled
     // (missing "plugins" — it was added later and will be appended by merge logic)
     const saved = {
+      version: CONFIG_VERSION,
       order: ["tasks", "git-branch", "usage-limits", "github-pr", "linear-issue", "mcp-servers"],
       enabled: {
         "usage-limits": true,
@@ -56,8 +58,9 @@ describe("getInitialTaskPanelConfig", () => {
   });
 
   it("appends new sections that were added since the config was saved", () => {
-    // Simulate a config saved before "tasks" and "mcp-servers" were added
+    // Simulate a config at current version but missing some sections (added since save)
     const saved = {
+      version: CONFIG_VERSION,
       order: ["usage-limits", "git-branch", "github-pr", "linear-issue"],
       enabled: {
         "usage-limits": true,
@@ -85,6 +88,7 @@ describe("getInitialTaskPanelConfig", () => {
   it("filters out removed sections that no longer exist in SECTION_DEFINITIONS", () => {
     // Simulate a saved config that includes a section ID that no longer exists
     const saved = {
+      version: CONFIG_VERSION,
       order: ["usage-limits", "old-removed-section", "git-branch", "github-pr", "linear-issue", "mcp-servers", "tasks"],
       enabled: {
         "usage-limits": true,
@@ -108,8 +112,9 @@ describe("getInitialTaskPanelConfig", () => {
   });
 
   it("handles both additions and removals simultaneously", () => {
-    // Config has a removed section and is missing a new section
+    // Config has a removed section and is missing a new section (same version)
     const saved = {
+      version: CONFIG_VERSION,
       order: ["usage-limits", "deprecated-widget", "git-branch"],
       enabled: {
         "usage-limits": true,
@@ -131,6 +136,34 @@ describe("getInitialTaskPanelConfig", () => {
     expect(config.order).toContain("tasks");
     expect(config.order).toContain("plugins");
     expect(config.order.length).toBe(7);
+  });
+
+  it("resets order to defaults on version bump but preserves enabled state", () => {
+    // Old config without version field — had a custom order and some sections disabled
+    const saved = {
+      order: ["tasks", "mcp-servers", "git-branch", "usage-limits", "github-pr", "linear-issue"],
+      enabled: {
+        "usage-limits": true,
+        "git-branch": false,
+        "github-pr": false,
+        "linear-issue": true,
+        "mcp-servers": true,
+        "tasks": true,
+      },
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+
+    const config = getInitialTaskPanelConfig();
+    // Order should be reset to the current default (not the saved custom order)
+    expect(config.order).toEqual(DEFAULT_SECTION_ORDER);
+    // Enabled/disabled states from the old config should be preserved
+    expect(config.enabled["git-branch"]).toBe(false);
+    expect(config.enabled["github-pr"]).toBe(false);
+    expect(config.enabled["usage-limits"]).toBe(true);
+    // New sections (plugins) should default to enabled
+    expect(config.enabled["plugins"]).toBe(true);
+    // Version should be updated
+    expect(config.version).toBe(CONFIG_VERSION);
   });
 
   it("returns defaults when localStorage contains corrupted JSON", () => {
