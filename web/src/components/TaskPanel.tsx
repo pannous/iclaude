@@ -753,9 +753,26 @@ function LinearIssueSection({ sessionId }: { sessionId: string }) {
 
 // ─── Extracted Section Components ─────────────────────────────────────────────
 
-/** Session stats — cost, context usage bar, and turn count */
+/** Session stats — cost, context usage bar, weekly usage, and turn count */
 function SessionStatsSection({ sessionId }: { sessionId: string }) {
   const session = useStore((s) => s.sessions.get(sessionId));
+  const [weeklyPct, setWeeklyPct] = useState<number | null>(null);
+
+  const fetchWeekly = useCallback(async () => {
+    try {
+      const data = await api.getSessionUsageLimits(sessionId);
+      setWeeklyPct(data.seven_day?.utilization ?? null);
+    } catch {
+      // silent
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    fetchWeekly();
+    const id = setInterval(fetchWeekly, 60_000);
+    return () => clearInterval(id);
+  }, [fetchWeekly]);
+
   if (!session) return null;
   const contextPct = Math.round(session.context_used_percent ?? 0);
   return (
@@ -778,6 +795,20 @@ function SessionStatsSection({ sessionId }: { sessionId: string }) {
           />
         </div>
       </div>
+      {weeklyPct !== null && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-cc-muted uppercase tracking-wider">Weekly</span>
+            <span className="text-[11px] text-cc-muted tabular-nums">{weeklyPct}%</span>
+          </div>
+          <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${barColor(weeklyPct)}`}
+              style={{ width: `${Math.min(weeklyPct, 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <span className="text-[11px] text-cc-muted uppercase tracking-wider">Turns</span>
         <span className="text-[13px] font-medium text-cc-fg tabular-nums">{session.num_turns}</span>
