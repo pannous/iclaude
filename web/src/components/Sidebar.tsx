@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useStore } from "../store.js";
-import { api, type ResumableSession, type SkillInfo } from "../api.js";
+import { api, type ResumableSession } from "../api.js";
 import { connectSession, disconnectSession, disconnectAllExcept, waitForConnection } from "../ws.js";
 import { navigateToSession, navigateHome, parseHash } from "../utils/routing.js";
 import { ProjectGroup } from "./ProjectGroup.js";
 import { SessionItem } from "./SessionItem.js";
 import { groupSessionsByProject, type SessionItem as SessionItemType } from "../utils/project-grouping.js";
-import { SKILL_ICON_PATHS, PUZZLE_ICON_PATH } from "../utils/skill-icons.js";
 
 function formatTimeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -102,8 +101,6 @@ export function Sidebar() {
   const [resumeLoading, setResumeLoading] = useState(false);
   const [resumingId, setResumingId] = useState<string | null>(null);
   const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
-  const [skills, setSkills] = useState<SkillInfo[]>([]);
-  const [showSkills, setShowSkills] = useState(true);
   const [hash, setHash] = useState(() => (typeof window !== "undefined" ? window.location.hash : ""));
   const editInputRef = useRef<HTMLInputElement>(null);
   const sessions = useStore((s) => s.sessions);
@@ -120,13 +117,8 @@ export function Sidebar() {
   const collapsedProjects = useStore((s) => s.collapsedProjects);
   const toggleProjectCollapse = useStore((s) => s.toggleProjectCollapse);
   const setAllProjectsCollapsed = useStore((s) => s.setAllProjectsCollapsed);
-  const openSkill = useStore((s) => s.openSkill);
   const route = parseHash(hash);
 
-  // Load available skills once on mount
-  useEffect(() => {
-    api.listSkills().then(setSkills).catch(() => setSkills([]));
-  }, []);
 
   // Poll for SDK sessions on mount
   useEffect(() => {
@@ -417,7 +409,7 @@ export function Sidebar() {
   const currentSession = currentSessionId ? allSessionList.find((s) => s.id === currentSessionId) : null;
   const logoSrc = currentSession?.backendType === "codex" ? "/logo-codex.svg" : "/logo.svg";
   const [showCronSessions, setShowCronSessions] = useState(true);
-  const [showAgentSessions, setShowAgentSessions] = useState(true);
+  const [showAgentSessions, setShowAgentSessions] = useState(false);
 
   // Group active sessions by project
   const projectGroups = useMemo(
@@ -668,7 +660,7 @@ export function Sidebar() {
               <div className="mt-2 pt-2 border-t border-cc-border">
                 <button
                   onClick={() => setShowAgentSessions(!showAgentSessions)}
-                  className="w-full px-3 py-1.5 text-[11px] font-medium text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 hover:text-emerald-300 transition-colors cursor-pointer"
+                  className="w-full px-3 py-1.5 text-[11px] font-medium text-cc-muted uppercase tracking-wider flex items-center gap-1.5 hover:text-cc-fg transition-colors cursor-pointer"
                 >
                   <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 transition-transform ${showAgentSessions ? "rotate-90" : ""}`}>
                     <path d="M6 4l4 4-4 4" />
@@ -737,40 +729,6 @@ export function Sidebar() {
           </>
         )}
 
-        {/* Plugins */}
-        {skills.filter((s) => s.type !== "markdown").length > 0 && (
-          <div className="mt-2 pt-2 border-t border-cc-border">
-            <button
-              onClick={() => setShowSkills(!showSkills)}
-              className="w-full px-3 py-1.5 text-[11px] font-medium text-cc-muted uppercase tracking-wider flex items-center gap-1.5 hover:text-cc-fg transition-colors cursor-pointer"
-            >
-              <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 transition-transform ${showSkills ? "rotate-90" : ""}`}>
-                <path d="M6 4l4 4-4 4" />
-              </svg>
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-60">
-                <path d={PUZZLE_ICON_PATH} />
-              </svg>
-              Plugins ({skills.filter((s) => s.type !== "markdown").length})
-            </button>
-            {showSkills && (
-              <div className="space-y-0.5 mt-1">
-                {skills.filter((s) => s.type !== "markdown").map((s) => (
-                  <button
-                    key={s.slug}
-                    onClick={() => openSkill(s.slug)}
-                    className="w-full text-left px-3 py-1.5 rounded-lg text-[12px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                      strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-cc-muted shrink-0">
-                      <path d={SKILL_ICON_PATHS[s.icon || ""] || SKILL_ICON_PATHS.terminal} />
-                    </svg>
-                    <span className="truncate">{s.name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Footer */}
