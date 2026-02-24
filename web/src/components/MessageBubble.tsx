@@ -1,4 +1,4 @@
-import { useState, useRef, useContext, useMemo, useCallback, type ComponentProps } from "react";
+import { useState, useContext, useMemo, useCallback, type ComponentProps } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ChatMessage, ContentBlock } from "../types.js";
@@ -606,45 +606,42 @@ function buildFragmentBridge(fragmentId: string): string {
 })();`;
 }
 
+function buildYoloApi(): string {
+  return `window.vibeCommand = async function(command, options = {}) {
+    try {
+      const response = await fetch('/api/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: command, cwd: options && options.cwd })
+      });
+      const result = await response.json();
+      return result.success
+        ? { success: true, output: result.output }
+        : { success: false, error: result.error, exitCode: result.exitCode, stderr: result.stderr, stdout: result.stdout };
+    } catch (err) { return { success: false, error: err.message }; }
+  };
+  window.vibe = {
+    command: window.vibeCommand,
+    playSound: (sound = 'Ping') => window.vibeCommand('afplay /System/Library/Sounds/' + (sound || 'Ping') + '.aiff'),
+    notify: (title, body) => {
+      window.parent.postMessage({ type: 'vibe:notify', title: title, body: body }, '*');
+    }
+  };`;
+}
+
+/** Prepend bridge + optional YOLO API as <script> tags so they load with the document. */
+function injectBridgeIntoHtml(html: string, fragmentId: string, yoloMode: boolean): string {
+  const scripts = `<script>${buildFragmentBridge(fragmentId)}${yoloMode ? buildYoloApi() : ""}</script>`;
+  // Insert before </head> if present, otherwise prepend
+  if (html.includes("</head>")) return html.replace("</head>", `${scripts}</head>`);
+  return scripts + html;
+}
+
 function HtmlPreview({ html, preview, fragmentId }: { html: string; preview: string; fragmentId: string }) {
   const [open, setOpen] = useState(true);
   const [showSource, setShowSource] = useState(false);
   const yoloMode = useStore((s) => s.yoloMode);
-  const currentIframeRef = useRef<HTMLIFrameElement | null>(null);
-
-  const handleIframeLoad = (iframe: HTMLIFrameElement) => {
-    if (!iframe.contentWindow) return;
-    currentIframeRef.current = iframe;
-
-    // Inject bridge: console forwarding + vibeReportState push
-    try { (iframe.contentWindow as any).eval(buildFragmentBridge(fragmentId)); } catch { /* sandboxed */ }
-
-    // YOLO mode: also inject vibe command API
-    if (yoloMode) {
-      (iframe.contentWindow as any).eval(`
-        window.vibeCommand = async function(command, options = {}) {
-          try {
-            const response = await fetch('/api/exec', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ command: command, cwd: options && options.cwd })
-            });
-            const result = await response.json();
-            return result.success
-              ? { success: true, output: result.output }
-              : { success: false, error: result.error, exitCode: result.exitCode, stderr: result.stderr, stdout: result.stdout };
-          } catch (err) { return { success: false, error: err.message }; }
-        };
-        window.vibe = {
-          command: window.vibeCommand,
-          playSound: (sound = 'Ping') => window.vibeCommand('afplay /System/Library/Sounds/' + (sound || 'Ping') + '.aiff'),
-          notify: (title, body) => {
-            window.parent.postMessage({ type: 'vibe:notify', title: title, body: body }, '*');
-          }
-        };
-      `);
-    }
-  };
+  const enrichedHtml = useMemo(() => injectBridgeIntoHtml(html, fragmentId, yoloMode), [html, fragmentId, yoloMode]);
 
   return (
     <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
@@ -685,8 +682,7 @@ function HtmlPreview({ html, preview, fragmentId }: { html: string; preview: str
             </pre>
           ) : (
             <iframe
-              ref={(el) => { if (el && el !== currentIframeRef.current) handleIframeLoad(el!); }}
-              srcDoc={html}
+              srcDoc={enrichedHtml}
               className="w-full h-[400px] bg-white"
               sandbox={yoloMode ? undefined : "allow-scripts"}
               title="HTML preview"
