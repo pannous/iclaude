@@ -234,6 +234,7 @@ export interface SkillInfo {
   path?: string;
   icon?: string;
   refreshInterval?: number | null;
+  type?: "html" | "markdown";
 }
 
 export interface UpdateInfo {

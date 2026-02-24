@@ -10,6 +10,7 @@ export interface SkillInfo {
   description: string;
   icon: string;
   refreshInterval: number | null;
+  type: "html" | "markdown";
 }
 
 // ─── Paths ──────────────────────────────────────────────────────────────────
@@ -72,6 +73,7 @@ function scanSkillsDir(baseDir: string): SkillInfo[] {
           description: raw.description || "",
           icon: raw.icon || "terminal",
           refreshInterval: typeof raw.refreshInterval === "number" ? raw.refreshInterval : null,
+          type: "html",
         });
       } catch {
         // Skip malformed skills
@@ -107,7 +109,7 @@ function scanMarkdownSkillsDir(baseDir: string): SkillInfo[] {
             if (dm) description = dm[1];
           }
         }
-        skills.push({ slug: entry, name, description, icon: "file-text", refreshInterval: null });
+        skills.push({ slug: entry, name, description, icon: "file-text", refreshInterval: null, type: "markdown" });
       } catch {
         // Skip malformed entries
       }
@@ -150,6 +152,7 @@ export function getSkill(slug: string, cwd?: string): SkillInfo | null {
       description: raw.description || "",
       icon: raw.icon || "terminal",
       refreshInterval: typeof raw.refreshInterval === "number" ? raw.refreshInterval : null,
+      type: "html",
     };
   } catch {
     return null;
