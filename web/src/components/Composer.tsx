@@ -284,6 +284,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
     const scannedHtml = scanned.html.length > 0
       ? scanned.html.map((h, i) => ({ ...h, fragmentId: `${msgId}:${i}` }))
       : undefined;
+    const scannedHtmlFiles = scanned.htmlFiles.length > 0
+      ? scanned.htmlFiles.map((f) => ({ path: f.path, filename: f.filename, url: `/api/fs/html?path=${encodeURIComponent(f.path)}` }))
+      : undefined;
     const imageData = images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined;
 
     if (isAmend) {
@@ -300,18 +303,19 @@ export function Composer({ sessionId }: { sessionId: string }) {
           content: actualMsg,
           images: imageData,
           scannedHtml,
+          scannedHtmlFiles,
           timestamp: Date.now(),
         };
         store.setMessages(sessionId, updated);
       } else {
         // No previous user message to amend — just append as new
         store.appendMessage(sessionId, {
-          id: msgId, role: "user", content: actualMsg, images: imageData, scannedHtml, timestamp: Date.now(),
+          id: msgId, role: "user", content: actualMsg, images: imageData, scannedHtml, scannedHtmlFiles, timestamp: Date.now(),
         });
       }
     } else {
       store.appendMessage(sessionId, {
-        id: msgId, role: "user", content: actualMsg, images: imageData, scannedHtml, timestamp: Date.now(),
+        id: msgId, role: "user", content: actualMsg, images: imageData, scannedHtml, scannedHtmlFiles, timestamp: Date.now(),
       });
     }
 

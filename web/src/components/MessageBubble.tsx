@@ -304,11 +304,25 @@ function MarkdownContent({ text, showCursor = false }: { text: string; showCurso
             }
 
             // Detect file paths in inline code and make them clickable
-            // Uses <button> for reliable touch handling on iOS/iPadOS
+            // HTML files open in a new tab via the proxy; others open in the editor
             const text = typeof children === "string" ? children : "";
             const filePathMatch = text.match(/^(\/[^\s:]+|[a-zA-Z][\w.-]*(?:\/[\w.-]+)+)(?::(\d+))?$/);
             if (filePathMatch) {
               const filePath = filePathMatch[1];
+              const isHtmlFile = /\.html?$/i.test(filePath);
+              if (isHtmlFile) {
+                return (
+                  <a
+                    href={`/api/fs/html?path=${encodeURIComponent(filePath)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-1 py-0.5 rounded bg-cc-code-bg/30 text-[13px] font-mono-code text-cc-primary hover:bg-cc-primary/20 cursor-pointer transition-colors underline decoration-cc-primary/30 inline"
+                    title={`Open ${filePath} in browser`}
+                  >
+                    {children}
+                  </a>
+                );
+              }
               return (
                 <button
                   type="button"
