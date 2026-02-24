@@ -817,8 +817,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
               style={{ minHeight: "42px", maxHeight: "200px" }}
             />
 
-            {/* Desktop secondary buttons + send/stop */}
-            <div className="mb-0.5 flex items-center gap-1.5 shrink-0">
+            {/* Desktop secondary buttons + send/stop
+                select-none + touch-action:manipulation prevent iOS from treating
+                taps on these buttons as text-selection gestures from the textarea */}
+            <div className="mb-0.5 flex items-center gap-1.5 shrink-0 select-none" style={{ touchAction: "manipulation", WebkitTouchCallout: "none" } as React.CSSProperties}>
               {/* Bookmark + image: desktop only */}
               <button
                 onClick={() => {
@@ -881,11 +883,12 @@ export function Composer({ sessionId }: { sessionId: string }) {
               )}
 
               {/* Send/stop: always visible */}
-              {/* iOS/iPadOS: onTouchEnd fires before blur/focus changes, so we
-                  handle the action there and preventDefault to suppress the
-                  synthetic click. Desktop still uses onClick as normal. */}
+              {/* iOS/iPadOS: onTouchStart preventDefault stops the browser from
+                  stealing the touch for text selection or textarea blur/keyboard
+                  dismiss. onTouchEnd fires the action. Desktop uses onClick. */}
               {isRunning ? (
                 <button
+                  onTouchStart={(e) => e.preventDefault()}
                   onTouchEnd={(e) => { e.preventDefault(); handleInterrupt(); }}
                   onClick={handleInterrupt}
                   className="flex items-center justify-center w-10 h-10 sm:w-9 sm:h-9 rounded-lg bg-cc-error/10 hover:bg-cc-error/20 text-cc-error transition-colors cursor-pointer"
@@ -897,6 +900,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 </button>
               ) : (
                 <button
+                  onTouchStart={(e) => e.preventDefault()}
                   onTouchEnd={(e) => { e.preventDefault(); handleSend(); }}
                   onClick={handleSend}
                   disabled={!canSend}
