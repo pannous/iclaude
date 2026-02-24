@@ -146,6 +146,9 @@ wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
 wsBridge.onFirstTurnCompletedCallback(async (sessionId, firstUserMessage) => {
   // Don't overwrite a name that was already set (manual rename or prior auto-name)
   if (sessionNames.getName(sessionId)) return;
+  // Skip auto-naming if the session already has a title from the first user message
+  const existingTitle = launcher.getSession(sessionId)?.title;
+  if (existingTitle) return;
   if (!getSettings().openrouterApiKey.trim()) return;
   const info = launcher.getSession(sessionId);
   const model = info?.model || "claude-sonnet-4-6";

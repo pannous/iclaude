@@ -1805,6 +1805,26 @@ describe("handleMessage: session_name_update", () => {
     fireMessage({ type: "session_name_update", name: "Second Title" });
     expect(useStore.getState().sessionNames.get("s1")).toBe("Second Title");
   });
+
+  it("does not animate when session already has a stable title in sdkSessions", () => {
+    // When a session has s.title set (from truncateTitle of first user message),
+    // the auto-namer's name goes into sessionNames but is never displayed.
+    // Don't trigger the animation — it creates a confusing visual flash.
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    // Simulate sdkSessions having a title (from title_updated)
+    useStore.getState().setSdkSessions([
+      { sessionId: "s1", state: "connected", cwd: "/home", createdAt: 1, title: "my first message..." },
+    ]);
+
+    fireMessage({ type: "session_name_update", name: "AI Generated Name" });
+
+    // Name is always stored (lower priority than title in display)
+    expect(useStore.getState().sessionNames.get("s1")).toBe("AI Generated Name");
+    // But no animation since the visible title didn't change
+    expect(useStore.getState().recentlyRenamed.has("s1")).toBe(false);
+  });
 });
 
 // ===========================================================================

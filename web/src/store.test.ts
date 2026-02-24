@@ -473,6 +473,53 @@ describe("recentlyRenamed", () => {
   });
 });
 
+// ─── setSdkSessions title preservation ────────────────────────────────────────
+
+describe("setSdkSessions title preservation", () => {
+  it("preserves existing title when poll data arrives without one", () => {
+    // Simulate: title_updated set the title, then a stale poll replaces the array
+    useStore.getState().setSdkSessions([
+      { sessionId: "s1", state: "connected", cwd: "/test", createdAt: 1, title: "my first message..." },
+    ]);
+
+    // Stale poll response arrives without title (poll was in-flight before title was set)
+    useStore.getState().setSdkSessions([
+      { sessionId: "s1", state: "running", cwd: "/test", createdAt: 1 },
+    ]);
+
+    const sessions = useStore.getState().sdkSessions;
+    expect(sessions[0].title).toBe("my first message...");
+    // Other fields should update normally
+    expect(sessions[0].state).toBe("running");
+  });
+
+  it("uses new title when poll data includes one", () => {
+    useStore.getState().setSdkSessions([
+      { sessionId: "s1", state: "connected", cwd: "/test", createdAt: 1, title: "old title" },
+    ]);
+
+    useStore.getState().setSdkSessions([
+      { sessionId: "s1", state: "connected", cwd: "/test", createdAt: 1, title: "updated title" },
+    ]);
+
+    expect(useStore.getState().sdkSessions[0].title).toBe("updated title");
+  });
+
+  it("does not inject title for new sessions", () => {
+    useStore.getState().setSdkSessions([
+      { sessionId: "s1", state: "connected", cwd: "/test", createdAt: 1, title: "existing" },
+    ]);
+
+    // New session s2 arrives without a title — should stay undefined
+    useStore.getState().setSdkSessions([
+      { sessionId: "s1", state: "connected", cwd: "/test", createdAt: 1, title: "existing" },
+      { sessionId: "s2", state: "starting", cwd: "/other", createdAt: 2 },
+    ]);
+
+    expect(useStore.getState().sdkSessions[1].title).toBeUndefined();
+  });
+});
+
 // ─── UI state ───────────────────────────────────────────────────────────────
 
 describe("UI state", () => {

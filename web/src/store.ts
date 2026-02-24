@@ -589,7 +589,21 @@ export const useStore = create<AppState>((set) => ({
       };
     }),
 
-  setSdkSessions: (sessions) => set({ sdkSessions: sessions }),
+  setSdkSessions: (sessions) => set((s) => {
+    // Preserve titles from WebSocket updates that may not be in the polled data yet
+    // (race: poll in-flight when title was set → response arrives without it)
+    if (s.sdkSessions.length === 0) return { sdkSessions: sessions };
+    const titleMap = new Map<string, string>();
+    for (const prev of s.sdkSessions) {
+      if (prev.title) titleMap.set(prev.sessionId, prev.title);
+    }
+    const merged = sessions.map((sess) =>
+      sess.title || !titleMap.has(sess.sessionId)
+        ? sess
+        : { ...sess, title: titleMap.get(sess.sessionId) }
+    );
+    return { sdkSessions: merged };
+  }),
 
   appendMessage: (sessionId, msg) =>
     set((s) => {

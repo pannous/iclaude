@@ -750,7 +750,10 @@ function handleParsedMessage(
     case "session_name_update": {
       // Always apply server-provided name (user manual renames go through REST API)
       store.setSessionName(sessionId, data.name);
-      store.markRecentlyRenamed(sessionId);
+      // Only animate if the session doesn't already have a stable title
+      // (avoids a distracting flash when auto-namer sets a hidden lower-priority name)
+      const hasTitle = store.sdkSessions.find((s) => s.sessionId === sessionId)?.title;
+      if (!hasTitle) store.markRecentlyRenamed(sessionId);
       break;
     }
 
