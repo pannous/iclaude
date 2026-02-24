@@ -167,6 +167,27 @@ export function registerFsRoutes(api: Hono): void {
     }
   });
 
+  api.get("/fs/image", async (c) => {
+    const filePath = c.req.query("path");
+    if (!filePath) return c.json({ error: "path required" }, 400);
+    const expanded = filePath.startsWith("~/")
+      ? join(homedir(), filePath.slice(2))
+      : filePath;
+    const absPath = resolve(expanded);
+    try {
+      const file = Bun.file(absPath);
+      if (!(await file.exists())) return c.json({ error: "Not found" }, 404);
+      return new Response(file, {
+        headers: { "Content-Type": file.type, "Cache-Control": "no-cache" },
+      });
+    } catch (e: unknown) {
+      return c.json(
+        { error: e instanceof Error ? e.message : "Cannot read file" },
+        404,
+      );
+    }
+  });
+
   api.put("/fs/write", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const { path: filePath, content } = body;
