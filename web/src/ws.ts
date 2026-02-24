@@ -263,13 +263,11 @@ function setStreamingDraftMessage(sessionId: string, content: string) {
 
 function finalizeStreamingDraftMessage(sessionId: string, finalMessage: ChatMessage): boolean {
   const draftId = streamingDraftMessageIdBySession.get(sessionId);
-  console.log("[ws:TRACE] finalizeStreamingDraftMessage: draftId=", draftId, "finalMsg.id=", finalMessage.id, "finalMsg.scannedHtml=", finalMessage.scannedHtml?.length ?? 0);
   if (!draftId) return false;
 
   const store = useStore.getState();
   const existing = store.messages.get(sessionId) || [];
   const draftIndex = existing.findIndex((m) => m.id === draftId);
-  console.log("[ws:TRACE] finalizeStreamingDraftMessage: draftIndex=", draftIndex, "totalMsgs=", existing.length);
   if (draftIndex === -1) {
     streamingDraftMessageIdBySession.delete(sessionId);
     return false;
@@ -279,22 +277,17 @@ function finalizeStreamingDraftMessage(sessionId: string, finalMessage: ChatMess
   messages[draftIndex] = finalMessage;
   store.setMessages(sessionId, messages);
   streamingDraftMessageIdBySession.delete(sessionId);
-  console.log("[ws:TRACE] finalizeStreamingDraftMessage: SUCCESS, replaced draft at index", draftIndex);
   return true;
 }
 
 function clearStreamingDraftMessage(sessionId: string) {
   const draftId = streamingDraftMessageIdBySession.get(sessionId);
-  console.log("[ws:TRACE] clearStreamingDraftMessage: draftId=", draftId);
   if (!draftId) {
-    console.log("[ws:TRACE] clearStreamingDraftMessage: no draft to clear (already finalized)");
-    return;
+      return;
   }
 
   const store = useStore.getState();
   const existing = store.messages.get(sessionId) || [];
-  const draft = existing.find(m => m.id === draftId);
-  console.log("[ws:TRACE] clearStreamingDraftMessage: REMOVING draft, content length=", draft?.content?.length ?? 0);
   const next = existing.filter((m) => m.id !== draftId);
   if (next.length !== existing.length) {
     store.setMessages(sessionId, next);
@@ -448,11 +441,6 @@ function mergeAssistantMessage(previous: ChatMessage, incoming: ChatMessage): Ch
   // Re-scan merged content so HTML fragments survive across partial assistant merges.
   // Without this, a later tool_use-only message would overwrite scannedHtml with undefined.
   const scanned = scanForImagesAndHtml(mergedContent, previous.id);
-  console.log("[ws:TRACE] mergeAssistantMessage:", previous.id,
-    "prevHtml=", previous.scannedHtml?.length ?? 0,
-    "incomingHtml=", incoming.scannedHtml?.length ?? 0,
-    "mergedHtml=", scanned.html?.length ?? 0,
-    "mergedContent length=", mergedContent.length);
 
   return {
     ...previous,
@@ -473,15 +461,12 @@ function upsertAssistantMessage(sessionId: string, incoming: ChatMessage) {
   const existing = store.messages.get(sessionId) || [];
   const index = existing.findIndex((m) => m.role === "assistant" && m.id === incoming.id);
   if (index === -1) {
-    console.log("[ws:TRACE] upsertAssistantMessage: NEW message", incoming.id, "html=", incoming.scannedHtml?.length ?? 0, "content length=", incoming.content?.length);
-    store.appendMessage(sessionId, incoming);
+      store.appendMessage(sessionId, incoming);
     return;
   }
 
-  console.log("[ws:TRACE] upsertAssistantMessage: MERGING into existing", incoming.id, "prevHtml=", existing[index].scannedHtml?.length ?? 0, "incomingHtml=", incoming.scannedHtml?.length ?? 0);
   const messages = [...existing];
   messages[index] = mergeAssistantMessage(messages[index], incoming);
-  console.log("[ws:TRACE] upsertAssistantMessage: MERGED html=", messages[index].scannedHtml?.length ?? 0);
   store.setMessages(sessionId, messages);
 }
 
@@ -508,7 +493,6 @@ function handleParsedMessage(
   options: { processSeq?: boolean; ackSeqMessage?: boolean } = {},
 ) {
   const { processSeq = true, ackSeqMessage = true } = options;
-  console.log(`[ws:TRACE] handleParsedMessage type="${data.type}" session=${sessionId.slice(0,8)}`);
   const store = useStore.getState();
 
   if (processSeq && typeof data.seq === "number") {
@@ -540,15 +524,8 @@ function handleParsedMessage(
     case "assistant": {
       const msg = data.message;
       const textContent = extractTextFromBlocks(msg.content);
-      console.log("[ws:TRACE] === ASSISTANT MESSAGE ===");
-      console.log("[ws:TRACE] msg.id:", msg.id);
-      console.log("[ws:TRACE] textContent length:", textContent.length);
-      console.log("[ws:TRACE] textContent preview:", textContent.slice(0, 300));
-      console.log("[ws:TRACE] contentBlocks count:", msg.content?.length, "types:", msg.content?.map((b: ContentBlock) => b.type));
-      const scanned = scanForImagesAndHtml(textContent, msg.id);
-      console.log("[ws:TRACE] scan result — html:", scanned.html?.length ?? 0, "images:", scanned.images?.length ?? 0);
-      if (scanned.html) console.log("[ws:TRACE] html previews:", scanned.html.map(h => h.preview));
-      const chatMsg: ChatMessage = {
+                          const scanned = scanForImagesAndHtml(textContent, msg.id);
+              const chatMsg: ChatMessage = {
         id: msg.id,
         role: "assistant",
         content: textContent,
