@@ -242,6 +242,7 @@ function createMockBridge() {
     getCodexRateLimits: vi.fn(() => null),
     markContainerized: vi.fn(),
     broadcastToSession: vi.fn(),
+    broadcastGlobal: vi.fn(),
     initializeResumedSession: vi.fn(),
     getFragmentState: vi.fn(() => null),
     getAllFragmentStates: vi.fn(() => ({})),

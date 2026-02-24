@@ -2,7 +2,7 @@ import { useStore } from "./store.js";
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, SdkSessionInfo, McpServerConfig } from "./types.js";
 import { resultScanner, scanContent } from "./utils/result-scanner.js";
 import { safeStorage } from "./utils/safe-storage.js";
-
+import { api } from "./api.js";
 import { playNotificationSound } from "./utils/notification-sound.js";
 
 const WS_RECONNECT_DELAY_MS = 2000;
@@ -817,6 +817,15 @@ function handleParsedMessage(
       store.setSdkSessions(sdkSessions.map(s =>
         s.sessionId === sessionId ? { ...s, archived: true } : s
       ));
+      break;
+    }
+
+    case "sessions_updated": {
+      // Global notification: session list changed (created externally, etc.)
+      // Re-fetch immediately so the sidebar updates without waiting for the 5s poll.
+      api.listSessions().then((list) => {
+        useStore.getState().setSdkSessions(list);
+      }).catch(() => { /* server not ready */ });
       break;
     }
 

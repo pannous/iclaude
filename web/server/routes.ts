@@ -306,6 +306,9 @@ export function createRoutes(
         });
       }
 
+      // Notify all connected browsers so the sidebar updates immediately
+      wsBridge.broadcastGlobal({ type: "sessions_updated" });
+
       return c.json(session);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -640,6 +643,9 @@ export function createRoutes(
         }
 
         await emitProgress(stream, "launching_cli", "Session started", "done");
+
+        // Notify all connected browsers so the sidebar updates immediately
+        wsBridge.broadcastGlobal({ type: "sessions_updated" });
 
         // --- Done ---
         await stream.writeSSE({

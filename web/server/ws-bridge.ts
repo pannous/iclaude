@@ -114,6 +114,8 @@ export class WsBridge {
   /** Cached fragment console logs received from browsers via fragment_console_log */
   private static readonly MAX_CONSOLE_LOGS = 200;
   private fragmentConsoleCache = new Map<string, Map<string, Array<{ level: string; args: string[]; ts: number }>>>();
+  /** All browser sockets across all sessions, for global notifications. */
+  private globalBrowserSockets = new Set<ServerWebSocket<SocketData>>();
   private userMsgCounter = 0;
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
   private sessionInfoLookup: ((sessionId: string) => { cliSessionId?: string; cwd?: string } | null) | null = null;
@@ -173,6 +175,18 @@ export class WsBridge {
     const session = this.sessions.get(sessionId);
     if (!session) return;
     this.broadcastToBrowsers(session, msg);
+  }
+
+  /** Notify all connected browsers (across all sessions) about a global event like session creation. */
+  broadcastGlobal(msg: BrowserIncomingMessage): void {
+    const json = JSON.stringify(msg);
+    for (const ws of this.globalBrowserSockets) {
+      try {
+        ws.send(json);
+      } catch {
+        this.globalBrowserSockets.delete(ws);
+      }
+    }
   }
 
   /** Return the last state pushed by a fragment via vibeReportState. */
@@ -758,6 +772,7 @@ export class WsBridge {
     browserData.subscribed = false;
     browserData.lastAckSeq = 0;
     session.browserSockets.add(ws);
+    this.globalBrowserSockets.add(ws);
     console.log(`[ws-bridge] Browser connected for session ${sessionId} (${session.browserSockets.size} browsers)`);
 
     // Refresh git state on browser connect so branch changes made mid-session are reflected.
@@ -891,6 +906,7 @@ export class WsBridge {
     if (!session) return;
 
     session.browserSockets.delete(ws);
+    this.globalBrowserSockets.delete(ws);
     console.log(`[ws-bridge] Browser disconnected for session ${sessionId} (${session.browserSockets.size} browsers)`);
 
     // If nobody is watching anymore, cancel any pending relaunch — pointless to relaunch
