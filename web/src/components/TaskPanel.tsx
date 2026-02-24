@@ -753,28 +753,29 @@ function LinearIssueSection({ sessionId }: { sessionId: string }) {
 
 // ─── Extracted Section Components ─────────────────────────────────────────────
 
-/** Session stats — cost, context usage bar, weekly usage, and turn count */
+/** Session stats — cost, context usage bar, 5h/7d usage, and turn count */
 function SessionStatsSection({ sessionId }: { sessionId: string }) {
   const session = useStore((s) => s.sessions.get(sessionId));
-  const [weeklyPct, setWeeklyPct] = useState<number | null>(null);
+  const [limits, setLimits] = useState<UsageLimits | null>(null);
 
-  const fetchWeekly = useCallback(async () => {
+  const fetchLimits = useCallback(async () => {
     try {
-      const data = await api.getSessionUsageLimits(sessionId);
-      setWeeklyPct(data.seven_day?.utilization ?? null);
+      setLimits(await api.getSessionUsageLimits(sessionId));
     } catch {
       // silent
     }
   }, [sessionId]);
 
   useEffect(() => {
-    fetchWeekly();
-    const id = setInterval(fetchWeekly, 60_000);
+    fetchLimits();
+    const id = setInterval(fetchLimits, 60_000);
     return () => clearInterval(id);
-  }, [fetchWeekly]);
+  }, [fetchLimits]);
 
   if (!session) return null;
   const contextPct = Math.round(session.context_used_percent ?? 0);
+  const hourlyPct = limits?.five_hour?.utilization ?? null;
+  const weeklyPct = limits?.seven_day?.utilization ?? null;
   return (
     <div className="shrink-0 px-4 py-3 border-b border-cc-border space-y-2.5">
       <div className="flex items-center justify-between">
@@ -795,10 +796,24 @@ function SessionStatsSection({ sessionId }: { sessionId: string }) {
           />
         </div>
       </div>
+      {hourlyPct !== null && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-cc-muted uppercase tracking-wider">5h Limit</span>
+            <span className="text-[11px] text-cc-muted tabular-nums">{hourlyPct}%</span>
+          </div>
+          <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${barColor(hourlyPct)}`}
+              style={{ width: `${Math.min(hourlyPct, 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
       {weeklyPct !== null && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] text-cc-muted uppercase tracking-wider">Weekly</span>
+            <span className="text-[11px] text-cc-muted uppercase tracking-wider">7d Limit</span>
             <span className="text-[11px] text-cc-muted tabular-nums">{weeklyPct}%</span>
           </div>
           <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
