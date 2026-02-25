@@ -49,8 +49,8 @@ type SessionLaunchOverride = {
   createBranch?: boolean;
 };
 
-const RECENT_SESSIONS_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
-const INITIAL_VISIBLE_SESSION_ROWS = 12;
+const RECENT_SESSIONS_WINDOW_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+const INITIAL_VISIBLE_SESSION_ROWS = 12; // NOTE: HomePage.test.tsx hardcodes "12 of 16" — update test before increasing
 const LOAD_MORE_SESSION_ROWS = 24;
 
 function getResumeCandidateProject(cwd: string): string {
@@ -1225,24 +1225,24 @@ export function HomePage() {
                             className="px-2.5 py-2.5 grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_auto] sm:items-center"
                           >
                             <div className="min-w-0">
-                              <p className={`text-xs truncate ${selected ? "text-cc-primary font-medium" : "text-cc-fg"}`}>
+                              <p className={`text-[11px] truncate ${selected ? "text-cc-primary font-medium" : "text-cc-fg"}`}>
                                 {title}
                               </p>
-                              <div className="mt-0.5 flex items-center gap-1.5 text-[10px]">
+                              <div className="mt-0.5 flex items-center gap-1.5 text-[9px]">
                                 <span className="font-mono-code text-cc-muted">{shortSessionId(candidate.resumeSessionId)}</span>
                                 <span className="px-1 py-0.5 rounded bg-cc-hover text-cc-muted">{sourceLabel}</span>
                               </div>
                             </div>
-                            <div className="min-w-0 text-[11px] text-cc-muted sm:font-mono-code truncate" title={candidate.cwd}>
+                            <div className="min-w-0 text-[10px] text-cc-muted sm:font-mono-code truncate" title={candidate.cwd}>
                               <div className="truncate">{project}</div>
-                              <div className="mt-0.5 text-[10px] text-cc-muted/70 truncate" title={candidate.cwd}>
+                              <div className="mt-0.5 text-[9px] text-cc-muted/70 truncate" title={candidate.cwd}>
                                 {formatPathTail(candidate.cwd)}
                               </div>
                             </div>
-                            <div className="text-[11px] text-cc-muted sm:font-mono-code truncate">
+                            <div className="text-[10px] text-cc-muted sm:font-mono-code truncate">
                               {candidate.gitBranch || "—"}
                             </div>
-                            <div className="text-[11px] text-cc-muted">
+                            <div className="text-[10px] text-cc-muted">
                               {formatTimeAgo(candidate.createdAt)}
                             </div>
                             <div className="sm:text-right flex gap-1.5 sm:justify-end">

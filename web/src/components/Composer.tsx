@@ -91,6 +91,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const cliConnected = useStore((s) => s.cliConnected);
   const sessionData = useStore((s) => s.sessions.get(sessionId));
   const previousMode = useStore((s) => s.previousPermissionMode.get(sessionId) || "bypassPermissions");
+  const isRunning = useStore((s) => s.sessionStatus.get(sessionId) === "running");
 
   const isConnected = cliConnected.get(sessionId) ?? false;
   const currentMode = sessionData?.permissionMode || "bypassPermissions";
@@ -107,13 +108,13 @@ export function Composer({ sessionId }: { sessionId: string }) {
     textareaRef.current?.focus();
   }, [completionSuggestion]);
 
-  // LOCAL: Fetch a completion suggestion, debounced
-  const scheduleCompletion = useCallback((partial: string, menusOpen: boolean) => {
+  // LOCAL: Fetch a completion suggestion, debounced.
+  // Only runs when the agent is idle (not running/thinking).
+  const scheduleCompletion = useCallback((partial: string, menusOpen: boolean, agentRunning: boolean) => {
     if (completionTimeoutRef.current) clearTimeout(completionTimeoutRef.current);
     completionAbortRef.current?.abort();
     setCompletionSuggestion(null);
-    // Don't fetch while a slash or mention menu is active
-    if (menusOpen) return;
+    if (menusOpen || agentRunning) return;
     completionTimeoutRef.current = setTimeout(async () => {
       const controller = new AbortController();
       completionAbortRef.current = controller;
@@ -146,11 +147,18 @@ export function Composer({ sessionId }: { sessionId: string }) {
     void refreshPrompts();
   }, [refreshPrompts]);
 
-  // LOCAL: Trigger completion whenever text or menu state changes
+  // LOCAL: Trigger completion whenever text, menu state, or agent status changes.
+  // Also immediately clears any stale suggestion when the agent starts running.
   useEffect(() => {
-    scheduleCompletion(text, slashMenuOpen || mentionMenuOpen);
+    if (isRunning) {
+      setCompletionSuggestion(null);
+      completionAbortRef.current?.abort();
+      if (completionTimeoutRef.current) clearTimeout(completionTimeoutRef.current);
+      return;
+    }
+    scheduleCompletion(text, slashMenuOpen || mentionMenuOpen, false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, slashMenuOpen, mentionMenuOpen]);
+  }, [text, slashMenuOpen, mentionMenuOpen, isRunning]);
 
   // Build command list from session data
   const allCommands = useMemo<CommandItem[]>(() => {
@@ -623,8 +631,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
   }
 
 
-  const sessionStatus = useStore((s) => s.sessionStatus);
-  const isRunning = sessionStatus.get(sessionId) === "running";
   const canSend = text.trim().length > 0 && isConnected;
 
   return (
@@ -1048,7 +1054,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
               onClick={syncCaret}
               onKeyUp={syncCaret}
               onPaste={handlePaste}
-              onFocus={() => { if (!text) scheduleCompletion("", slashMenuOpen || mentionMenuOpen); }}
+              onFocus={() => { if (!text) scheduleCompletion("", slashMenuOpen || mentionMenuOpen, isRunning); }}
               aria-label="Message input"
               placeholder={isConnected && !completionSuggestion
                 ? "Type a message... (/ + @)"

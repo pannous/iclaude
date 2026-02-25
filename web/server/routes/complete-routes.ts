@@ -10,10 +10,11 @@ const COMPLETION_MODEL = "gpt-4o-mini";
 const MAX_HISTORY_MESSAGES = 20;
 
 const SYSTEM_PROMPT =
-  "You are an input completion assistant for an AI coding assistant interface. " +
-  "Predict what the user wants to type next. " +
-  "Return ONLY the completion text — no explanations, no quotes, no preamble. " +
-  "If you cannot make a useful prediction, return an empty string.";
+  "You complete user messages in an AI coding assistant chat. " +
+  "Rules: reply with the completion ONLY — no quotes, no explanation. " +
+  "Keep it under 60 characters. Prefer short, direct follow-ups like " +
+  "'run the tests', 'commit the changes', 'explain the error'. " +
+  "If nothing useful comes to mind, reply with an empty string.";
 
 /** Read OPENAI_API_KEY from env, falling back to ~/.keys export lines. */
 function resolveOpenAiKey(): string | null {
@@ -78,8 +79,8 @@ export function registerCompleteRoutes(api: Hono, deps: { wsBridge: WsBridge }):
     }
 
     const taskContent = partial
-      ? `The user has started typing: "${partial}"\nComplete what they are typing. Return ONLY the continuation (nothing already typed). Max 150 chars.`
-      : `Based on the conversation, suggest a concise follow-up message the user might want to send. Max 150 chars.`;
+      ? `Complete: "${partial}" — return only what comes after, max 60 chars.`
+      : `Suggest the single most likely next message. Max 60 chars.`;
 
     messages.push({ role: "user", content: taskContent });
 
@@ -92,7 +93,7 @@ export function registerCompleteRoutes(api: Hono, deps: { wsBridge: WsBridge }):
         },
         body: JSON.stringify({
           model: COMPLETION_MODEL,
-          max_tokens: 200,
+          max_tokens: 60,
           messages,
         }),
       });
