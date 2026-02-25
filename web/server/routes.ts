@@ -816,6 +816,7 @@ export function createRoutes(
         // (notably containerized sessions mapped back to host paths).
         cwd: bridge?.cwd || s.cwd,
         name: names[s.sessionId] ?? s.name,
+        title: s.title ? stripSystemTags(s.title) : s.title,
         gitBranch: bridge?.git_branch || "",
         gitAhead: bridge?.git_ahead || 0,
         gitBehind: bridge?.git_behind || 0,
