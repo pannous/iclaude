@@ -524,9 +524,8 @@ export class CodexAdapter {
         || msg.type === "mcp_reconnect"
         || msg.type === "mcp_set_servers"
       ) {
-        console.log(`[codex-adapter] Queuing ${msg.type} — adapter not yet initialized`);
         this.pendingOutgoing.push(msg);
-        return true; // accepted, will be sent after init
+        return true;
       }
       // Non-queueable messages are dropped if not connected
       if (!this.connected) return false;
@@ -606,7 +605,6 @@ export class CodexAdapter {
 
   private async initialize(): Promise<void> {
     try {
-      // Step 1: Send initialize request
       const result = await this.transport.call("initialize", {
         clientInfo: {
           name: "thecompanion",
@@ -618,23 +616,19 @@ export class CodexAdapter {
         },
       }) as Record<string, unknown>;
 
-      // Step 2: Send initialized notification
       await this.transport.notify("initialized", {});
 
       this.connected = true;
       this.initialized = true;
 
-      // Step 3: Start or resume a thread
       this.threadId = await this.startOrResumeThreadWithFallback();
 
-      // Notify session metadata
       this.sessionMetaCb?.({
         cliSessionId: this.threadId,
         model: this.options.model,
         cwd: this.options.cwd,
       });
 
-      // Send session_init to browser
       const state: SessionState = {
         session_id: this.sessionId,
         backend_type: "codex",
@@ -668,9 +662,7 @@ export class CodexAdapter {
         this.updateRateLimits(result as Record<string, unknown>);
       }).catch(() => { /* best-effort */ });
 
-      // Flush any messages that were queued during initialization
       if (this.pendingOutgoing.length > 0) {
-        console.log(`[codex-adapter] Flushing ${this.pendingOutgoing.length} queued message(s)`);
         const queued = this.pendingOutgoing.splice(0);
         for (const msg of queued) {
           this.dispatchOutgoing(msg);
@@ -1017,12 +1009,6 @@ export class CodexAdapter {
   // ── Incoming notification handlers ──────────────────────────────────────
 
   private handleNotification(method: string, params: Record<string, unknown>): void {
-    // Debug: log all significant notifications to understand Codex event flow
-    if (method.startsWith("item/") || method.startsWith("turn/") || method.startsWith("thread/")) {
-      const item = params.item as { type?: string; id?: string } | undefined;
-      console.log(`[codex-adapter] ← ${method}${item ? ` type=${item.type} id=${item.id}` : ""}${!item && Object.keys(params).length > 0 ? ` keys=[${Object.keys(params).join(",")}]` : ""}`);
-    }
-
     try {
     switch (method) {
       case "item/started":
@@ -1045,9 +1031,7 @@ export class CodexAdapter {
         this.handleReasoningDelta(params);
         break;
       case "item/mcpToolCall/progress": {
-        // MCP tool call progress — map to tool_progress
         const itemId = params.itemId as string | undefined;
-        const threadId = params.threadId as string | undefined;
         if (itemId) {
           this.emit({
             type: "tool_progress",
@@ -1098,7 +1082,7 @@ export class CodexAdapter {
       case "codex/event/stream_error": {
         const msg = params.msg as { message?: string } | undefined;
         if (msg?.message) {
-          console.log(`[codex-adapter] Stream error: ${msg.message}`);
+          console.warn(`[codex-adapter] Stream error: ${msg.message}`);
         }
         break;
       }
@@ -1111,10 +1095,6 @@ export class CodexAdapter {
         break;
       }
       default:
-        // Unknown notification, log for debugging
-        if (!method.startsWith("account/") && !method.startsWith("codex/event/")) {
-          console.log(`[codex-adapter] Unhandled notification: ${method}`);
-        }
         break;
     }
     } catch (err) {
@@ -1153,8 +1133,6 @@ export class CodexAdapter {
           this.transport.respond(id, { error: "not supported" });
           break;
         default:
-          console.log(`[codex-adapter] Unhandled request: ${method}`);
-          // Auto-accept unknown requests
           this.transport.respond(id, { decision: "accept" });
           break;
       }
@@ -1256,8 +1234,6 @@ export class CodexAdapter {
     const toolName = params.tool as string || "unknown_dynamic_tool";
     const toolArgs = params.arguments as Record<string, unknown> || {};
     const requestId = `codex-dynamic-${randomUUID()}`;
-
-    console.log(`[codex-adapter] Dynamic tool call received: ${toolName} (callId=${callId})`);
 
     // Emit tool_use so the browser sees this custom tool invocation.
     this.emitToolUseTracked(callId, `dynamic:${toolName}`, toolArgs);
@@ -1520,10 +1496,6 @@ export class CodexAdapter {
         break;
 
       default:
-        // userMessage is an echo of browser input and not needed in UI.
-        if (item.type !== "userMessage") {
-          console.log(`[codex-adapter] Unhandled item/started type: ${item.type}`, JSON.stringify(item).substring(0, 300));
-        }
         break;
     }
   }
@@ -1885,9 +1857,6 @@ export class CodexAdapter {
         break;
 
       default:
-        if (item.type !== "userMessage") {
-          console.log(`[codex-adapter] Unhandled item/completed type: ${item.type}`, JSON.stringify(item).substring(0, 300));
-        }
         break;
     }
   }
@@ -2019,9 +1988,7 @@ export class CodexAdapter {
     this.browserMessageCb?.(msg);
   }
 
-  /** Emit an assistant message with a tool_use content block (no tracking). */
   private emitToolUse(toolUseId: string, toolName: string, input: Record<string, unknown>): void {
-    console.log(`[codex-adapter] Emitting tool_use: ${toolName} id=${toolUseId}`);
     this.emit({
       type: "assistant",
       message: {
@@ -2073,7 +2040,6 @@ export class CodexAdapter {
   /** Emit tool_use only if item/started was never received for this ID. */
   private ensureToolUseEmitted(toolUseId: string, toolName: string, input: Record<string, unknown>): void {
     if (!this.emittedToolUseIds.has(toolUseId)) {
-      console.log(`[codex-adapter] Backfilling tool_use for ${toolName} (id=${toolUseId}) — item/started was missing`);
       this.emitToolUseTracked(toolUseId, toolName, input);
     }
   }

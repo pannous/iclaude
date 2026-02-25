@@ -191,20 +191,13 @@ export function createRoutes(
         return c.json({ error: `Invalid backend: ${String(backend)}` }, 400);
       }
 
-      // Resolve environment variables from envSlug
       let envVars: Record<string, string> | undefined = body.env;
       if (body.envSlug) {
         const companionEnv = envManager.getEnv(body.envSlug);
         if (companionEnv) {
-          console.log(
-            `[routes] Injecting env "${companionEnv.name}" (${Object.keys(companionEnv.variables).length} vars):`,
-            Object.keys(companionEnv.variables).join(", "),
-          );
           envVars = { ...companionEnv.variables, ...body.env };
         } else {
-          console.warn(
-            `[routes] Environment "${body.envSlug}" not found, ignoring`,
-          );
+          console.warn(`[routes] Environment "${body.envSlug}" not found, ignoring`);
         }
       }
 
@@ -257,7 +250,6 @@ export function createRoutes(
         }
       }
 
-      // Resolve Docker image from environment or explicit container config
       const companionEnv = body.envSlug ? envManager.getEnv(body.envSlug) : null;
       let effectiveImage = companionEnv
         ? (body.envSlug ? envManager.getEffectiveImage(body.envSlug) : null)
@@ -337,7 +329,6 @@ export function createRoutes(
         containerName = containerInfo.name;
         containerImage = effectiveImage;
 
-        // Copy workspace files into the container's isolated volume
         try {
           await containerManager.copyWorkspaceToContainer(containerInfo.containerId, cwd);
           containerManager.reseedGitAuth(containerInfo.containerId);
@@ -349,10 +340,8 @@ export function createRoutes(
           }, 503);
         }
 
-        // Run per-environment init script if configured
         if (companionEnv?.initScript?.trim()) {
           try {
-            console.log(`[routes] Running init script for env "${companionEnv.name}" in container ${containerInfo.name}...`);
             const initTimeout = Number(process.env.COMPANION_INIT_SCRIPT_TIMEOUT) || 120_000;
             const result = await containerManager.execInContainerAsync(
               containerInfo.containerId,
@@ -371,7 +360,6 @@ export function createRoutes(
                 error: `Init script failed (exit ${result.exitCode}):\n${truncated}`,
               }, 503);
             }
-            console.log(`[routes] Init script completed successfully for env "${companionEnv.name}"`);
           } catch (e) {
             containerManager.removeContainer(tempId);
             const reason = e instanceof Error ? e.message : String(e);
@@ -417,7 +405,6 @@ export function createRoutes(
         wsBridge.markContainerized(session.sessionId, cwd);
       }
 
-      // Track the worktree mapping
       if (worktreeInfo) {
         worktreeTracker.addMapping({
           sessionId: session.sessionId,
@@ -429,7 +416,6 @@ export function createRoutes(
         });
       }
 
-      // Notify all connected browsers so the sidebar updates immediately
       wsBridge.broadcastGlobal({ type: "sessions_updated" });
 
       return c.json(session);
@@ -486,7 +472,6 @@ export function createRoutes(
         let cwd = body.cwd;
         let worktreeInfo: { isWorktree: boolean; repoRoot: string; branch: string; actualBranch: string; worktreePath: string } | undefined;
 
-        // Validate branch name
         if (body.branch && !/^[a-zA-Z0-9/_.\-]+$/.test(body.branch)) {
           await stream.writeSSE({
             event: "error",
@@ -553,7 +538,6 @@ export function createRoutes(
         let containerName: string | undefined;
         let containerImage: string | undefined;
 
-        // Auth check for containerized sessions
         if (effectiveImage && backend === "claude" && !hasContainerClaudeAuth(envVars)) {
           await stream.writeSSE({
             event: "error",
@@ -747,13 +731,11 @@ export function createRoutes(
           wsBridge.initializeResumedSession(session.sessionId, resumeCliId, cwd);
         }
 
-        // Re-track container and mark session as containerized
         if (containerInfo) {
           containerManager.retrack(containerInfo.containerId, session.sessionId);
           wsBridge.markContainerized(session.sessionId, cwd);
         }
 
-        // Track worktree mapping
         if (worktreeInfo) {
           worktreeTracker.addMapping({
             sessionId: session.sessionId,
@@ -767,7 +749,6 @@ export function createRoutes(
 
         await emitProgress(stream, "launching_cli", "Session started", "done");
 
-        // Notify all connected browsers so the sidebar updates immediately
         wsBridge.broadcastGlobal({ type: "sessions_updated" });
 
         // --- Done ---
@@ -877,7 +858,6 @@ export function createRoutes(
     const session = launcher.getSession(id);
     if (!session) return c.json({ error: "Session not found" }, 404);
 
-    // Include message history from wsBridge
     const wsBridgeSession = wsBridge.getSession(id);
     const enriched = {
       ...session,
@@ -1074,7 +1054,6 @@ export function createRoutes(
     if (!killed)
       return c.json({ error: "Session not found or already exited" }, 404);
 
-    // Clean up container if any
     containerManager.removeContainer(id);
 
     return c.json({ ok: true });
@@ -1346,7 +1325,6 @@ export function createRoutes(
         });
       }
 
-      // Sort by port (lowest first)
       processes.sort((a, b) => (a.ports[0] || 0) - (b.ports[0] || 0));
 
       return c.json({ ok: true, processes });
@@ -1398,7 +1376,6 @@ export function createRoutes(
     const id = c.req.param("id");
     await launcher.kill(id);
 
-    // Clean up container if any
     containerManager.removeContainer(id);
 
     const worktreeResult = cleanupWorktree(id, true);
@@ -1414,10 +1391,8 @@ export function createRoutes(
     const body = await c.req.json().catch(() => ({}));
     await launcher.kill(id);
 
-    // Clean up container if any
     containerManager.removeContainer(id);
 
-    // Stop PR polling for this session
     prPoller?.unwatch(id);
 
     const worktreeResult = cleanupWorktree(id, body.force);
@@ -1529,7 +1504,6 @@ export function createRoutes(
             priority?: number;
           }>;
         };
-        // Only return visible models, sorted by priority
         const models = cache.models
           .filter((m) => m.visibility === "list")
           .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99))
@@ -1544,7 +1518,6 @@ export function createRoutes(
       }
     }
 
-    // Claude models are hardcoded on the frontend
     return c.json({ error: "Use frontend defaults for this backend" }, 404);
   });
 
