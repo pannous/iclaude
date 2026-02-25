@@ -62,6 +62,43 @@ interface MentionContext {
   end: number;
 }
 
+function formatImagesForAPI(imgs: ImageAttachment[]) {
+  return imgs.map((img) => ({ media_type: img.mediaType, data: img.base64 }));
+}
+
+function handleMenuKeyDown<T>(
+  e: React.KeyboardEvent,
+  items: T[],
+  selectedIndex: number,
+  setSelectedIndex: React.Dispatch<React.SetStateAction<number>>,
+  onSelect: (item: T) => void,
+  onClose: () => void,
+): boolean {
+  if (items.length > 0) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSelectedIndex((i) => (i + 1) % items.length);
+      return true;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelectedIndex((i) => (i - 1 + items.length) % items.length);
+      return true;
+    }
+    if ((e.key === "Tab" && !e.shiftKey) || (e.key === "Enter" && !e.shiftKey)) {
+      e.preventDefault();
+      onSelect(items[selectedIndex]);
+      return true;
+    }
+  }
+  if (e.key === "Escape") {
+    e.preventDefault();
+    onClose();
+    return true;
+  }
+  return false;
+}
+
 export function Composer({ sessionId }: { sessionId: string }) {
   const [text, setText] = useState("");
   const [images, setImages] = useState<ImageAttachment[]>([]);
@@ -317,7 +354,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
       type: "user_message",
       content: actualMsg,
       session_id: sessionId,
-      images: images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined,
+      images: images.length > 0 ? formatImagesForAPI(images) : undefined,
     });
 
     const store = useStore.getState();
@@ -329,7 +366,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
     const scannedHtmlFiles = scanned.htmlFiles.length > 0
       ? scanned.htmlFiles.map((f) => ({ path: f.path, filename: f.filename, url: `/api/fs/html?path=${encodeURIComponent(f.path)}` }))
       : undefined;
-    const imageData = images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined;
+    const imageData = images.length > 0 ? formatImagesForAPI(images) : undefined;
 
     if (isAmend) {
       const existing = store.messages.get(sessionId) || [];
@@ -375,67 +412,25 @@ export function Composer({ sessionId }: { sessionId: string }) {
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (slashMenuOpen && filteredCommands.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSlashMenuIndex((i) => (i + 1) % filteredCommands.length);
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSlashMenuIndex((i) => (i - 1 + filteredCommands.length) % filteredCommands.length);
-        return;
-      }
-      if (e.key === "Tab" && !e.shiftKey) {
-        e.preventDefault();
-        selectCommand(filteredCommands[slashMenuIndex]);
-        return;
-      }
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        selectCommand(filteredCommands[slashMenuIndex]);
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setSlashMenuOpen(false);
-        return;
-      }
+    if (slashMenuOpen) {
+      const handled = handleMenuKeyDown(
+        e, filteredCommands, slashMenuIndex, setSlashMenuIndex,
+        selectCommand, () => setSlashMenuOpen(false),
+      );
+      if (handled) return;
     }
 
     if (mentionMenuOpen) {
-      if (e.key === "Escape") {
+      const handled = handleMenuKeyDown(
+        e, filteredPrompts, mentionMenuIndex, setMentionMenuIndex,
+        selectPrompt, () => setMentionMenuOpen(false),
+      );
+      if (handled) return;
+      // Block Enter/Tab when mention menu is open but empty
+      if ((e.key === "Enter" && !e.shiftKey) || (e.key === "Tab" && !e.shiftKey)) {
         e.preventDefault();
-        setMentionMenuOpen(false);
         return;
       }
-    }
-
-    if (mentionMenuOpen && filteredPrompts.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setMentionMenuIndex((i) => (i + 1) % filteredPrompts.length);
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setMentionMenuIndex((i) => (i - 1 + filteredPrompts.length) % filteredPrompts.length);
-        return;
-      }
-      if ((e.key === "Tab" && !e.shiftKey) || (e.key === "Enter" && !e.shiftKey)) {
-        e.preventDefault();
-        selectPrompt(filteredPrompts[mentionMenuIndex]);
-        return;
-      }
-    }
-
-    if (
-      mentionMenuOpen
-      && filteredPrompts.length === 0
-      && ((e.key === "Enter" && !e.shiftKey) || (e.key === "Tab" && !e.shiftKey))
-    ) {
-      e.preventDefault();
-      return;
     }
 
     // LOCAL: Tab (no shift) accepts completion suggestion when no menu is open
@@ -466,22 +461,22 @@ export function Composer({ sessionId }: { sessionId: string }) {
     }
   }
 
-  function handleInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
+  const handleInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
     setCaretPos(e.target.selectionStart ?? e.target.value.length);
     const ta = e.target;
     ta.style.height = "auto";
     ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
-  }
+  }, []);
 
-  function syncCaret() {
+  const syncCaret = useCallback(() => {
     if (!textareaRef.current) return;
     setCaretPos(textareaRef.current.selectionStart ?? 0);
-  }
+  }, []);
 
-  function handleInterrupt() {
+  const handleInterrupt = useCallback(() => {
     sendToSession(sessionId, { type: "interrupt" });
-  }
+  }, [sessionId]);
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;

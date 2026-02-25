@@ -11,6 +11,16 @@ const URL_PATTERN = /https?:\/\/[^\s)<>"'`]+/g;
 // Absolute paths: /Users/..., /tmp/..., ~/... (macOS/Linux)
 const LOCAL_PATH_PATTERN = /(?:~\/|\/)[^\s<>"'`*?|:,;(){}\[\]]+/g;
 
+// --- HTML fragment extraction patterns ---
+const CODE_BLOCK_HTML_RE = /```html\s*\n([\s\S]*?)```/gi;
+const ALL_CODE_BLOCKS_RE = /```[\s\S]*?```/g;
+const HTML_DOCUMENT_RE = /(?:<!DOCTYPE\s+html[^>]*>|<html[\s>])[\s\S]*?(?:<\/html>|<\/body>)/gi;
+const BODY_FRAGMENT_RE = /<body[\s>][\s\S]*?<\/body>/gi;
+
+// Fragments with fewer meaningful characters than this are considered trivial
+// (e.g. just punctuation/whitespace) and skipped.
+const MIN_MEANINGFUL_HTML_CHARS = 5;
+
 /**
  * Extract HTML fragments from text. Supports:
  * 1. ```html code blocks (most common from LLM output)
@@ -28,23 +38,20 @@ function extractHtmlFragments(text: string): ExtractedFragment[] {
   const fragments: ExtractedFragment[] = [];
 
   // 1. HTML from markdown code blocks: ```html ... ```
-  const codeBlockRe = /```html\s*\n([\s\S]*?)```/gi;
-  for (const m of text.matchAll(codeBlockRe)) {
+  for (const m of text.matchAll(CODE_BLOCK_HTML_RE)) {
     fragments.push({ html: m[1].trim(), original: m[0] });
   }
 
   // 2. Bare HTML documents (not inside code blocks)
   // Strip code blocks first to avoid double-matching
-  const stripped = text.replace(/```[\s\S]*?```/g, "");
-  const docRe = /(?:<!DOCTYPE\s+html[^>]*>|<html[\s>])[\s\S]*?(?:<\/html>|<\/body>)/gi;
-  for (const m of stripped.matchAll(docRe)) {
+  const stripped = text.replace(ALL_CODE_BLOCKS_RE, "");
+  for (const m of stripped.matchAll(HTML_DOCUMENT_RE)) {
     fragments.push({ html: m[0].trim(), original: m[0] });
   }
 
   // 3. Bare <body> fragments (no doctype/html wrapper)
   if (fragments.length === 0) {
-    const bodyRe = /<body[\s>][\s\S]*?<\/body>/gi;
-    for (const m of stripped.matchAll(bodyRe)) {
+    for (const m of stripped.matchAll(BODY_FRAGMENT_RE)) {
       fragments.push({ html: m[0].trim(), original: m[0] });
     }
   }
@@ -152,6 +159,8 @@ export class ResultScanner {
     const htmlFragments: ScannedHtml[] = [];
 
     for (const frag of extractHtmlFragments(text)) {
+      // Exact string dedup — intentional: fragments are typically small HTML snippets
+      // so full-string comparison in the Set is cheap and catches identical duplicates.
       if (seen.has(frag.html)) continue;
       seen.add(frag.html);
 
@@ -159,7 +168,7 @@ export class ResultScanner {
 
       // Skip trivial fragments (just punctuation/whitespace)
       const meaningfulChars = preview.replace(/[.\s,;:!?-]+/g, "");
-      if (meaningfulChars.length < 5) continue;
+      if (meaningfulChars.length < MIN_MEANINGFUL_HTML_CHARS) continue;
 
       htmlFragments.push({ html: frag.html, original: frag.original, preview });
     }
