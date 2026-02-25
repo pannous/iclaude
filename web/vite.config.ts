@@ -46,11 +46,15 @@ export default defineConfig({
     include: ["@xterm/xterm", "@xterm/addon-fit"],
   },
   server: {
-    host: "0.0.0.0",
-    // LOCAL: custom port and allowed hosts for our dev setup
+    // LOCAL: bind to 127.0.0.1 only — LAN phones access via the Hono proxy
+    // on port 3456, so Vite doesn't need to be directly reachable from the network.
+    host: "127.0.0.1",
     port: 2345,
     strictPort: true,
     allowedHosts: [".trycloudflare.com","mac.fritz.box"],
+    // LOCAL: pin HMR to localhost so the phone (served via Hono proxy) can't
+    // reach the HMR WebSocket and trigger infinite reload loops.
+    hmr: { host: "localhost", port: 2345 },
     proxy: {
       "/api": "http://localhost:3456",
       "/ws": {

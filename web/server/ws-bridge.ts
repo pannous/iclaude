@@ -261,7 +261,7 @@ export class WsBridge {
         messageHistory: p.messageHistory || [],
         pendingMessages: p.pendingMessages || [],
         cliSessionId: p.cliSessionId,
-        title: p.title,
+        title: p.title ? (truncateTitle(p.title) || undefined) : p.title,
         createdAt: p.createdAt,
         nextEventSeq: p.nextEventSeq && p.nextEventSeq > 0 ? p.nextEventSeq : 1,
         eventBuffer: Array.isArray(p.eventBuffer) ? p.eventBuffer : [],
@@ -1594,9 +1594,14 @@ export class WsBridge {
 
 
   private broadcastToBrowsers(session: Session, msg: BrowserIncomingMessage) {
-    // Debug: warn when assistant messages are broadcast to 0 browsers (they may be lost)
+    // Warn once when assistant/stream messages reach 0 browsers; suppress repeats until browsers reconnect
     if (session.browserSockets.size === 0 && (msg.type === "assistant" || msg.type === "stream_event" || msg.type === "result")) {
-      console.log(`[ws-bridge] ⚠ Broadcasting ${msg.type} to 0 browsers for session ${session.id} (stored in history: ${msg.type === "assistant" || msg.type === "result"})`);
+      if (!(session as any)._warnedNoBrowsers) {
+        (session as any)._warnedNoBrowsers = true;
+        console.log(`[ws-bridge] ⚠ Broadcasting ${msg.type} to 0 browsers for session ${session.id} (further warnings suppressed)`);
+      }
+    } else {
+      (session as any)._warnedNoBrowsers = false;
     }
     const json = JSON.stringify(
       sequenceEvent(

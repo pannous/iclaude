@@ -227,9 +227,13 @@ if (process.env.NODE_ENV === "production") {
     const url = new URL(c.req.url);
     const viteUrl = `http://localhost:${vitePort}${url.pathname}${url.search}`;
     try {
+      // Rewrite Host so Vite's allowedHosts check sees localhost (not the
+      // phone's LAN IP), which would otherwise trigger a 403 → retry loop.
+      const headers = new Headers(c.req.raw.headers);
+      headers.set("Host", `localhost:${vitePort}`);
       const resp = await fetch(viteUrl, {
         method: c.req.method,
-        headers: c.req.raw.headers,
+        headers,
         body: ["GET", "HEAD"].includes(c.req.method) ? undefined : c.req.raw.body,
       });
       return new Response(resp.body, { status: resp.status, headers: resp.headers });
