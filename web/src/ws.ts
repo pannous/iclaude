@@ -5,7 +5,6 @@ import { safeStorage } from "./utils/safe-storage.js";
 import { api } from "./api.js";
 import { playNotificationSound } from "./utils/notification-sound.js";
 
-const WS_RECONNECT_DELAY_MS = 2000;
 const sockets = new Map<string, WebSocket>();
 const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const reconnectAttempts = new Map<string, number>();
@@ -171,7 +170,7 @@ function extractProcessesFromBlocks(sessionId: string, blocks: ContentBlock[]) {
         const content = typeof block.content === "string"
           ? block.content
           : Array.isArray(block.content)
-            ? block.content.map((b) => ("text" in b ? (b as { text: string }).text : "")).join("")
+            ? block.content.map((b) => ("text" in b ? b.text : "")).join("")
             : "";
 
         const match = content.match(BG_RESULT_REGEX);
@@ -434,7 +433,7 @@ function setLastSeq(sessionId: string, seq: number): void {
   try {
     safeStorage.setItem(getLastSeqStorageKey(sessionId), String(normalized));
   } catch {
-    // ignore storage errors
+    // storage unavailable
   }
 }
 
@@ -594,8 +593,8 @@ function handleParsedMessage(
     case "assistant": {
       const msg = data.message;
       const textContent = extractTextFromBlocks(msg.content);
-                          const scanned = scanForImagesAndHtml(textContent, msg.id);
-              const chatMsg: ChatMessage = {
+      const scanned = scanForImagesAndHtml(textContent, msg.id);
+      const chatMsg: ChatMessage = {
         id: msg.id,
         role: "assistant",
         content: textContent,
@@ -920,7 +919,6 @@ function handleParsedMessage(
     }
 
     case "message_history": {
-      console.debug(`[ws] message_history for ${sessionId}: ${data.messages.length} messages`);
       const chatMessages: ChatMessage[] = [];
 
       for (let i = 0; i < data.messages.length; i++) {
@@ -1016,8 +1014,8 @@ function handleParsedMessage(
           }
           if (r.modelUsage) {
             for (const usage of Object.values(r.modelUsage)) {
-              if ((usage as { contextWindow: number; inputTokens: number; outputTokens: number }).contextWindow > 0) {
-                const u = usage as { contextWindow: number; inputTokens: number; outputTokens: number };
+              const u = usage as { contextWindow: number; inputTokens: number; outputTokens: number };
+              if (u.contextWindow > 0) {
                 const pct = Math.round(((u.inputTokens + u.outputTokens) / u.contextWindow) * 100);
                 resultUpdates.context_used_percent = Math.max(0, Math.min(pct, 100));
               }
@@ -1035,13 +1033,10 @@ function handleParsedMessage(
           });
         }
       }
-      console.debug(`[ws] message_history: created ${chatMessages.length} ChatMessages (user: ${chatMessages.filter(m => m.role === "user").length}, assistant: ${chatMessages.filter(m => m.role === "assistant").length})`);
       if (chatMessages.length > 0) {
         const existing = store.messages.get(sessionId) || [];
         if (existing.length === 0) {
-          // Initial connect: history is the full truth
           store.setMessages(sessionId, chatMessages);
-          console.debug(`[ws] message_history: set ${chatMessages.length} messages (initial connect)`);
         } else {
           // Reconnect: merge history with live messages, upserting duplicate assistant IDs.
           const merged = [...existing];
@@ -1099,11 +1094,7 @@ function handleParsedMessage(
 }
 
 export function connectSession(sessionId: string) {
-  if (sockets.has(sessionId)) {
-    console.debug(`[ws] connectSession(${sessionId}): already connected, skipping`);
-    return;
-  }
-  console.debug(`[ws] connectSession(${sessionId}): opening WebSocket`);
+  if (sockets.has(sessionId)) return;
 
   const store = useStore.getState();
   store.setConnectionStatus(sessionId, "connecting");
@@ -1116,9 +1107,7 @@ export function connectSession(sessionId: string) {
     // proving the subscription succeeded. handleMessage promotes to "connected".
     reconnectAttempts.delete(sessionId);
     const lastSeq = getLastSeq(sessionId);
-    console.debug(`[ws] session_subscribe for ${sessionId} with last_seq=${lastSeq}`);
     ws.send(JSON.stringify({ type: "session_subscribe", last_seq: lastSeq }));
-    // Clear any reconnect timer
     const timer = reconnectTimers.get(sessionId);
     if (timer) {
       clearTimeout(timer);
