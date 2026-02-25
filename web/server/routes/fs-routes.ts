@@ -59,9 +59,9 @@ function resolveBranchDiffBases(repoRoot: string): string[] {
 }
 
 export function registerFsRoutes(api: Hono, opts?: { allowedBases?: string[] }): void {
-  // Allowed base directories for filesystem access.
-  // Requests must target paths under the user's home directory or process cwd.
-  const allowedBases = () => opts?.allowedBases ?? [homedir(), process.cwd()];
+  // LOCAL: allow all paths by default (YOLO mode is on by default).
+  // Tests can pass a restricted allowedBases to scope access.
+  const allowedBases = () => opts?.allowedBases ?? ["/"];
 
   api.get("/fs/list", async (c) => {
     const rawPath = c.req.query("path") || homedir();
