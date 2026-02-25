@@ -2918,8 +2918,14 @@ describe("PATCH /api/sessions/:id/name", () => {
 });
 
 // ─── Update checking ────────────────────────────────────────────────────────
+// Note: NODE_ENV is set to "production" here so the dev-mode guard in
+// system-routes.ts does not short-circuit these tests.
 
 describe("GET /api/update-check", () => {
+  let origNodeEnv: string | undefined;
+  beforeEach(() => { origNodeEnv = process.env.NODE_ENV; process.env.NODE_ENV = "production"; });
+  afterEach(() => { process.env.NODE_ENV = origNodeEnv; });
+
   it("triggers a refresh when never checked", async () => {
     mockUpdateCheckerState.lastChecked = 0;
 

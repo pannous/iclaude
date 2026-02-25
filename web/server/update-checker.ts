@@ -95,6 +95,9 @@ export function isNewerVersion(a: string, b: string): boolean {
 let intervalId: ReturnType<typeof setInterval> | null = null;
 
 export function startPeriodicCheck(): void {
+  // LOCAL: skip update checks in dev mode — avoids noisy "[api] [update-checker]" logs
+  if (process.env.NODE_ENV !== "production") return;
+
   // Initial check after a short delay
   setTimeout(() => {
     checkForUpdate();

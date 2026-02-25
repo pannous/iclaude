@@ -56,6 +56,19 @@ export function registerSystemRoutes(
   });
 
   api.get("/update-check", async (c) => {
+    // LOCAL: suppress update banner in dev mode
+    if (process.env.NODE_ENV !== "production") {
+      const state = getUpdateState();
+      return c.json({
+        currentVersion: state.currentVersion,
+        latestVersion: null,
+        updateAvailable: false,
+        isServiceMode: false,
+        updateInProgress: false,
+        lastChecked: 0,
+      });
+    }
+
     const initialState = getUpdateState();
     const needsRefresh =
       initialState.lastChecked === 0
