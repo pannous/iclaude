@@ -734,9 +734,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
           )}
 
 
-          {/* Toolbar: mode toggle + actions + send -- ABOVE textarea so it's
-              never behind the iOS keyboard (Safari ignores interactive-widget) */}
-          <div className="flex items-center justify-between px-3 pt-2 pb-0.5">
+          {/* Toolbar: mode toggle + actions -- ABOVE textarea on mobile only
+              (never behind the iOS keyboard; Safari ignores interactive-widget).
+              Hidden on desktop where the input row has these controls inline. */}
+          <div className="flex sm:hidden items-center justify-between px-3 pt-2 pb-0.5">
             {/* Left: mode toggle */}
             <button
               onClick={toggleMode}
@@ -874,10 +875,11 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   <path d="M4 2.75h8A1.25 1.25 0 0113.25 4v9.25L8 10.5l-5.25 2.75V4A1.25 1.25 0 014 2.75z" />
                 </svg>
               </button>
+              {/* Upload image — desktop only (mobile has it in toolbar above) */}
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={!isConnected}
-                className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
+                className={`hidden sm:flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
                   isConnected
                     ? "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
                     : "text-cc-muted opacity-30 cursor-not-allowed"
@@ -912,8 +914,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 </button>
               )}
 
-              {/* Model switcher */}
-              <ModelSwitcher sessionId={sessionId} />
+              {/* Model switcher — desktop only (mobile has it in toolbar above) */}
+              <span className="hidden sm:inline-flex">
+                <ModelSwitcher sessionId={sessionId} />
+              </span>
 
               {/* Send/stop */}
               {isRunning ? (
