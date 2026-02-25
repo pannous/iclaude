@@ -25,10 +25,11 @@ export function registerPromptRoutes(api: Hono): void {
   api.post("/prompts", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     try {
+      const scope = body.scope ?? (body.cwd ? "project" : "global");
       const prompt = promptManager.createPrompt(
         String(body.title || body.name || ""),
         String(body.content || ""),
-        body.scope,
+        scope,
         body.cwd,
       );
       return c.json(prompt, 201);

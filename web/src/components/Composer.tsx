@@ -776,9 +776,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 setSavePromptError(null);
                 setSavePromptOpen((v) => !v);
               }}
-              disabled={!isConnected || !text.trim()}
+              disabled={!text.trim()}
               className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
-                isConnected && text.trim()
+                text.trim()
                   ? "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
                   : "text-cc-muted opacity-30 cursor-not-allowed"
               }`}
@@ -836,6 +836,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
               <span>{modeLabel}</span>
             </button>
 
+            {/* Spacer pushes actions to the right */}
+            <div className="flex-1" />
+
             {/* Right: secondary actions + send */}
             <div className="flex items-center gap-1.5">
               {text.trim() && (
@@ -863,9 +866,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   setSavePromptError(null);
                   setSavePromptOpen((v) => !v);
                 }}
-                disabled={!isConnected || !text.trim()}
+                disabled={!text.trim()}
                 className={`hidden sm:flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${
-                  isConnected && text.trim()
+                  text.trim()
                     ? "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
                     : "text-cc-muted opacity-30 cursor-not-allowed"
                 }`}
