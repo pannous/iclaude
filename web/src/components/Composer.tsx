@@ -449,11 +449,15 @@ export function Composer({ sessionId }: { sessionId: string }) {
       return;
     }
 
-    // LOCAL: Escape dismisses completion suggestion
+    // LOCAL: Escape or Ctrl/Cmd+Z dismisses completion suggestion
     if (e.key === "Escape" && completionSuggestion) {
       e.preventDefault();
       setCompletionSuggestion(null);
       return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === "z" && completionSuggestion) {
+      setCompletionSuggestion(null);
+      // let default undo proceed
     }
 
     if (e.key === "Tab" && e.shiftKey) {
@@ -1008,54 +1012,55 @@ export function Composer({ sessionId }: { sessionId: string }) {
             </div>
           </div>
 
-          {/* LOCAL: Completion suggestion strip — shown between toolbar and textarea */}
-          {completionSuggestion && !slashMenuOpen && !mentionMenuOpen && (
-            <div
-              role="status"
-              aria-live="polite"
-              aria-label={`Completion suggestion: ${completionSuggestion}`}
-              className="mx-3 mb-0.5 flex items-center gap-2 border-t border-cc-border/30 pt-1"
-            >
-              <span className="text-[11px] text-cc-muted/70 shrink-0 select-none">Tab</span>
-              <button
+          {/* LOCAL: Inline ghost text — mirror div sits behind the textarea.
+              The user's text is rendered transparent (invisible) so only the
+              gray ghost suffix and [Tab] badge show through. */}
+          <div className="relative">
+            {completionSuggestion && !slashMenuOpen && !mentionMenuOpen && (
+              <div
+                aria-hidden="true"
                 onClick={acceptCompletion}
-                tabIndex={-1}
                 title="Accept completion (Tab)"
-                className="text-[12px] text-cc-muted/80 flex-1 text-left truncate hover:text-cc-fg transition-colors cursor-pointer font-sans-ui"
+                className="absolute inset-0 px-4 pt-1 pb-2 text-base sm:text-sm font-sans-ui pointer-events-auto cursor-text overflow-hidden"
+                style={{
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  lineHeight: "inherit",
+                  minHeight: "42px",
+                  maxHeight: "200px",
+                }}
               >
-                {completionSuggestion}
-              </button>
-              <button
-                onClick={() => setCompletionSuggestion(null)}
-                tabIndex={-1}
-                aria-label="Dismiss completion"
-                title="Dismiss (Esc)"
-                className="text-[10px] text-cc-muted/50 hover:text-cc-muted transition-colors cursor-pointer shrink-0 px-1"
-              >
-                ✕
-              </button>
-            </div>
-          )}
+                {/* Invisible mirror of user text so ghost suffix aligns to cursor */}
+                <span style={{ color: "transparent" }}>{text}</span>
+                {/* Ghost completion text */}
+                <span className="text-cc-muted/50">{completionSuggestion}</span>
+                {/* [Tab] badge */}
+                <span className="text-cc-muted/40 text-[10px] select-none"> [Tab]</span>
+              </div>
+            )}
 
-          {/* Textarea -- full width, at the bottom (closest to iOS keyboard) */}
-          <textarea
-            ref={textareaRef}
-            value={text}
-            onChange={handleInput}
-            onKeyDown={handleKeyDown}
-            onClick={syncCaret}
-            onKeyUp={syncCaret}
-            onPaste={handlePaste}
-            onFocus={() => { if (!text) scheduleCompletion("", slashMenuOpen || mentionMenuOpen); }}
-            aria-label="Message input"
-            placeholder={isConnected
-              ? "Type a message... (/ + @)"
-              : "Waiting for CLI connection..."}
-            disabled={!isConnected}
-            rows={1}
-            className="w-full px-4 pt-1 pb-2 text-base sm:text-sm bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted disabled:opacity-50 overflow-y-auto"
-            style={{ minHeight: "42px", maxHeight: "200px" }}
-          />
+            {/* Textarea -- on top of mirror, bg-transparent so ghost shows through */}
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              onClick={syncCaret}
+              onKeyUp={syncCaret}
+              onPaste={handlePaste}
+              onFocus={() => { if (!text) scheduleCompletion("", slashMenuOpen || mentionMenuOpen); }}
+              aria-label="Message input"
+              placeholder={isConnected && !completionSuggestion
+                ? "Type a message... (/ + @)"
+                : isConnected
+                  ? ""
+                  : "Waiting for CLI connection..."}
+              disabled={!isConnected}
+              rows={1}
+              className="relative w-full px-4 pt-1 pb-2 text-base sm:text-sm bg-transparent resize-none focus:outline-none text-cc-fg font-sans-ui placeholder:text-cc-muted disabled:opacity-50 overflow-y-auto"
+              style={{ minHeight: "42px", maxHeight: "200px" }}
+            />
+          </div>
 
         </div>
       </div>
