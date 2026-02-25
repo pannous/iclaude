@@ -266,16 +266,17 @@ export class StdioTransport implements ICodexTransport {
   /** Send a request and wait for the matching response. */
   async call(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
     const id = this.nextId++;
-    return new Promise(async (resolve, reject) => {
+    const promise = new Promise<unknown>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      const request = JSON.stringify({ method, id, params });
-      try {
-        await this.writeRaw(request + "\n");
-      } catch (err) {
-        this.pending.delete(id);
-        reject(err instanceof Error ? err : new Error(String(err)));
-      }
     });
+    const request = JSON.stringify({ method, id, params });
+    try {
+      await this.writeRaw(request + "\n");
+    } catch (err) {
+      this.pending.delete(id);
+      throw err instanceof Error ? err : new Error(String(err));
+    }
+    return promise;
   }
 
   /** Send a notification (no response expected). */
