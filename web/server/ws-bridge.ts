@@ -231,8 +231,12 @@ export class WsBridge {
     let skipped = 0;
     for (const p of persisted) {
       if (this.sessions.has(p.id)) continue; // don't overwrite live sessions
-      // Skip ghost sessions: no cwd and no message history means never initialized
-      if (!p.state.cwd && (!p.messageHistory || p.messageHistory.length === 0)) {
+      // LOCAL: Only prune sessions that are genuinely abandoned: no cwd, no history,
+      // AND created more than 5 minutes ago (young sessions may not have received system.init yet).
+      const GHOST_PRUNE_AGE_MS = 5 * 60 * 1000;
+      const isGhost = !p.state.cwd && (!p.messageHistory || p.messageHistory.length === 0);
+      const isOld = !p.createdAt || Date.now() - p.createdAt > GHOST_PRUNE_AGE_MS;
+      if (isGhost && isOld) {
         this.store.remove(p.id);
         skipped++;
         continue;

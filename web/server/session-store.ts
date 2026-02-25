@@ -158,6 +158,9 @@ export class SessionStore {
 
   /** Remove ghost session files: no cwd and no message history. Returns count of purged files. */
   purgeGhosts(): number {
+    // LOCAL: Only prune sessions older than 5 minutes to avoid deleting sessions
+    // that were created just before a server restart (haven't received system.init yet).
+    const GHOST_PRUNE_AGE_MS = 5 * 60 * 1000;
     let purged = 0;
     try {
       const files = readdirSync(this.dir).filter((f) => f.endsWith(".json") && f !== "launcher.json");
@@ -165,7 +168,9 @@ export class SessionStore {
         try {
           const raw = readFileSync(join(this.dir, file), "utf-8");
           const session = JSON.parse(raw) as PersistedSession;
-          if (!session.state?.cwd && (!session.messageHistory || session.messageHistory.length === 0)) {
+          const isGhost = !session.state?.cwd && (!session.messageHistory || session.messageHistory.length === 0);
+          const isOld = !session.createdAt || Date.now() - session.createdAt > GHOST_PRUNE_AGE_MS;
+          if (isGhost && isOld) {
             unlinkSync(join(this.dir, file));
             purged++;
           }
