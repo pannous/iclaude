@@ -51,6 +51,95 @@ function shellEscapeArg(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Merge environment variables from the request body and optional companion env profile.
+ */
+function prepareEnvVars(
+  body: Record<string, unknown>,
+  envMgr: typeof envManager,
+): Record<string, string> | undefined {
+  let envVars = body.env as Record<string, string> | undefined;
+  if (body.envSlug) {
+    const companionEnv = envMgr.getEnv(body.envSlug as string);
+    if (companionEnv) {
+      envVars = { ...companionEnv.variables, ...body.env as Record<string, string> };
+    } else {
+      console.warn(`[routes] Environment "${body.envSlug}" not found, ignoring`);
+    }
+  }
+  return envVars;
+}
+
+/**
+ * Handle git worktree creation or branch checkout based on request body.
+ * Returns updated cwd and optional worktree metadata.
+ */
+function setupWorktree(
+  body: Record<string, unknown>,
+  cwd: string | undefined,
+): {
+  cwd: string | undefined;
+  worktreeInfo?: {
+    isWorktree: boolean;
+    repoRoot: string;
+    branch: string;
+    actualBranch: string;
+    worktreePath: string;
+  };
+  error?: string;
+} {
+  if (body.branch && !/^[a-zA-Z0-9/_.\-]+$/.test(body.branch as string)) {
+    return { cwd, error: "Invalid branch name" };
+  }
+
+  if (body.useWorktree && body.branch && cwd) {
+    const repoInfo = gitUtils.getRepoInfo(cwd);
+    if (repoInfo) {
+      const result = gitUtils.ensureWorktree(repoInfo.repoRoot, body.branch as string, {
+        baseBranch: repoInfo.defaultBranch,
+        createBranch: body.createBranch as boolean | undefined,
+        forceNew: true,
+      });
+      return {
+        cwd: result.worktreePath,
+        worktreeInfo: {
+          isWorktree: true,
+          repoRoot: repoInfo.repoRoot,
+          branch: body.branch as string,
+          actualBranch: result.actualBranch,
+          worktreePath: result.worktreePath,
+        },
+      };
+    }
+  } else if (body.branch && cwd) {
+    const repoInfo = gitUtils.getRepoInfo(cwd);
+    if (repoInfo) {
+      const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
+      if (!fetchResult.success) {
+        console.warn(`[routes] git fetch failed (non-fatal): ${fetchResult.output}`);
+      }
+
+      if (repoInfo.currentBranch !== body.branch) {
+        gitUtils.checkoutOrCreateBranch(repoInfo.repoRoot, body.branch as string, {
+          createBranch: body.createBranch as boolean | undefined,
+          defaultBranch: repoInfo.defaultBranch,
+        });
+      }
+
+      const pullResult = gitUtils.gitPull(repoInfo.repoRoot);
+      if (!pullResult.success) {
+        console.warn(`[routes] git pull warning (non-fatal): ${pullResult.output}`);
+      }
+    }
+  }
+
+  return { cwd };
+}
+
 export function createRoutes(
   launcher: CliLauncher,
   wsBridge: WsBridge,
@@ -191,64 +280,14 @@ export function createRoutes(
         return c.json({ error: `Invalid backend: ${String(backend)}` }, 400);
       }
 
-      let envVars: Record<string, string> | undefined = body.env;
-      if (body.envSlug) {
-        const companionEnv = envManager.getEnv(body.envSlug);
-        if (companionEnv) {
-          envVars = { ...companionEnv.variables, ...body.env };
-        } else {
-          console.warn(`[routes] Environment "${body.envSlug}" not found, ignoring`);
-        }
+      const envVars = prepareEnvVars(body, envManager);
+
+      const wtResult = setupWorktree(body, body.cwd);
+      if (wtResult.error) {
+        return c.json({ error: wtResult.error }, 400);
       }
-
-      let cwd = body.cwd;
-      let worktreeInfo: { isWorktree: boolean; repoRoot: string; branch: string; actualBranch: string; worktreePath: string } | undefined;
-
-      // Validate branch name to prevent command injection via shell metacharacters
-      if (body.branch && !/^[a-zA-Z0-9/_.\-]+$/.test(body.branch)) {
-        return c.json({ error: "Invalid branch name" }, 400);
-      }
-
-      if (body.useWorktree && body.branch && cwd) {
-        // Worktree isolation: create/reuse a worktree for the selected branch
-        const repoInfo = gitUtils.getRepoInfo(cwd);
-        if (repoInfo) {
-          const result = gitUtils.ensureWorktree(repoInfo.repoRoot, body.branch, {
-            baseBranch: repoInfo.defaultBranch,
-            createBranch: body.createBranch,
-            forceNew: true,
-          });
-          cwd = result.worktreePath;
-          worktreeInfo = {
-            isWorktree: true,
-            repoRoot: repoInfo.repoRoot,
-            branch: body.branch,
-            actualBranch: result.actualBranch,
-            worktreePath: result.worktreePath,
-          };
-        }
-      } else if (body.branch && cwd) {
-        // Non-worktree: checkout the selected branch in-place (lightweight)
-        const repoInfo = gitUtils.getRepoInfo(cwd);
-        if (repoInfo) {
-          const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
-          if (!fetchResult.success) {
-            console.warn(`[routes] git fetch failed (non-fatal): ${fetchResult.output}`);
-          }
-
-          if (repoInfo.currentBranch !== body.branch) {
-            gitUtils.checkoutOrCreateBranch(repoInfo.repoRoot, body.branch, {
-              createBranch: body.createBranch,
-              defaultBranch: repoInfo.defaultBranch,
-            });
-          }
-
-          const pullResult = gitUtils.gitPull(repoInfo.repoRoot);
-          if (!pullResult.success) {
-            console.warn(`[routes] git pull warning (non-fatal): ${pullResult.output}`);
-          }
-        }
-      }
+      let cwd: string = (wtResult.cwd ?? body.cwd) as string;
+      const worktreeInfo = wtResult.worktreeInfo;
 
       const companionEnv = body.envSlug ? envManager.getEnv(body.envSlug) : null;
       let effectiveImage = companionEnv
@@ -318,7 +357,7 @@ export function createRoutes(
         try {
           containerInfo = containerManager.createContainer(tempId, cwd, cConfig);
         } catch (err) {
-          const reason = err instanceof Error ? err.message : String(err);
+          const reason = getErrorMessage(err);
           return c.json({
             error:
               `Docker is required to run this environment image (${effectiveImage}) ` +
@@ -334,7 +373,7 @@ export function createRoutes(
           containerManager.reseedGitAuth(containerInfo.containerId);
         } catch (err) {
           containerManager.removeContainer(tempId);
-          const reason = err instanceof Error ? err.message : String(err);
+          const reason = getErrorMessage(err);
           return c.json({
             error: `Failed to copy workspace to container: ${reason}`,
           }, 503);
@@ -362,7 +401,7 @@ export function createRoutes(
             }
           } catch (e) {
             containerManager.removeContainer(tempId);
-            const reason = e instanceof Error ? e.message : String(e);
+            const reason = getErrorMessage(e);
             return c.json({
               error: `Init script execution failed: ${reason}`,
             }, 503);
@@ -420,7 +459,7 @@ export function createRoutes(
 
       return c.json(session);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = getErrorMessage(e);
       console.error("[routes] Failed to create session:", msg);
       return c.json({ error: msg }, 500);
     }
@@ -618,7 +657,7 @@ export function createRoutes(
           try {
             containerInfo = containerManager.createContainer(tempId, cwd, cConfig);
           } catch (err) {
-            const reason = err instanceof Error ? err.message : String(err);
+            const reason = getErrorMessage(err);
             await stream.writeSSE({
               event: "error",
               data: JSON.stringify({
@@ -641,7 +680,7 @@ export function createRoutes(
             await emitProgress(stream, "copying_workspace", "Workspace copied", "done");
           } catch (err) {
             containerManager.removeContainer(tempId);
-            const reason = err instanceof Error ? err.message : String(err);
+            const reason = getErrorMessage(err);
             await stream.writeSSE({
               event: "error",
               data: JSON.stringify({
@@ -687,7 +726,7 @@ export function createRoutes(
               await emitProgress(stream, "running_init_script", "Init script complete", "done");
             } catch (e) {
               containerManager.removeContainer(tempId);
-              const reason = e instanceof Error ? e.message : String(e);
+              const reason = getErrorMessage(e);
               await stream.writeSSE({
                 event: "error",
                 data: JSON.stringify({
@@ -764,7 +803,7 @@ export function createRoutes(
           }),
         });
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = getErrorMessage(e);
         console.error("[routes] Failed to create session (stream):", msg);
         await stream.writeSSE({
           event: "error",
@@ -967,7 +1006,7 @@ export function createRoutes(
             url: containerEditorUrl,
           });
         } catch (e) {
-          const message = e instanceof Error ? e.message : String(e);
+          const message = getErrorMessage(e);
           return c.json({
             available: false,
             installed: true,
@@ -1026,7 +1065,7 @@ export function createRoutes(
         url: editorUrl,
       });
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = getErrorMessage(e);
       return c.json({
         available: false,
         installed: true,
@@ -1107,7 +1146,7 @@ export function createRoutes(
       }
       return c.json({ ok: true, taskId });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = getErrorMessage(e);
       return c.json({ error: `Kill failed: ${msg}` }, 500);
     }
   });
@@ -1145,7 +1184,7 @@ export function createRoutes(
         }
         results.push({ taskId, ok: true });
       } catch (e) {
-        results.push({ taskId, ok: false, error: e instanceof Error ? e.message : String(e) });
+        results.push({ taskId, ok: false, error: getErrorMessage(e) });
       }
     }
 
@@ -1329,7 +1368,7 @@ export function createRoutes(
 
       return c.json({ ok: true, processes });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = getErrorMessage(e);
       return c.json({ error: `Scan failed: ${msg}` }, 500);
     }
   });
@@ -1367,7 +1406,7 @@ export function createRoutes(
       }
       return c.json({ ok: true, pid });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = getErrorMessage(e);
       return c.json({ error: `Kill failed: ${msg}` }, 500);
     }
   });

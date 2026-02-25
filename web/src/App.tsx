@@ -1,11 +1,10 @@
-import { lazy, Suspense, useEffect, useState, useMemo, useRef, useSyncExternalStore } from "react";
+import { lazy, Suspense, useEffect, useState, useMemo, useRef, useSyncExternalStore, type ComponentType } from "react";
 import { useStore } from "./store.js";
 import { connectSession, disconnectSession, sendToSession } from "./ws.js";
-import { api } from "./api.js";
-import { parseHash, navigateToSession, navigateHome } from "./utils/routing.js";
+import { api, autoAuth } from "./api.js";
+import { parseHash, navigateToSession, navigateHome, type Route } from "./utils/routing.js";
 import { handleKeyDown, createMouseHandler } from "./utils/keybindings.js";
 import { LoginPage } from "./components/LoginPage.js";
-import { autoAuth } from "./api.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
@@ -18,21 +17,37 @@ import { SessionTerminalDock } from "./components/SessionTerminalDock.js";
 import { SessionEditorPane } from "./components/SessionEditorPane.js";
 import { UpdateOverlay } from "./components/UpdateOverlay.js";
 
+// Extract named export as lazy component — eliminates repetitive .then() boilerplate
+function lazyNamed<T extends Record<string, ComponentType<any>>>(loader: () => Promise<T>, name: keyof T) {
+  return lazy(() => loader().then((m) => ({ default: m[name] })));
+}
+
 // Lazy-loaded route-level pages (not needed for initial render)
-const Playground = lazy(() => import("./components/Playground.js").then((m) => ({ default: m.Playground })));
-const SettingsPage = lazy(() => import("./components/SettingsPage.js").then((m) => ({ default: m.SettingsPage })));
-const IntegrationsPage = lazy(() => import("./components/IntegrationsPage.js").then((m) => ({ default: m.IntegrationsPage })));
-const LinearSettingsPage = lazy(() => import("./components/LinearSettingsPage.js").then((m) => ({ default: m.LinearSettingsPage })));
-const PromptsPage = lazy(() => import("./components/PromptsPage.js").then((m) => ({ default: m.PromptsPage })));
-const EnvManager = lazy(() => import("./components/EnvManager.js").then((m) => ({ default: m.EnvManager })));
-const CronManager = lazy(() => import("./components/CronManager.js").then((m) => ({ default: m.CronManager })));
-const AgentsPage = lazy(() => import("./components/AgentsPage.js").then((m) => ({ default: m.AgentsPage })));
-const TerminalPage = lazy(() => import("./components/TerminalPage.js").then((m) => ({ default: m.TerminalPage })));
+const Playground = lazyNamed(() => import("./components/Playground.js"), "Playground");
+const SettingsPage = lazyNamed(() => import("./components/SettingsPage.js"), "SettingsPage");
+const IntegrationsPage = lazyNamed(() => import("./components/IntegrationsPage.js"), "IntegrationsPage");
+const LinearSettingsPage = lazyNamed(() => import("./components/LinearSettingsPage.js"), "LinearSettingsPage");
+const PromptsPage = lazyNamed(() => import("./components/PromptsPage.js"), "PromptsPage");
+const EnvManager = lazyNamed(() => import("./components/EnvManager.js"), "EnvManager");
+const CronManager = lazyNamed(() => import("./components/CronManager.js"), "CronManager");
+const AgentsPage = lazyNamed(() => import("./components/AgentsPage.js"), "AgentsPage");
+const TerminalPage = lazyNamed(() => import("./components/TerminalPage.js"), "TerminalPage");
 // LOCAL: Panel, panels page, and file editor lazy loads
-const Panel = lazy(() => import("./components/Panel.js").then((m) => ({ default: m.Panel })));
-const PanelsPage = lazy(() => import("./components/PanelsPage.js").then((m) => ({ default: m.PanelsPage })));
-const FileEditor = lazy(() => import("./components/FileEditor.js").then((m) => ({ default: m.FileEditor })));
-const ProcessPanel = lazy(() => import("./components/ProcessPanel.js").then((m) => ({ default: m.ProcessPanel })));
+const Panel = lazyNamed(() => import("./components/Panel.js"), "Panel");
+const PanelsPage = lazyNamed(() => import("./components/PanelsPage.js"), "PanelsPage");
+const ProcessPanel = lazyNamed(() => import("./components/ProcessPanel.js"), "ProcessPanel");
+
+// Route → lazy component map for simple full-page routes rendered inside <Suspense>
+const PAGE_MAP: Partial<Record<Route["page"], { component: ComponentType<any>; props?: Record<string, unknown> }>> = {
+  settings: { component: SettingsPage, props: { embedded: true } },
+  prompts: { component: PromptsPage, props: { embedded: true } },
+  integrations: { component: IntegrationsPage, props: { embedded: true } },
+  "integration-linear": { component: LinearSettingsPage, props: { embedded: true } },
+  terminal: { component: TerminalPage },
+  environments: { component: EnvManager, props: { embedded: true } },
+  scheduled: { component: CronManager, props: { embedded: true } },
+  panels: { component: PanelsPage },
+};
 
 
 function LazyFallback() {
@@ -74,16 +89,6 @@ export default function App() {
   const updateOverlayActive = useStore((s) => s.updateOverlayActive);
   const hash = useHash();
   const route = useMemo(() => parseHash(hash), [hash]);
-  const isSettingsPage = route.page === "settings";
-  const isPromptsPage = route.page === "prompts";
-  const isIntegrationsPage = route.page === "integrations";
-  const isLinearIntegrationPage = route.page === "integration-linear";
-  const isTerminalPage = route.page === "terminal";
-  const isEnvironmentsPage = route.page === "environments";
-  const isScheduledPage = route.page === "scheduled";
-  const isAgentsPage = route.page === "agents" || route.page === "agent-detail";
-  const isPanelsPage = route.page === "panels";
-  const isProcessesPage = route.page === "processes";
   const isSessionView = route.page === "session" || route.page === "home";
 
   // LOCAL: On startup, attempt autoAuth so the login page never flashes when auth is disabled
@@ -343,71 +348,33 @@ export default function App() {
         <TopBar />
         <UpdateBanner />
         <div className="flex-1 overflow-hidden relative">
-          {isSettingsPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><SettingsPage embedded /></Suspense>
-            </div>
-          )}
+          {/* Mapped route pages (settings, prompts, integrations, etc.) */}
+          {PAGE_MAP[route.page] && (() => {
+            const { component: PageComponent, props } = PAGE_MAP[route.page]!;
+            return (
+              <div className="absolute inset-0">
+                <Suspense fallback={<LazyFallback />}><PageComponent {...props} /></Suspense>
+              </div>
+            );
+          })()}
 
-          {isPromptsPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><PromptsPage embedded /></Suspense>
-            </div>
-          )}
-
-          {isIntegrationsPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><IntegrationsPage embedded /></Suspense>
-            </div>
-          )}
-
-          {isLinearIntegrationPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><LinearSettingsPage embedded /></Suspense>
-            </div>
-          )}
-
-          {isTerminalPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><TerminalPage /></Suspense>
-            </div>
-          )}
-
-          {isEnvironmentsPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><EnvManager embedded /></Suspense>
-            </div>
-          )}
-
-          {isScheduledPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><CronManager embedded /></Suspense>
-            </div>
-          )}
-
-          {isAgentsPage && (
+          {/* Agents page — needs route prop for agent-detail subroute */}
+          {(route.page === "agents" || route.page === "agent-detail") && (
             <div className="absolute inset-0">
               <Suspense fallback={<LazyFallback />}><AgentsPage route={route} /></Suspense>
             </div>
           )}
 
-          {isPanelsPage && (
-            <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><PanelsPage /></Suspense>
-            </div>
-          )}
-
           {/* LOCAL: processes moved from TopBar workspace tab to sidebar nav page */}
-          {isProcessesPage && currentSessionId && (
+          {route.page === "processes" && (currentSessionId ? (
             <div className="absolute inset-0">
               <Suspense fallback={<LazyFallback />}><ProcessPanel sessionId={currentSessionId} /></Suspense>
             </div>
-          )}
-          {isProcessesPage && !currentSessionId && (
+          ) : (
             <div className="absolute inset-0 flex items-center justify-center text-sm text-cc-muted">
               Select a session to view its processes.
             </div>
-          )}
+          ))}
 
           {isSessionView && (
             <>
