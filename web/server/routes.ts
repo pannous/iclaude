@@ -849,38 +849,18 @@ export function createRoutes(
 
   api.get("/sessions/resumable", async (c) => {
     try {
-      const projectsDir = join(homedir(), ".claude", "projects");
-      const projEntries = await readdir(projectsDir, { withFileTypes: true }).catch(() => []);
-
-      const candidates: { sessionId: string; project: string; mtime: number; filePath: string }[] = [];
-
-      for (const entry of projEntries) {
-        if (!entry.isDirectory()) continue;
-        const projPath = join(projectsDir, entry.name);
-        const project = "/" + entry.name.replace(/^-/, "").replace(/-/g, "/");
-        const files = await readdir(projPath).catch(() => []);
-        for (const file of files) {
-          if (!file.endsWith(".jsonl")) continue;
-          const sessionId = file.replace(".jsonl", "");
-          const filePath = join(projPath, file);
-          try {
-            const s = await stat(filePath);
-            candidates.push({ sessionId, project, mtime: s.mtime.getTime(), filePath });
-          } catch { /* skip */ }
-        }
-      }
-
-      candidates.sort((a, b) => b.mtime - a.mtime);
-      const top = candidates.slice(0, 20);
+      // Use discoverClaudeSessions so project uses the real cwd from JSONL metadata
+      // (directory-name decoding breaks for agent sessions stored under session-ID dirs)
+      const discovered = discoverClaudeSessions({ limit: 40 });
 
       const results: { sessionId: string; project: string; lastModified: number; title: string }[] = [];
-      for (const item of top) {
-        const title = await extractSessionTitle(item.filePath);
+      for (const session of discovered.slice(0, 20)) {
+        const title = await extractSessionTitle(session.sourceFile);
         if (title === "") continue;
         results.push({
-          sessionId: item.sessionId,
-          project: item.project,
-          lastModified: item.mtime,
+          sessionId: session.sessionId,
+          project: session.cwd,
+          lastModified: session.lastActivityAt,
           title,
         });
       }

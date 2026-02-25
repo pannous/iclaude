@@ -541,9 +541,11 @@ export function Sidebar() {
             ) : (
               <div className="max-h-[280px] overflow-y-auto">
                 {resumableSessions.map((rs) => {
-                  const projectName = rs.project.split("/").pop() || rs.project;
+                  const projectName = rs.project.split("/").filter(Boolean).pop() || rs.project;
                   const ago = formatTimeAgo(rs.lastModified);
                   const isResuming = resumingId === rs.sessionId;
+                  // Strip [agent:type-slug Agent Name] prefix injected into agent session titles
+                  const displayTitle = rs.title?.replace(/^\[agent:[^\]]+\]\s*/, "").trim() || rs.sessionId.slice(0, 12);
                   return (
                     <button
                       key={rs.sessionId}
@@ -555,7 +557,7 @@ export function Sidebar() {
                         <span className="shrink-0 mt-1 w-1.5 h-1.5 rounded-full bg-cc-muted opacity-40" />
                         <div className="flex-1 min-w-0">
                           <p className="text-[12px] text-cc-fg truncate leading-snug">
-                            {isResuming ? "Resuming..." : (rs.title || rs.sessionId.slice(0, 12))}
+                            {isResuming ? "Resuming..." : displayTitle}
                           </p>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span className="text-[10px] text-cc-muted truncate">{projectName}</span>
