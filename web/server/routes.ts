@@ -34,6 +34,7 @@ import { registerSettingsRoutes } from "./routes/settings-routes.js";
 import { registerGitRoutes } from "./routes/git-routes.js";
 import { registerSystemRoutes } from "./routes/system-routes.js";
 import { registerLinearRoutes } from "./routes/linear-routes.js";
+import { registerCompleteRoutes } from "./routes/complete-routes.js";
 import { discoverClaudeSessions } from "./claude-session-discovery.js";
 import { getClaudeSessionHistoryPage } from "./claude-session-history.js";
 import { verifyToken, getToken, getLanAddress, regenerateToken, getAllAddresses, isAuthEnabled } from "./auth-manager.js";
@@ -1568,6 +1569,8 @@ export function createRoutes(
   // ─── Linear ────────────────────────────────────────────────────────
 
   registerLinearRoutes(api);
+
+  registerCompleteRoutes(api, { wsBridge });
 
   registerGitRoutes(api, prPoller);
   registerSystemRoutes(api, {

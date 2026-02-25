@@ -663,6 +663,23 @@ export const api = {
   cleanupSessions: () =>
     post<{ success: boolean }>("/sessions/cleanup"),
 
+  // Input completion — uses ANTHROPIC_API_KEY on the server to predict the next user message.
+  // Accepts an AbortSignal so callers can cancel in-flight requests.
+  completeInput: async (sessionId: string, partial: string, signal?: AbortSignal): Promise<{ suggestion: string | null }> => {
+    try {
+      const res = await fetch(`${BASE}/sessions/${encodeURIComponent(sessionId)}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ partial }),
+        signal,
+      });
+      if (!res.ok) return { suggestion: null };
+      return res.json() as Promise<{ suggestion: string | null }>;
+    } catch {
+      return { suggestion: null };
+    }
+  },
+
   killSession: (sessionId: string) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/kill`),
 

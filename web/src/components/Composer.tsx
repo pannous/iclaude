@@ -76,6 +76,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const [promptsLoading, setPromptsLoading] = useState(false);
   const [caretPos, setCaretPos] = useState(0);
   const [isListening, setIsListening] = useState(false);
+  // LOCAL: AI-powered input completion suggestion
+  const [completionSuggestion, setCompletionSuggestion] = useState<string | null>(null);
+  const completionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const completionAbortRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const baseTextRef = useRef("");
@@ -95,6 +99,37 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const modes: ModeOption[] = isCodex ? CODEX_MODES : CLAUDE_MODES;
   const modeLabel = modes.find((m) => m.value === currentMode)?.label?.toLowerCase() || currentMode;
 
+  // LOCAL: Accept the current completion suggestion into the text
+  const acceptCompletion = useCallback(() => {
+    if (!completionSuggestion) return;
+    setText((prev) => prev + completionSuggestion);
+    setCompletionSuggestion(null);
+    textareaRef.current?.focus();
+  }, [completionSuggestion]);
+
+  // LOCAL: Fetch a completion suggestion, debounced
+  const scheduleCompletion = useCallback((partial: string, menusOpen: boolean) => {
+    if (completionTimeoutRef.current) clearTimeout(completionTimeoutRef.current);
+    completionAbortRef.current?.abort();
+    setCompletionSuggestion(null);
+    // Don't fetch while a slash or mention menu is active
+    if (menusOpen) return;
+    completionTimeoutRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      completionAbortRef.current = controller;
+      const result = await api.completeInput(sessionId, partial, controller.signal);
+      if (!controller.signal.aborted) setCompletionSuggestion(result.suggestion);
+    }, 500);
+  }, [sessionId]);
+
+  // LOCAL: Cleanup completion on unmount
+  useEffect(() => {
+    return () => {
+      if (completionTimeoutRef.current) clearTimeout(completionTimeoutRef.current);
+      completionAbortRef.current?.abort();
+    };
+  }, []);
+
   const refreshPrompts = useCallback(async () => {
     setPromptsLoading(true);
     try {
@@ -110,6 +145,12 @@ export function Composer({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     void refreshPrompts();
   }, [refreshPrompts]);
+
+  // LOCAL: Trigger completion whenever text or menu state changes
+  useEffect(() => {
+    scheduleCompletion(text, slashMenuOpen || mentionMenuOpen);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, slashMenuOpen, mentionMenuOpen]);
 
   // Build command list from session data
   const allCommands = useMemo<CommandItem[]>(() => {
@@ -328,6 +369,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
     setImages([]);
     setSlashMenuOpen(false);
     setMentionMenuOpen(false);
+    setCompletionSuggestion(null);
 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -397,6 +439,20 @@ export function Composer({ sessionId }: { sessionId: string }) {
       && ((e.key === "Enter" && !e.shiftKey) || (e.key === "Tab" && !e.shiftKey))
     ) {
       e.preventDefault();
+      return;
+    }
+
+    // LOCAL: Tab (no shift) accepts completion suggestion when no menu is open
+    if (e.key === "Tab" && !e.shiftKey && completionSuggestion) {
+      e.preventDefault();
+      acceptCompletion();
+      return;
+    }
+
+    // LOCAL: Escape dismisses completion suggestion
+    if (e.key === "Escape" && completionSuggestion) {
+      e.preventDefault();
+      setCompletionSuggestion(null);
       return;
     }
 
@@ -952,6 +1008,35 @@ export function Composer({ sessionId }: { sessionId: string }) {
             </div>
           </div>
 
+          {/* LOCAL: Completion suggestion strip — shown between toolbar and textarea */}
+          {completionSuggestion && !slashMenuOpen && !mentionMenuOpen && (
+            <div
+              role="status"
+              aria-live="polite"
+              aria-label={`Completion suggestion: ${completionSuggestion}`}
+              className="mx-3 mb-0.5 flex items-center gap-2 border-t border-cc-border/30 pt-1"
+            >
+              <span className="text-[11px] text-cc-muted/70 shrink-0 select-none">Tab</span>
+              <button
+                onClick={acceptCompletion}
+                tabIndex={-1}
+                title="Accept completion (Tab)"
+                className="text-[12px] text-cc-muted/80 flex-1 text-left truncate hover:text-cc-fg transition-colors cursor-pointer font-sans-ui"
+              >
+                {completionSuggestion}
+              </button>
+              <button
+                onClick={() => setCompletionSuggestion(null)}
+                tabIndex={-1}
+                aria-label="Dismiss completion"
+                title="Dismiss (Esc)"
+                className="text-[10px] text-cc-muted/50 hover:text-cc-muted transition-colors cursor-pointer shrink-0 px-1"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Textarea -- full width, at the bottom (closest to iOS keyboard) */}
           <textarea
             ref={textareaRef}
@@ -961,6 +1046,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
             onClick={syncCaret}
             onKeyUp={syncCaret}
             onPaste={handlePaste}
+            onFocus={() => { if (!text) scheduleCompletion("", slashMenuOpen || mentionMenuOpen); }}
             aria-label="Message input"
             placeholder={isConnected
               ? "Type a message... (/ + @)"
