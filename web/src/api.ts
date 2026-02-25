@@ -977,7 +977,7 @@ export const api = {
   deleteAgent: (id: string) => del(`/agents/${encodeURIComponent(id)}`),
   toggleAgent: (id: string) => post<AgentInfo>(`/agents/${encodeURIComponent(id)}/toggle`),
   runAgent: (id: string, input?: string) =>
-    post<{ ok: boolean; message: string }>(`/agents/${encodeURIComponent(id)}/run`, { input }),
+    post<{ ok: boolean; message: string; sessionId?: string }>(`/agents/${encodeURIComponent(id)}/run`, { input }),
   getAgentExecutions: (id: string) =>
     get<AgentExecution[]>(`/agents/${encodeURIComponent(id)}/executions`),
   importAgent: (data: AgentExport) => post<AgentInfo>("/agents/import", data),

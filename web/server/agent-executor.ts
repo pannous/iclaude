@@ -107,7 +107,7 @@ export class AgentExecutor {
   async executeAgent(
     agentId: string,
     input?: string,
-    opts?: { force?: boolean; triggerType?: "manual" | "webhook" | "schedule" },
+    opts?: { force?: boolean; triggerType?: "manual" | "webhook" | "schedule"; onLaunch?: (sessionId: string) => void },
   ): Promise<SdkSessionInfo | undefined> {
     const agent = agentStore.getAgent(agentId);
     if (!agent) return;
@@ -161,6 +161,7 @@ export class AgentExecutor {
       });
 
       execution.sessionId = sessionInfo.sessionId;
+      opts?.onLaunch?.(sessionInfo.sessionId);
 
       // Tag the session as agent-originated
       sessionInfo.agentId = agentId;
@@ -232,10 +233,20 @@ export class AgentExecutor {
     }
   }
 
-  /** Manual trigger (run now regardless of schedule, bypasses enabled check). */
-  executeAgentManually(agentId: string, input?: string): void {
-    this.executeAgent(agentId, input, { force: true, triggerType: "manual" }).catch((err) => {
-      console.error(`[agent-executor] Manual execution of agent "${agentId}" failed:`, err);
+  /** Manual trigger (run now regardless of schedule, bypasses enabled check).
+   *  Returns the sessionId as soon as the CLI process is spawned (before async setup completes). */
+  executeAgentManually(agentId: string, input?: string): Promise<string | undefined> {
+    return new Promise<string | undefined>((resolve) => {
+      let resolved = false;
+      this.executeAgent(agentId, input, {
+        force: true,
+        triggerType: "manual",
+        onLaunch: (sessionId) => { resolved = true; resolve(sessionId); },
+      }).catch((err) => {
+        console.error(`[agent-executor] Manual execution of agent "${agentId}" failed:`, err);
+      }).finally(() => {
+        if (!resolved) resolve(undefined);
+      });
     });
   }
 

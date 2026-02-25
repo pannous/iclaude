@@ -3,7 +3,7 @@ import { api, type AgentInfo, type AgentExport, type AgentExecution, type McpSer
 import { getModelsForBackend, getDefaultModel, getAgentModesForBackend, getDefaultAgentMode } from "../utils/backends.js";
 import { FolderPicker } from "./FolderPicker.js";
 import { timeAgo } from "../utils/time-ago.js";
-import type { Route } from "../utils/routing.js";
+import { navigateToSession, type Route } from "../utils/routing.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -352,10 +352,11 @@ export function AgentsPage({ route }: Props) {
 
   async function handleRun(agent: AgentInfo, input?: string) {
     try {
-      await api.runAgent(agent.id, input);
+      const result = await api.runAgent(agent.id, input);
       setRunInputAgent(null);
       setRunInput("");
-      await loadAgents();
+      if (result.sessionId) navigateToSession(result.sessionId);
+      else await loadAgents();
     } catch {
       // ignore
     }
