@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { safeStorage } from "../utils/safe-storage.js";
+import { AUTH_STORAGE_KEY } from "../utils/auth-constants.js";
 
-/** Read the auth token from localStorage for the poll request.
- *  Intentionally local — exporting from api.ts would trigger the coverage gate on that file. */
+/** Read the auth token for the poll request. */
 function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem("companion_auth_token");
+  const token = safeStorage.getItem(AUTH_STORAGE_KEY);
   if (!token) return {};
   return { Authorization: `Bearer ${token}` };
 }

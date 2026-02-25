@@ -1,9 +1,9 @@
 import type { SdkSessionInfo } from "./types.js";
 import type { ContentBlock } from "./types.js";
 import { captureEvent, captureException } from "./analytics.js";
+import { AUTH_STORAGE_KEY } from "./utils/auth-constants.js";
 
 const BASE = "/api";
-const AUTH_STORAGE_KEY = "companion_auth_token";
 
 function getAuthHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -22,10 +22,14 @@ function handle401(status: number): void {
   }
 }
 
-async function post<T = unknown>(path: string, body?: object): Promise<T> {
+async function request<T = unknown>(method: string, path: string, body?: object): Promise<T> {
+  const headers: Record<string, string> = { ...getAuthHeaders() };
+  if (body || (method !== "GET" && method !== "DELETE")) {
+    headers["Content-Type"] = "application/json";
+  }
   const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    method,
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -36,58 +40,24 @@ async function post<T = unknown>(path: string, body?: object): Promise<T> {
   return res.json();
 }
 
-async function get<T = unknown>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { ...getAuthHeaders() },
-  });
-  if (!res.ok) {
-    handle401(res.status);
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || res.statusText);
-  }
-  return res.json();
+function post<T = unknown>(path: string, body?: object): Promise<T> {
+  return request<T>("POST", path, body);
 }
 
-async function put<T = unknown>(path: string, body?: object): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    handle401(res.status);
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || res.statusText);
-  }
-  return res.json();
+function get<T = unknown>(path: string): Promise<T> {
+  return request<T>("GET", path);
 }
 
-async function patch<T = unknown>(path: string, body?: object): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    handle401(res.status);
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || res.statusText);
-  }
-  return res.json();
+function put<T = unknown>(path: string, body?: object): Promise<T> {
+  return request<T>("PUT", path, body);
 }
 
-async function del<T = unknown>(path: string, body?: object): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "DELETE",
-    headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...getAuthHeaders() },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    handle401(res.status);
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || res.statusText);
-  }
-  return res.json();
+function patch<T = unknown>(path: string, body?: object): Promise<T> {
+  return request<T>("PATCH", path, body);
+}
+
+function del<T = unknown>(path: string, body?: object): Promise<T> {
+  return request<T>("DELETE", path, body);
 }
 
 export interface ContainerCreateOpts {

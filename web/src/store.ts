@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem, ProcessItem, McpServerDetail } from "./types.js";
 import type { UpdateInfo, PRStatusResponse, CreationProgressEvent, LinearIssue } from "./api.js";
 import { safeStorage } from "./utils/safe-storage.js";
+import { AUTH_STORAGE_KEY } from "./utils/auth-constants.js";
 import { type TaskPanelConfig, getInitialTaskPanelConfig, getDefaultConfig, persistTaskPanelConfig } from "./components/task-panel-sections.js";
 
 function setInMap<K, V>(map: Map<K, V>, key: K, value: V): Map<K, V> {
@@ -65,8 +66,6 @@ function initTheme(): ThemeMode {
   if (legacy === "false") return "light";
   return "system";
 }
-
-const AUTH_STORAGE_KEY = "companion_auth_token";
 
 interface AppState {
   authToken: string | null;

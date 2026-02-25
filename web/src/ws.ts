@@ -2,6 +2,7 @@ import { useStore } from "./store.js";
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, ProcessItem, ProcessStatus, SdkSessionInfo, McpServerConfig } from "./types.js";
 import { resultScanner, scanContent } from "./utils/result-scanner.js";
 import { safeStorage } from "./utils/safe-storage.js";
+import { AUTH_STORAGE_KEY } from "./utils/auth-constants.js";
 import { api } from "./api.js";
 import { playNotificationSound } from "./utils/notification-sound.js";
 
@@ -405,7 +406,7 @@ const IDEMPOTENT_OUTGOING_TYPES = new Set<BrowserOutgoingMessage["type"]>([
 
 function getWsUrl(sessionId: string): string {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const token = localStorage.getItem("companion_auth_token") || "";
+  const token = safeStorage.getItem(AUTH_STORAGE_KEY) || "";
   return `${proto}//${location.host}/ws/browser/${sessionId}?token=${encodeURIComponent(token)}`;
 }
 

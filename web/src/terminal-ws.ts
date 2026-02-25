@@ -1,3 +1,6 @@
+import { safeStorage } from "./utils/safe-storage.js";
+import { AUTH_STORAGE_KEY } from "./utils/auth-constants.js";
+
 interface TerminalConnectionCallbacks {
   onData: (data: Uint8Array) => void;
   onExit: (exitCode: number) => void;
@@ -16,7 +19,7 @@ export function createTerminalConnection(
   callbacks: TerminalConnectionCallbacks,
 ): TerminalConnection {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const token = localStorage.getItem("companion_auth_token") || "";
+  const token = safeStorage.getItem(AUTH_STORAGE_KEY) || "";
   const wsUrl = `${protocol}//${window.location.host}/ws/terminal/${terminalId}?token=${encodeURIComponent(token)}`;
   const socket = new WebSocket(wsUrl);
   socket.binaryType = "arraybuffer";

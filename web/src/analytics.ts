@@ -18,10 +18,6 @@ function getPostHogHost(): string {
   return host.trim();
 }
 
-export function isAnalyticsEnabled(): boolean {
-  return analyticsEnabled;
-}
-
 export function getTelemetryPreferenceEnabled(): boolean {
   if (typeof localStorage === "undefined") return true;
   const stored = localStorage.getItem(TELEMETRY_STORAGE_KEY);
