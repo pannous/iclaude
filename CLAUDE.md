@@ -242,19 +242,19 @@ curl localhost:3456/api/sessions/<sessionId>/fragments/<fragmentId>/state
 
 The session ID is visible in the URL hash (`#/<sessionId>`). The fragment ID is in the message's `scannedHtml` array.
 
-## Legacy: HTML Skills System
+## Legacy: HTML Panels System
 
-- `web/server/skill-manager-legacy.ts` — Skill manager module
-- `web/server/skill-routes-legacy.ts` — API routes for skills
+- `web/server/panel-manager-legacy.ts` — Panel manager module
+- `web/server/panel-routes-legacy.ts` — API routes for panels
 
-The skills system provided:
-- Tab skills (via "+" picker): Full panels like htop with `window.vibe` API
+The panels system provided:
+- Tab panels (via "+" picker): Full panels like htop with `window.vibe` API
 - Inline HTML fragments in chat with `window.vibeCommand()` access in YOLO mode
 - Inline HTML fragments shall report back via `window.vibeReportState()` and respond to `window.vibeGetState()` for reactive state queries
 
 
 
 
-See git history (`git log --grep=skill`) for full implementation details.
+See git history (`git log --grep=panel`) for full implementation details.
 
 <!-- end of CLAUDE.md -->

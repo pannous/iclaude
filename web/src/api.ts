@@ -227,7 +227,7 @@ export interface TreeNode {
   children?: TreeNode[];
 }
 
-export interface SkillInfo {
+export interface PanelInfo {
   slug: string;
   name: string;
   description: string;
@@ -829,9 +829,9 @@ export const api = {
   getSessionUsageLimits: (sessionId: string) =>
     get<UsageLimits>(`/sessions/${encodeURIComponent(sessionId)}/usage-limits`),
 
-  // HTML Skills
-  listSkills: () => get<SkillInfo[]>("/skills"),
-  getSkillPanelUrl: (slug: string) => `/api/skills/${encodeURIComponent(slug)}/panel`,
+  // HTML Panels
+  listPanels: () => get<PanelInfo[]>("/panels"),
+  getPanelUrl: (slug: string) => `/api/panels/${encodeURIComponent(slug)}/panel`,
 
   // Terminal
   spawnTerminal: (cwd: string, cols?: number, rows?: number, opts?: { containerId?: string }) =>

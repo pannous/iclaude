@@ -20,8 +20,8 @@ interface MockStoreState {
   editorTabEnabled: boolean;
   activeTab: string;
   setActiveTab: ReturnType<typeof vi.fn>;
-  openSkills: string[];
-  closeSkill: ReturnType<typeof vi.fn>;
+  openPanels: string[];
+  closePanel: ReturnType<typeof vi.fn>;
   markChatTabReentry: ReturnType<typeof vi.fn>;
   quickTerminalOpen: boolean;
   quickTerminalTabs: { id: string; label: string; cwd: string; containerId?: string }[];
@@ -50,8 +50,8 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     editorTabEnabled: true,
     activeTab: "chat",
     setActiveTab: vi.fn(),
-    openSkills: [],
-    closeSkill: vi.fn(),
+    openPanels: [],
+    closePanel: vi.fn(),
     markChatTabReentry: vi.fn(),
     quickTerminalOpen: false,
     quickTerminalTabs: [],

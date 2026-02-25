@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 let tempDir: string;
-let skillManager: typeof import("./skill-manager.js");
+let panelManager: typeof import("./panel-manager.js");
 
 const mockHomedir = vi.hoisted(() => {
   let dir = "";
@@ -25,40 +25,40 @@ beforeEach(async () => {
   tempDir = mkdtempSync(join(tmpdir(), "skill-test-"));
   mockHomedir.set(tempDir);
   vi.resetModules();
-  skillManager = await import("./skill-manager.js");
+  panelManager = await import("./panel-manager.js");
 });
 
 afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true });
 });
 
-function globalSkillsDir(): string {
-  return join(tempDir, ".companion", "skills");
+function globalPanelsDir(): string {
+  return join(tempDir, ".companion", "panels");
 }
 
 function projectDir(): string {
   return join(tempDir, "project");
 }
 
-function projectSkillsDir(): string {
-  return join(projectDir(), "skills");
+function projectPanelsDir(): string {
+  return join(projectDir(), "panels");
 }
 
-function createSkillInDir(baseDir: string, slug: string, manifest: object, panelHtml?: string): void {
+function createPanelInDir(baseDir: string, slug: string, manifest: object, panelHtml?: string): void {
   const dir = join(baseDir, slug);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "skill.json"), JSON.stringify(manifest), "utf-8");
+  writeFileSync(join(dir, "panel.json"), JSON.stringify(manifest), "utf-8");
   if (panelHtml !== undefined) {
     writeFileSync(join(dir, "panel.html"), panelHtml, "utf-8");
   }
 }
 
-function createSkillOnDisk(slug: string, manifest: object, panelHtml?: string): void {
-  createSkillInDir(globalSkillsDir(), slug, manifest, panelHtml);
+function createPanelOnDisk(slug: string, manifest: object, panelHtml?: string): void {
+  createPanelInDir(globalPanelsDir(), slug, manifest, panelHtml);
 }
 
-function createProjectSkill(slug: string, manifest: object, panelHtml?: string): void {
-  createSkillInDir(projectSkillsDir(), slug, manifest, panelHtml);
+function createProjectPanel(slug: string, manifest: object, panelHtml?: string): void {
+  createPanelInDir(projectPanelsDir(), slug, manifest, panelHtml);
 }
 
 function commandsDir(): string {
@@ -72,144 +72,144 @@ function createCommandOnDisk(name: string, markdown: string): void {
 }
 
 // ===========================================================================
-// listSkills
+// listPanels
 // ===========================================================================
-describe("listSkills", () => {
-  it("returns empty array when no skills exist", () => {
-    expect(skillManager.listSkills()).toEqual([]);
+describe("listPanels", () => {
+  it("returns empty array when no panels exist", () => {
+    expect(panelManager.listPanels()).toEqual([]);
   });
 
-  it("discovers skills from directories with skill.json", () => {
-    createSkillOnDisk("htop", { name: "Process Monitor", description: "View processes" });
-    createSkillOnDisk("docker", { name: "Docker", description: "Manage containers" });
+  it("discovers panels from directories with panel.json", () => {
+    createPanelOnDisk("htop", { name: "Process Monitor", description: "View processes" });
+    createPanelOnDisk("docker", { name: "Docker", description: "Manage containers" });
 
-    const result = skillManager.listSkills();
+    const result = panelManager.listPanels();
     expect(result).toHaveLength(2);
     expect(result.map(s => s.name)).toEqual(["Docker", "Process Monitor"]);
   });
 
-  it("skips directories without skill.json", () => {
-    mkdirSync(join(globalSkillsDir(), "empty-dir"), { recursive: true });
-    createSkillOnDisk("valid", { name: "Valid" });
+  it("skips directories without panel.json", () => {
+    mkdirSync(join(globalPanelsDir(), "empty-dir"), { recursive: true });
+    createPanelOnDisk("valid", { name: "Valid" });
 
-    const result = skillManager.listSkills();
+    const result = panelManager.listPanels();
     expect(result).toHaveLength(1);
     expect(result[0].slug).toBe("valid");
   });
 
-  it("skips directories with malformed skill.json", () => {
-    const dir = join(globalSkillsDir(), "broken");
+  it("skips directories with malformed panel.json", () => {
+    const dir = join(globalPanelsDir(), "broken");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "skill.json"), "NOT JSON{{{", "utf-8");
-    createSkillOnDisk("good", { name: "Good" });
+    writeFileSync(join(dir, "panel.json"), "NOT JSON{{{", "utf-8");
+    createPanelOnDisk("good", { name: "Good" });
 
-    const result = skillManager.listSkills();
+    const result = panelManager.listPanels();
     expect(result).toHaveLength(1);
     expect(result[0].slug).toBe("good");
   });
 
   it("uses slug as fallback name when name is missing", () => {
-    createSkillOnDisk("my-skill", { description: "No name field" });
+    createPanelOnDisk("my-skill", { description: "No name field" });
 
-    const result = skillManager.listSkills();
+    const result = panelManager.listPanels();
     expect(result[0].name).toBe("my-skill");
   });
 
   it("defaults icon to terminal and refreshInterval to null", () => {
-    createSkillOnDisk("basic", { name: "Basic" });
+    createPanelOnDisk("basic", { name: "Basic" });
 
-    const result = skillManager.listSkills();
+    const result = panelManager.listPanels();
     expect(result[0].icon).toBe("terminal");
     expect(result[0].refreshInterval).toBeNull();
   });
 
   it("reads refreshInterval from manifest", () => {
-    createSkillOnDisk("polling", { name: "Poller", refreshInterval: 2000 });
+    createPanelOnDisk("polling", { name: "Poller", refreshInterval: 2000 });
 
-    const result = skillManager.listSkills();
+    const result = panelManager.listPanels();
     expect(result[0].refreshInterval).toBe(2000);
   });
 });
 
 // ===========================================================================
-// getSkill
+// getPanel
 // ===========================================================================
-describe("getSkill", () => {
-  it("returns skill info for existing skill", () => {
-    createSkillOnDisk("htop", { name: "Process Monitor", description: "View procs", icon: "cpu" });
+describe("getPanel", () => {
+  it("returns panel info for existing panel", () => {
+    createPanelOnDisk("htop", { name: "Process Monitor", description: "View procs", icon: "cpu" });
 
-    const skill = skillManager.getSkill("htop");
-    expect(skill).not.toBeNull();
-    expect(skill!.slug).toBe("htop");
-    expect(skill!.name).toBe("Process Monitor");
-    expect(skill!.icon).toBe("cpu");
+    const panel = panelManager.getPanel("htop");
+    expect(panel).not.toBeNull();
+    expect(panel!.slug).toBe("htop");
+    expect(panel!.name).toBe("Process Monitor");
+    expect(panel!.icon).toBe("cpu");
   });
 
-  it("returns null for non-existent skill", () => {
-    expect(skillManager.getSkill("nope")).toBeNull();
+  it("returns null for non-existent panel", () => {
+    expect(panelManager.getPanel("nope")).toBeNull();
   });
 
   it("returns null for invalid slug (path traversal)", () => {
-    expect(skillManager.getSkill("../etc")).toBeNull();
-    expect(skillManager.getSkill("foo/bar")).toBeNull();
+    expect(panelManager.getPanel("../etc")).toBeNull();
+    expect(panelManager.getPanel("foo/bar")).toBeNull();
   });
 });
 
 // ===========================================================================
-// getSkillPanel
+// getPanelHtml
 // ===========================================================================
-describe("getSkillPanel", () => {
+describe("getPanelHtml", () => {
   it("returns panel HTML content", () => {
     const html = "<html><body>Hello</body></html>";
-    createSkillOnDisk("test", { name: "Test" }, html);
+    createPanelOnDisk("test", { name: "Test" }, html);
 
-    expect(skillManager.getSkillPanel("test")).toBe(html);
+    expect(panelManager.getPanelHtml("test")).toBe(html);
   });
 
   it("returns null when panel.html is missing", () => {
-    createSkillOnDisk("no-panel", { name: "No Panel" });
+    createPanelOnDisk("no-panel", { name: "No Panel" });
 
-    expect(skillManager.getSkillPanel("no-panel")).toBeNull();
+    expect(panelManager.getPanelHtml("no-panel")).toBeNull();
   });
 
   it("returns null for invalid slug", () => {
-    expect(skillManager.getSkillPanel("../../bad")).toBeNull();
+    expect(panelManager.getPanelHtml("../../bad")).toBeNull();
   });
 });
 
 // ===========================================================================
-// getSkillState / setSkillState
+// getPanelState / setPanelState
 // ===========================================================================
-describe("skill state persistence", () => {
+describe("panel state persistence", () => {
   it("returns empty object when no state exists", () => {
-    createSkillOnDisk("fresh", { name: "Fresh" });
-    expect(skillManager.getSkillState("fresh")).toEqual({});
+    createPanelOnDisk("fresh", { name: "Fresh" });
+    expect(panelManager.getPanelState("fresh")).toEqual({});
   });
 
   it("round-trips state through set/get", () => {
-    createSkillOnDisk("stateful", { name: "Stateful" });
+    createPanelOnDisk("stateful", { name: "Stateful" });
 
-    skillManager.setSkillState("stateful", { sortBy: "cpu", ascending: false });
-    const state = skillManager.getSkillState("stateful");
+    panelManager.setPanelState("stateful", { sortBy: "cpu", ascending: false });
+    const state = panelManager.getPanelState("stateful");
     expect(state).toEqual({ sortBy: "cpu", ascending: false });
   });
 
   it("overwrites previous state", () => {
-    createSkillOnDisk("overwrite", { name: "Overwrite" });
+    createPanelOnDisk("overwrite", { name: "Overwrite" });
 
-    skillManager.setSkillState("overwrite", { a: 1 });
-    skillManager.setSkillState("overwrite", { b: 2 });
-    expect(skillManager.getSkillState("overwrite")).toEqual({ b: 2 });
+    panelManager.setPanelState("overwrite", { a: 1 });
+    panelManager.setPanelState("overwrite", { b: 2 });
+    expect(panelManager.getPanelState("overwrite")).toEqual({ b: 2 });
   });
 
-  it("ignores setSkillState for non-existent skill", () => {
-    skillManager.setSkillState("ghost", { x: 1 });
-    expect(skillManager.getSkillState("ghost")).toEqual({});
+  it("ignores setPanelState for non-existent panel", () => {
+    panelManager.setPanelState("ghost", { x: 1 });
+    expect(panelManager.getPanelState("ghost")).toEqual({});
   });
 
   it("ignores invalid slug for state operations", () => {
-    skillManager.setSkillState("../bad", { x: 1 });
-    expect(skillManager.getSkillState("../bad")).toEqual({});
+    panelManager.setPanelState("../bad", { x: 1 });
+    expect(panelManager.getPanelState("../bad")).toEqual({});
   });
 });
 
@@ -223,26 +223,26 @@ describe("slash command discovery", () => {
     createCommandOnDisk("ignore", "not markdown");
     writeFileSync(join(commandsDir(), "plain.txt"), "nope", "utf-8");
 
-    const result = skillManager.listProjectSlashCommands(join(tempDir, "project"));
+    const result = panelManager.listProjectSlashCommands(join(tempDir, "project"));
     expect(result).toEqual(["catch-time", "dev/review", "ignore"]);
   });
 
   it("returns [] when project has no command directory", () => {
-    const result = skillManager.listProjectSlashCommands(join(tempDir, "missing"));
+    const result = panelManager.listProjectSlashCommands(join(tempDir, "missing"));
     expect(result).toEqual([]);
   });
 
   it("loads command markdown template by name", () => {
     createCommandOnDisk("catch-time", "---\nname: catch-time\n---\nRun `date`");
-    const result = skillManager.getProjectSlashCommandTemplate(join(tempDir, "project"), "catch-time");
+    const result = panelManager.getProjectSlashCommandTemplate(join(tempDir, "project"), "catch-time");
     expect(result).toContain("name: catch-time");
     expect(result).toContain("Run `date`");
   });
 
   it("returns null for invalid command names", () => {
     createCommandOnDisk("safe", "ok");
-    expect(skillManager.getProjectSlashCommandTemplate(join(tempDir, "project"), "../safe")).toBeNull();
-    expect(skillManager.getProjectSlashCommandTemplate(join(tempDir, "project"), "safe/../x")).toBeNull();
+    expect(panelManager.getProjectSlashCommandTemplate(join(tempDir, "project"), "../safe")).toBeNull();
+    expect(panelManager.getProjectSlashCommandTemplate(join(tempDir, "project"), "safe/../x")).toBeNull();
   });
 });
 
@@ -252,7 +252,7 @@ describe("slash command discovery", () => {
 describe("wrapWithVibeApi", () => {
   it("injects script before </head>", () => {
     const html = "<html><head><title>Test</title></head><body></body></html>";
-    const result = skillManager.wrapWithVibeApi(html, "test-skill");
+    const result = panelManager.wrapWithVibeApi(html, "test-skill");
 
     expect(result).toContain("window.vibe");
     expect(result).toContain("window.vibeCommand");
@@ -262,25 +262,25 @@ describe("wrapWithVibeApi", () => {
 
   it("injects after <head> when no </head> but <head> present", () => {
     const html = "<head><body>Content</body>";
-    const result = skillManager.wrapWithVibeApi(html, "s");
+    const result = panelManager.wrapWithVibeApi(html, "s");
     expect(result).toContain("window.vibe");
     expect(result.indexOf("window.vibe")).toBeGreaterThan(result.indexOf("<head>"));
   });
 
   it("prepends script when no head tags at all", () => {
     const html = "<div>Simple content</div>";
-    const result = skillManager.wrapWithVibeApi(html, "s");
+    const result = panelManager.wrapWithVibeApi(html, "s");
     expect(result).toContain("window.vibe");
     expect(result.indexOf("window.vibe")).toBeLessThan(result.indexOf("<div>"));
   });
 
   it("includes skill slug in the injected script", () => {
-    const result = skillManager.wrapWithVibeApi("<html></html>", "my-htop");
+    const result = panelManager.wrapWithVibeApi("<html></html>", "my-htop");
     expect(result).toContain('"my-htop"');
   });
 
   it("includes vibe API surface: command, store, notify, playSound", () => {
-    const result = skillManager.wrapWithVibeApi("<html><head></head></html>", "x");
+    const result = panelManager.wrapWithVibeApi("<html><head></head></html>", "x");
     expect(result).toContain("window.vibe");
     expect(result).toContain("vibeExec");
     expect(result).toContain("store:");

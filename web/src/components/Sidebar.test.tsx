@@ -31,7 +31,7 @@ vi.mock("../api.js", () => ({
     archiveSession: (...args: unknown[]) => mockApi.archiveSession(...args),
     unarchiveSession: (...args: unknown[]) => mockApi.unarchiveSession(...args),
     renameSession: (...args: unknown[]) => mockApi.renameSession(...args),
-    listSkills: () => Promise.resolve([]),
+    listPanels: () => Promise.resolve([]),
   },
 }));
 

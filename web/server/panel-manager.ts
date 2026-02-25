@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface SkillInfo {
+export interface PanelInfo {
   slug: string;
   name: string;
   description: string;
@@ -15,26 +15,26 @@ export interface SkillInfo {
 
 // ─── Paths ──────────────────────────────────────────────────────────────────
 
-const GLOBAL_SKILLS_DIR = join(homedir(), ".companion", "skills");
+const GLOBAL_PANELS_DIR = join(homedir(), ".companion", "panels");
 const CLAUDE_SKILLS_DIR = join(homedir(), ".claude", "skills");
 
-function projectSkillsDir(cwd: string): string {
-  return join(cwd, "skills");
+function projectPanelsDir(cwd: string): string {
+  return join(cwd, "panels");
 }
 
 function ensureGlobalDir(): void {
-  mkdirSync(GLOBAL_SKILLS_DIR, { recursive: true });
+  mkdirSync(GLOBAL_PANELS_DIR, { recursive: true });
 }
 
-/** Resolve the directory for a skill slug, checking project-local first. */
-function resolveSkillDir(slug: string, cwd?: string): string | null {
+/** Resolve the directory for a panel slug, checking project-local first. */
+function resolvePanelDir(slug: string, cwd?: string): string | null {
   if (!isValidSlug(slug)) return null;
   if (cwd) {
-    const local = join(projectSkillsDir(cwd), slug);
-    if (existsSync(join(local, "skill.json"))) return local;
+    const local = join(projectPanelsDir(cwd), slug);
+    if (existsSync(join(local, "panel.json"))) return local;
   }
-  const global = join(GLOBAL_SKILLS_DIR, slug);
-  if (existsSync(join(global, "skill.json"))) return global;
+  const global = join(GLOBAL_PANELS_DIR, slug);
+  if (existsSync(join(global, "panel.json"))) return global;
   return null;
 }
 
@@ -55,19 +55,19 @@ function isValidCommandName(command: string): boolean {
 
 // ─── CRUD ───────────────────────────────────────────────────────────────────
 
-function scanSkillsDir(baseDir: string): SkillInfo[] {
+function scanPanelsDir(baseDir: string): PanelInfo[] {
   if (!existsSync(baseDir)) return [];
   try {
     const entries = readdirSync(baseDir);
-    const skills: SkillInfo[] = [];
+    const panels: PanelInfo[] = [];
     for (const entry of entries) {
       const dir = join(baseDir, entry);
       try {
         if (!statSync(dir).isDirectory()) continue;
-        const manifestPath = join(dir, "skill.json");
+        const manifestPath = join(dir, "panel.json");
         if (!existsSync(manifestPath)) continue;
         const raw = JSON.parse(readFileSync(manifestPath, "utf-8"));
-        skills.push({
+        panels.push({
           slug: entry,
           name: raw.name || entry,
           description: raw.description || "",
@@ -76,21 +76,21 @@ function scanSkillsDir(baseDir: string): SkillInfo[] {
           type: "html",
         });
       } catch {
-        // Skip malformed skills
+        // Skip malformed panels
       }
     }
-    return skills;
+    return panels;
   } catch {
     return [];
   }
 }
 
 /** Scan ~/.claude/skills/ for SKILL.md markdown skills (YAML frontmatter). */
-function scanMarkdownSkillsDir(baseDir: string): SkillInfo[] {
+function scanMarkdownPanelsDir(baseDir: string): PanelInfo[] {
   if (!existsSync(baseDir)) return [];
   try {
     const entries = readdirSync(baseDir);
-    const skills: SkillInfo[] = [];
+    const panels: PanelInfo[] = [];
     for (const entry of entries) {
       const dir = join(baseDir, entry);
       try {
@@ -109,43 +109,43 @@ function scanMarkdownSkillsDir(baseDir: string): SkillInfo[] {
             if (dm) description = dm[1];
           }
         }
-        skills.push({ slug: entry, name, description, icon: "file-text", refreshInterval: null, type: "markdown" });
+        panels.push({ slug: entry, name, description, icon: "file-text", refreshInterval: null, type: "markdown" });
       } catch {
         // Skip malformed entries
       }
     }
-    return skills;
+    return panels;
   } catch {
     return [];
   }
 }
 
-/** List skills from ~/.claude/skills/ (markdown), ~/.companion/skills/ (HTML panels), and optionally project-local (<cwd>/skills/). HTML panel skills take priority on slug collision. */
-export function listSkills(cwd?: string): SkillInfo[] {
+/** List panels from ~/.claude/skills/ (markdown), ~/.companion/panels/ (HTML), and optionally project-local (<cwd>/panels/). HTML panels take priority on slug collision. */
+export function listPanels(cwd?: string): PanelInfo[] {
   ensureGlobalDir();
-  const bySlug = new Map<string, SkillInfo>();
+  const bySlug = new Map<string, PanelInfo>();
   // Markdown skills from ~/.claude/skills/ (lowest priority)
-  for (const skill of scanMarkdownSkillsDir(CLAUDE_SKILLS_DIR)) {
-    bySlug.set(skill.slug, skill);
+  for (const panel of scanMarkdownPanelsDir(CLAUDE_SKILLS_DIR)) {
+    bySlug.set(panel.slug, panel);
   }
-  // HTML panel skills from ~/.companion/skills/ (higher priority)
-  for (const skill of scanSkillsDir(GLOBAL_SKILLS_DIR)) {
-    bySlug.set(skill.slug, skill);
+  // HTML panels from ~/.companion/panels/ (higher priority)
+  for (const panel of scanPanelsDir(GLOBAL_PANELS_DIR)) {
+    bySlug.set(panel.slug, panel);
   }
-  // Project-local skills (highest priority)
+  // Project-local panels (highest priority)
   if (cwd) {
-    for (const skill of scanSkillsDir(projectSkillsDir(cwd))) {
-      bySlug.set(skill.slug, skill);
+    for (const panel of scanPanelsDir(projectPanelsDir(cwd))) {
+      bySlug.set(panel.slug, panel);
     }
   }
   return Array.from(bySlug.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function getSkill(slug: string, cwd?: string): SkillInfo | null {
-  const dir = resolveSkillDir(slug, cwd);
+export function getPanel(slug: string, cwd?: string): PanelInfo | null {
+  const dir = resolvePanelDir(slug, cwd);
   if (!dir) return null;
   try {
-    const raw = JSON.parse(readFileSync(join(dir, "skill.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync(join(dir, "panel.json"), "utf-8"));
     return {
       slug,
       name: raw.name || slug,
@@ -159,8 +159,8 @@ export function getSkill(slug: string, cwd?: string): SkillInfo | null {
   }
 }
 
-export function getSkillPanel(slug: string, cwd?: string): string | null {
-  const dir = resolveSkillDir(slug, cwd);
+export function getPanelHtml(slug: string, cwd?: string): string | null {
+  const dir = resolvePanelDir(slug, cwd);
   if (!dir) return null;
   const panelPath = join(dir, "panel.html");
   try {
@@ -170,8 +170,8 @@ export function getSkillPanel(slug: string, cwd?: string): string | null {
   }
 }
 
-export function getSkillState(slug: string, cwd?: string): Record<string, unknown> {
-  const dir = resolveSkillDir(slug, cwd);
+export function getPanelState(slug: string, cwd?: string): Record<string, unknown> {
+  const dir = resolvePanelDir(slug, cwd);
   if (!dir) return {};
   try {
     return JSON.parse(readFileSync(join(dir, "state.json"), "utf-8"));
@@ -180,8 +180,8 @@ export function getSkillState(slug: string, cwd?: string): Record<string, unknow
   }
 }
 
-export function setSkillState(slug: string, state: Record<string, unknown>, cwd?: string): void {
-  const dir = resolveSkillDir(slug, cwd);
+export function setPanelState(slug: string, state: Record<string, unknown>, cwd?: string): void {
+  const dir = resolvePanelDir(slug, cwd);
   if (!dir) return;
   writeFileSync(join(dir, "state.json"), JSON.stringify(state, null, 2), "utf-8");
 }
@@ -242,7 +242,7 @@ export function getProjectSlashCommandTemplate(cwd: string | undefined, command:
 export function wrapWithVibeApi(html: string, slug: string): string {
   const apiScript = `<script>
 (function() {
-  var SKILL_SLUG = ${JSON.stringify(slug)};
+  var PANEL_SLUG = ${JSON.stringify(slug)};
 
   async function vibeExec(command, options) {
     var res = await fetch('/api/exec', {
@@ -258,14 +258,14 @@ export function wrapWithVibeApi(html: string, slug: string): string {
     command: vibeExec,
     store: {
       async get(key) {
-        var res = await fetch('/api/skills/' + encodeURIComponent(SKILL_SLUG) + '/state');
+        var res = await fetch('/api/panels/' + encodeURIComponent(PANEL_SLUG) + '/state');
         var state = await res.json();
         return key !== undefined ? state[key] : state;
       },
       async set(key, value) {
         var current = await this.get();
         current[key] = value;
-        await fetch('/api/skills/' + encodeURIComponent(SKILL_SLUG) + '/state', {
+        await fetch('/api/panels/' + encodeURIComponent(PANEL_SLUG) + '/state', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(current)

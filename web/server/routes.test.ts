@@ -10,12 +10,12 @@ vi.mock("./env-manager.js", () => ({
   deleteEnv: vi.fn(),
 }));
 
-vi.mock("./skill-manager.js", () => ({
-  listSkills: vi.fn(() => []),
-  getSkill: vi.fn(() => null),
-  getSkillPanel: vi.fn(() => null),
-  getSkillState: vi.fn(() => ({})),
-  setSkillState: vi.fn(),
+vi.mock("./panel-manager.js", () => ({
+  listPanels: vi.fn(() => []),
+  getPanel: vi.fn(() => null),
+  getPanelHtml: vi.fn(() => null),
+  getPanelState: vi.fn(() => ({})),
+  setPanelState: vi.fn(),
   wrapWithVibeApi: vi.fn((html: string) => `<script>vibe</script>\n${html}`),
 }));
 

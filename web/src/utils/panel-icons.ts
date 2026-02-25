@@ -1,5 +1,5 @@
-/** Lucide-compatible SVG paths for skill/plugin icons. Shared across components. */
-export const SKILL_ICON_PATHS: Record<string, string> = {
+/** Lucide-compatible SVG paths for panel icons. Shared across components. */
+export const PANEL_ICON_PATHS: Record<string, string> = {
   terminal: "M4 17l6-5-6-5M12 19h8",
   cpu: "M9 3v2M15 3v2M9 19v2M15 19v2M3 9h2M3 15h2M19 9h2M19 15h2M6 6h12v12H6zM9 9h6v6H9z",
   clock: "M12 2a10 10 0 100 20 10 10 0 000-20zM12 6v6l4 2",

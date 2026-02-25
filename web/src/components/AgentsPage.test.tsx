@@ -15,7 +15,6 @@ const mockApi = {
   exportAgent: vi.fn(),
   importAgent: vi.fn(),
   regenerateAgentWebhookSecret: vi.fn(),
-  listSkills: vi.fn(),
   listPanels: vi.fn(),
   listEnvs: vi.fn(),
 };
@@ -32,7 +31,6 @@ vi.mock("../api.js", () => ({
     importAgent: (...args: unknown[]) => mockApi.importAgent(...args),
     regenerateAgentWebhookSecret: (...args: unknown[]) =>
       mockApi.regenerateAgentWebhookSecret(...args),
-    listSkills: (...args: unknown[]) => mockApi.listSkills(...args),
     listPanels: (...args: unknown[]) => mockApi.listPanels(...args),
     listEnvs: (...args: unknown[]) => mockApi.listEnvs(...args),
   },
@@ -78,7 +76,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockApi.listAgents.mockResolvedValue([]);
   // Default: no panels or envs fetched
-  mockApi.listSkills.mockResolvedValue([]);
+  mockApi.listPanels.mockResolvedValue([]);
   mockApi.listPanels.mockResolvedValue([]);
   mockApi.listEnvs.mockResolvedValue([]);
   window.location.hash = "#/agents";

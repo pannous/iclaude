@@ -20,7 +20,7 @@ import type {
   McpServerDetail,
   McpServerConfig,
 } from "./session-types.js";
-import { getProjectSlashCommandTemplate, listProjectSlashCommands, listSkills } from "./skill-manager.js";
+import { getProjectSlashCommandTemplate, listProjectSlashCommands, listPanels } from "./panel-manager.js";
 import type { RecorderManager } from "./recorder.js";
 
 // ─── Codex JSON-RPC Types ─────────────────────────────────────────────────────
@@ -583,7 +583,7 @@ export class CodexAdapter {
         mcp_servers: [],
         agents: [],
         slash_commands: listProjectSlashCommands(this.options.cwd),
-        skills: listSkills(this.options.cwd).map((s) => s.slug),
+        skills: listPanels(this.options.cwd).map((s) => s.slug),
         total_cost_usd: 0,
         num_turns: 0,
         context_used_percent: 0,

@@ -23,7 +23,7 @@ import { hasContainerClaudeAuth } from "./claude-container-auth.js";
 import { hasContainerCodexAuth } from "./codex-container-auth.js";
 import { imagePullManager } from "./image-pull-manager.js";
 import { registerFsRoutes } from "./routes/fs-routes.js";
-import { registerSkillRoutes } from "./routes/skills-routes.js";
+import { registerPanelRoutes } from "./routes/panels-routes.js";
 import { registerEnvRoutes } from "./routes/env-routes.js";
 import { registerCronRoutes } from "./routes/cron-routes.js";
 import { registerAgentRoutes } from "./routes/agent-routes.js";
@@ -1151,7 +1151,7 @@ export function createRoutes(
     updateCheckStaleMs: UPDATE_CHECK_STALE_MS,
   });
 
-  registerSkillRoutes(api);
+  registerPanelRoutes(api);
   registerCronRoutes(api, cronScheduler);
   registerAgentRoutes(api, agentExecutor);
 

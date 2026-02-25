@@ -163,8 +163,8 @@ interface AppState {
   homeResetKey: number;
   editorTabEnabled: boolean;
   newSessionCwd: string | null; // LOCAL: custom cwd for new sessions
-  activeTab: string; // LOCAL: "chat" | "diff" | "terminal" | "editor" | "skill:<slug>"
-  openSkills: string[]; // LOCAL: skill panel tabs
+  activeTab: string; // LOCAL: "chat" | "diff" | "terminal" | "editor" | "panel:<slug>"
+  openPanels: string[]; // LOCAL: panel tabs
   editorOpenFile: Map<string, string>; // LOCAL: per-session editor file
   editorUrl: Map<string, string>; // LOCAL: per-session editor URL
   editorLoading: Map<string, boolean>; // LOCAL: per-session editor loading state
@@ -266,11 +266,11 @@ interface AppState {
   setUpdateOverlayActive: (active: boolean) => void;
   setEditorTabEnabled: (enabled: boolean) => void;
 
-  // LOCAL: Editor / Skill actions (string type for skill:<slug> tabs)
+  // LOCAL: Editor / Panel actions (string type for panel:<slug> tabs)
   setActiveTab: (tab: string) => void;
   markChatTabReentry: (sessionId: string) => void;
-  openSkill: (slug: string) => void;
-  closeSkill: (slug: string) => void;
+  openPanel: (slug: string) => void;
+  closePanel: (slug: string) => void;
   setEditorOpenFile: (sessionId: string, filePath: string | null) => void;
   setEditorUrl: (sessionId: string, url: string) => void;
   setEditorLoading: (sessionId: string, loading: boolean) => void;
@@ -393,7 +393,7 @@ export const useStore = create<AppState>((set) => ({
   editorTabEnabled: false,
   newSessionCwd: null,
   activeTab: "chat",
-  openSkills: [], // LOCAL: skill panel tabs
+  openPanels: [], // LOCAL: panel tabs
   editorOpenFile: new Map(), // LOCAL
   editorUrl: new Map(), // LOCAL
   editorLoading: new Map(), // LOCAL
@@ -779,17 +779,17 @@ export const useStore = create<AppState>((set) => ({
   setDiffPanelSelectedFile: (sessionId, filePath) =>
     set((s) => ({ diffPanelSelectedFile: setInMap(s.diffPanelSelectedFile, sessionId, filePath) })),
 
-  openSkill: (slug) =>
+  openPanel: (slug) =>
     set((s) => {
-      const skills = s.openSkills.includes(slug) ? s.openSkills : [...s.openSkills, slug];
-      return { openSkills: skills, activeTab: `skill:${slug}` };
+      const panels = s.openPanels.includes(slug) ? s.openPanels : [...s.openPanels, slug];
+      return { openPanels: panels, activeTab: `panel:${slug}` };
     }),
 
-  closeSkill: (slug) =>
+  closePanel: (slug) =>
     set((s) => {
-      const skills = s.openSkills.filter((s) => s !== slug);
-      const activeTab = s.activeTab === `skill:${slug}` ? "chat" : s.activeTab;
-      return { openSkills: skills, activeTab };
+      const panels = s.openPanels.filter((s) => s !== slug);
+      const activeTab = s.activeTab === `panel:${slug}` ? "chat" : s.activeTab;
+      return { openPanels: panels, activeTab };
     }),
 
   setEditorOpenFile: (sessionId, filePath) =>

@@ -1,53 +1,53 @@
 /**
- * HTML Skills routes — serves panel.html skills from ~/.companion/skills/
- * with window.vibe API injection for tab-based skill panels.
+ * HTML Panel routes — serves panel.html panels from ~/.companion/panels/
+ * with window.vibe API injection for tab-based panels.
  *
- * Also provides /api/exec for vibe.command() from skill iframes.
+ * Also provides /api/exec for vibe.command() from panel iframes.
  */
 
 import { execSync } from "node:child_process";
 import type { Hono } from "hono";
-import * as skillManager from "../skill-manager.js";
+import * as panelManager from "../panel-manager.js";
 
-export function registerSkillRoutes(api: Hono): void {
-  // ─── List all HTML skills ──────────────────────────────────────────────────
-  api.get("/skills", (c) => {
+export function registerPanelRoutes(api: Hono): void {
+  // ─── List all HTML panels ──────────────────────────────────────────────────
+  api.get("/panels", (c) => {
     try {
-      return c.json(skillManager.listSkills());
+      return c.json(panelManager.listPanels());
     } catch (e: unknown) {
       return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
     }
   });
 
-  // ─── Get skill metadata ────────────────────────────────────────────────────
-  api.get("/skills/:slug", (c) => {
-    const skill = skillManager.getSkill(c.req.param("slug"));
-    if (!skill) return c.json({ error: "Skill not found" }, 404);
-    return c.json(skill);
+  // ─── Get panel metadata ────────────────────────────────────────────────────
+  api.get("/panels/:slug", (c) => {
+    const panel = panelManager.getPanel(c.req.param("slug"));
+    if (!panel) return c.json({ error: "Panel not found" }, 404);
+    return c.json(panel);
   });
 
   // ─── Serve panel.html with injected window.vibe API ────────────────────────
-  api.get("/skills/:slug/panel", (c) => {
+  api.get("/panels/:slug/panel", (c) => {
     const slug = c.req.param("slug");
-    const skill = skillManager.getSkill(slug);
-    if (!skill) return c.json({ error: "Skill not found" }, 404);
-    const rawHtml = skillManager.getSkillPanel(slug);
+    const panel = panelManager.getPanel(slug);
+    if (!panel) return c.json({ error: "Panel not found" }, 404);
+    const rawHtml = panelManager.getPanelHtml(slug);
     if (!rawHtml) return c.json({ error: "Panel HTML not found" }, 404);
-    return new Response(skillManager.wrapWithVibeApi(rawHtml, slug), {
+    return new Response(panelManager.wrapWithVibeApi(rawHtml, slug), {
       headers: { "Content-Type": "text/html; charset=utf-8" },
     });
   });
 
-  // ─── Skill persistent state ────────────────────────────────────────────────
-  api.get("/skills/:slug/state", (c) => {
-    return c.json(skillManager.getSkillState(c.req.param("slug")));
+  // ─── Panel persistent state ────────────────────────────────────────────────
+  api.get("/panels/:slug/state", (c) => {
+    return c.json(panelManager.getPanelState(c.req.param("slug")));
   });
 
-  api.put("/skills/:slug/state", async (c) => {
+  api.put("/panels/:slug/state", async (c) => {
     const slug = c.req.param("slug");
-    if (!skillManager.getSkill(slug)) return c.json({ error: "Skill not found" }, 404);
+    if (!panelManager.getPanel(slug)) return c.json({ error: "Panel not found" }, 404);
     const body = await c.req.json().catch(() => ({}));
-    skillManager.setSkillState(slug, body);
+    panelManager.setPanelState(slug, body);
     return c.json({ ok: true });
   });
 

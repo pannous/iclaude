@@ -4,12 +4,12 @@ import type { BrowserIncomingMessage, BrowserOutgoingMessage } from "./session-t
 
 const mockListProjectSlashCommands = vi.hoisted(() => vi.fn(() => []));
 const mockGetProjectSlashCommandTemplate = vi.hoisted(() => vi.fn(() => null));
-const mockListSkills = vi.hoisted(() => vi.fn(() => []));
+const mockListPanels = vi.hoisted(() => vi.fn(() => []));
 
-vi.mock("./skill-manager.js", () => ({
+vi.mock("./panel-manager.js", () => ({
   listProjectSlashCommands: mockListProjectSlashCommands,
   getProjectSlashCommandTemplate: mockGetProjectSlashCommandTemplate,
-  listSkills: mockListSkills,
+  listPanels: mockListPanels,
 }));
 
 // ─── Mock Subprocess ──────────────────────────────────────────────────────────
@@ -84,10 +84,10 @@ describe("CodexAdapter", () => {
     stdout = mock.stdout;
     mockListProjectSlashCommands.mockReset();
     mockGetProjectSlashCommandTemplate.mockReset();
-    mockListSkills.mockReset();
+    mockListPanels.mockReset();
     mockListProjectSlashCommands.mockReturnValue([]);
     mockGetProjectSlashCommandTemplate.mockReturnValue(null);
-    mockListSkills.mockReturnValue([]);
+    mockListPanels.mockReturnValue([]);
   });
 
   it("sends initialize request on construction", async () => {
@@ -927,7 +927,7 @@ describe("CodexAdapter", () => {
 
   it("includes project slash commands and html skills in session_init", async () => {
     mockListProjectSlashCommands.mockReturnValue(["catch-time", "review/pr"] as any);
-    mockListSkills.mockReturnValue([{ slug: "htop" }, { slug: "logs" }] as any);
+    mockListPanels.mockReturnValue([{ slug: "htop" }, { slug: "logs" }] as any);
 
     const messages: BrowserIncomingMessage[] = [];
     const adapter = new CodexAdapter(proc as never, "test-session", {

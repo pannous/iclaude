@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface SkillInfo {
+export interface PanelInfo {
   slug: string;
   name: string;
   description: string;
@@ -14,14 +14,14 @@ export interface SkillInfo {
 
 // ─── Paths ──────────────────────────────────────────────────────────────────
 
-const SKILLS_DIR = join(homedir(), ".companion", "skills");
+const PANELS_DIR = join(homedir(), ".companion", "panels");
 
 function ensureDir(): void {
-  mkdirSync(SKILLS_DIR, { recursive: true });
+  mkdirSync(PANELS_DIR, { recursive: true });
 }
 
-function skillDir(slug: string): string {
-  return join(SKILLS_DIR, slug);
+function panelDir(slug: string): string {
+  return join(PANELS_DIR, slug);
 }
 
 function isValidSlug(slug: string): boolean {
@@ -41,19 +41,19 @@ function isValidCommandName(command: string): boolean {
 
 // ─── CRUD ───────────────────────────────────────────────────────────────────
 
-export function listSkills(): SkillInfo[] {
+export function listPanels(): PanelInfo[] {
   ensureDir();
   try {
-    const entries = readdirSync(SKILLS_DIR);
-    const skills: SkillInfo[] = [];
+    const entries = readdirSync(PANELS_DIR);
+    const panels: PanelInfo[] = [];
     for (const entry of entries) {
-      const dir = join(SKILLS_DIR, entry);
+      const dir = join(PANELS_DIR, entry);
       try {
         if (!statSync(dir).isDirectory()) continue;
-        const manifestPath = join(dir, "skill.json");
+        const manifestPath = join(dir, "panel.json");
         if (!existsSync(manifestPath)) continue;
         const raw = JSON.parse(readFileSync(manifestPath, "utf-8"));
-        skills.push({
+        panels.push({
           slug: entry,
           name: raw.name || entry,
           description: raw.description || "",
@@ -61,19 +61,19 @@ export function listSkills(): SkillInfo[] {
           refreshInterval: typeof raw.refreshInterval === "number" ? raw.refreshInterval : null,
         });
       } catch {
-        // Skip malformed skills
+        // Skip malformed panels
       }
     }
-    skills.sort((a, b) => a.name.localeCompare(b.name));
-    return skills;
+    panels.sort((a, b) => a.name.localeCompare(b.name));
+    return panels;
   } catch {
     return [];
   }
 }
 
-export function getSkill(slug: string): SkillInfo | null {
+export function getPanel(slug: string): PanelInfo | null {
   if (!isValidSlug(slug)) return null;
-  const manifestPath = join(skillDir(slug), "skill.json");
+  const manifestPath = join(panelDir(slug), "panel.json");
   try {
     const raw = JSON.parse(readFileSync(manifestPath, "utf-8"));
     return {
@@ -88,9 +88,9 @@ export function getSkill(slug: string): SkillInfo | null {
   }
 }
 
-export function getSkillPanel(slug: string): string | null {
+export function getPanelHtml(slug: string): string | null {
   if (!isValidSlug(slug)) return null;
-  const panelPath = join(skillDir(slug), "panel.html");
+  const panelPath = join(panelDir(slug), "panel.html");
   try {
     return readFileSync(panelPath, "utf-8");
   } catch {
@@ -98,9 +98,9 @@ export function getSkillPanel(slug: string): string | null {
   }
 }
 
-export function getSkillState(slug: string): Record<string, unknown> {
+export function getPanelState(slug: string): Record<string, unknown> {
   if (!isValidSlug(slug)) return {};
-  const statePath = join(skillDir(slug), "state.json");
+  const statePath = join(panelDir(slug), "state.json");
   try {
     return JSON.parse(readFileSync(statePath, "utf-8"));
   } catch {
@@ -108,9 +108,9 @@ export function getSkillState(slug: string): Record<string, unknown> {
   }
 }
 
-export function setSkillState(slug: string, state: Record<string, unknown>): void {
+export function setPanelState(slug: string, state: Record<string, unknown>): void {
   if (!isValidSlug(slug)) return;
-  const dir = skillDir(slug);
+  const dir = panelDir(slug);
   if (!existsSync(dir)) return;
   writeFileSync(join(dir, "state.json"), JSON.stringify(state, null, 2), "utf-8");
 }
@@ -171,7 +171,7 @@ export function getProjectSlashCommandTemplate(cwd: string | undefined, command:
 export function wrapWithVibeApi(html: string, slug: string): string {
   const apiScript = `<script>
 (function() {
-  var SKILL_SLUG = ${JSON.stringify(slug)};
+  var PANEL_SLUG = ${JSON.stringify(slug)};
 
   async function vibeExec(command, options) {
     var res = await fetch('/api/exec', {
@@ -186,14 +186,14 @@ export function wrapWithVibeApi(html: string, slug: string): string {
     command: vibeExec,
     store: {
       async get(key) {
-        var res = await fetch('/api/skills/' + encodeURIComponent(SKILL_SLUG) + '/state');
+        var res = await fetch('/api/panels/' + encodeURIComponent(PANEL_SLUG) + '/state');
         var state = await res.json();
         return key !== undefined ? state[key] : state;
       },
       async set(key, value) {
         var current = await this.get();
         current[key] = value;
-        await fetch('/api/skills/' + encodeURIComponent(SKILL_SLUG) + '/state', {
+        await fetch('/api/panels/' + encodeURIComponent(PANEL_SLUG) + '/state', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(current)
