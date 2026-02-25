@@ -41,7 +41,7 @@ import type { ServerWebSocket } from "bun";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const packageRoot = process.env.__COMPANION_PACKAGE_ROOT || resolve(__dirname, "..");
 
-import { DEFAULT_PORT_DEV, DEFAULT_PORT_PROD } from "./constants.js";
+import { DEFAULT_PORT_DEV, DEFAULT_PORT_PROD, DEFAULT_FRONTEND_PORT_DEV } from "./constants.js";
 
 const defaultPort = process.env.NODE_ENV === "production" ? DEFAULT_PORT_PROD : DEFAULT_PORT_DEV;
 const port = Number(process.env.PORT) || defaultPort;
@@ -219,6 +219,24 @@ if (process.env.NODE_ENV === "production") {
   app.use("/*", cacheControlMiddleware());
   app.use("/*", serveStatic({ root: distDir }));
   app.get("/*", serveStatic({ path: resolve(distDir, "index.html") }));
+} else {
+  // In dev mode, proxy all frontend requests to the Vite dev server so the API
+  // port (3457) also serves the UI — enabling QR code access from phones on LAN.
+  const vitePort = Number(process.env.VITE_PORT) || DEFAULT_FRONTEND_PORT_DEV;
+  app.all("/*", async (c) => {
+    const url = new URL(c.req.url);
+    const viteUrl = `http://localhost:${vitePort}${url.pathname}${url.search}`;
+    try {
+      const resp = await fetch(viteUrl, {
+        method: c.req.method,
+        headers: c.req.raw.headers,
+        body: ["GET", "HEAD"].includes(c.req.method) ? undefined : c.req.raw.body,
+      });
+      return new Response(resp.body, { status: resp.status, headers: resp.headers });
+    } catch {
+      return c.text(`Vite dev server not reachable on port ${vitePort}`, 503);
+    }
+  });
 }
 
 const server = Bun.serve<SocketData>({
@@ -335,7 +353,8 @@ console.log(`  CLI WebSocket:     ws://localhost:${server.port}/ws/cli/:sessionI
 console.log(`  Browser WebSocket: ws://localhost:${server.port}/ws/browser/:sessionId`);
 
 if (process.env.NODE_ENV !== "production") {
-  console.log("Dev mode: frontend at http://localhost:2345");
+  const vitePort = Number(process.env.VITE_PORT) || DEFAULT_FRONTEND_PORT_DEV;
+  console.log(`Dev mode: Vite at http://localhost:${vitePort} (proxied through :${server.port})`);
 }
 
 // ── Cron scheduler ──────────────────────────────────────────────────────────
