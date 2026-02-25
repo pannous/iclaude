@@ -991,8 +991,10 @@ export const api = {
 
   // Saved prompts ({cwd}/prompts/*.md)
   listPrompts: (cwd?: string) => {
-    if (!cwd) return Promise.resolve([] as SavedPrompt[]);
-    return get<SavedPrompt[]>(`/prompts?cwd=${encodeURIComponent(cwd)}`);
+    const params = new URLSearchParams();
+    if (cwd) params.set("cwd", cwd);
+    else params.set("scope", "global");
+    return get<SavedPrompt[]>(`/prompts?${params}`);
   },
   createPrompt: (data: { name: string; content: string; cwd: string }) =>
     post<SavedPrompt>("/prompts", data),
