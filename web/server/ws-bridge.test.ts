@@ -3457,22 +3457,24 @@ describe("MCP control messages", () => {
 // ─── stripSystemTags ──────────────────────────────────────────────────────────
 
 describe("stripSystemTags", () => {
-  it("strips <local-command-caveat> tags and their closing tags", () => {
+  // System tag content is stripped entirely — these blocks are never user intent.
+  it("strips <local-command-caveat> block including its content", () => {
     const input = '<local-command-caveat>Caveat: The messages below were generated</local-command-caveat> actual user message';
-    expect(stripSystemTags(input)).toBe("Caveat: The messages below were generated actual user message");
+    expect(stripSystemTags(input)).toBe("actual user message");
   });
 
-  it("strips <local-command-stdout> tags", () => {
-    expect(stripSystemTags("<local-command-stdout>Enabled plan mode</local-command-stdout>")).toBe("Enabled plan mode");
+  it("strips <local-command-stdout> block including its content", () => {
+    expect(stripSystemTags("<local-command-stdout>Enabled plan mode</local-command-stdout>")).toBe("");
   });
 
-  it("strips <command-name> and <command-args> tags", () => {
+  it("strips <command-name> and <command-args> blocks including their content", () => {
+    // command-message is stripped too; <command-args> with empty body is also removed
     const input = '<command-name>/plan</command-name> <command-message>plan</command-message> <command-args></command-args>';
-    expect(stripSystemTags(input)).toBe("/plan plan");
+    expect(stripSystemTags(input)).toBe("");
   });
 
-  it("strips <system-reminder> tags", () => {
-    expect(stripSystemTags("<system-reminder>reminder text</system-reminder>")).toBe("reminder text");
+  it("strips <system-reminder> block including its content", () => {
+    expect(stripSystemTags("<system-reminder>reminder text</system-reminder>")).toBe("");
   });
 
   it("returns empty string when content is only system tags", () => {
@@ -3485,6 +3487,12 @@ describe("stripSystemTags", () => {
 
   it("passes through plain text unchanged", () => {
     expect(stripSystemTags("Fix the login bug")).toBe("Fix the login bug");
+  });
+
+  it("strips caveat block but keeps the real user message that follows", () => {
+    // A meta message followed by actual user content — only the actual content survives.
+    const input = '<local-command-caveat>DO NOT RESPOND</local-command-caveat>\nPlease fix the bug';
+    expect(stripSystemTags(input)).toBe("Please fix the bug");
   });
 });
 

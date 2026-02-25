@@ -11,6 +11,7 @@ import { existsSync, readFileSync, createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import type { CliLauncher } from "./cli-launcher.js";
 import type { WsBridge } from "./ws-bridge.js";
+import { stripSystemTags } from "./ws-bridge.js";
 import type { SessionStore } from "./session-store.js";
 import type { WorktreeTracker } from "./worktree-tracker.js";
 import type { TerminalManager } from "./terminal-manager.js";
@@ -1640,24 +1641,29 @@ async function extractSessionTitle(filePath: string): Promise<string> {
           resolve(stripTitleGenPrompt(data.summary?.slice(0, 120) || ""));
           return;
         }
-        if (data.type !== "user") return;
+        // isMeta entries are local-command caveats — never user content, never a title.
+        if (data.type !== "user" || data.isMeta === true) return;
         const msg = data.message;
         if (!msg) return;
         const content = msg.content;
+        let rawText = "";
         if (Array.isArray(content)) {
           for (const block of content) {
             if (block?.type === "text" && block.text) {
-              found = true;
-              rl.close();
-              resolve(stripTitleGenPrompt(block.text.slice(0, 120)));
-              return;
+              rawText = block.text;
+              break;
             }
           }
         } else if (typeof content === "string") {
-          found = true;
-          rl.close();
-          resolve(stripTitleGenPrompt(content.slice(0, 120)));
+          rawText = content;
         }
+        if (!rawText) return;
+        // Strip system-injected tags before using as title.
+        const clean = stripTitleGenPrompt(stripSystemTags(rawText.slice(0, 500)));
+        if (!clean) return;
+        found = true;
+        rl.close();
+        resolve(clean.slice(0, 120));
       } catch { /* skip malformed lines */ }
     });
     rl.on("close", () => { if (!found) resolve(""); });

@@ -864,8 +864,11 @@ function handleParsedMessage(
     }
 
     case "title_updated": {
+      // Last-resort client-side guard: never display raw system XML tags as a title.
+      const title = (data.title || "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+      if (!title) break;
       const updated = store.sdkSessions.map((s) =>
-        s.sessionId === sessionId ? { ...s, title: data.title } : s
+        s.sessionId === sessionId ? { ...s, title } : s
       );
       store.setSdkSessions(updated);
       break;

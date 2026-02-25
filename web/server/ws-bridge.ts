@@ -57,18 +57,26 @@ import {
   handlePermissionResponse,
 } from "./ws-bridge-browser.js";
 
-// LOCAL: Known system-injected XML tags that wrap (or replace) user content.
-// Matches the tag AND its enclosed text so both are removed before title generation.
-const SYSTEM_TAG_RE = /<\/?(local-command-caveat|local-command-stdout|command-name|command-message|command-args|system-reminder|user-prompt-submit-hook|antml:[a-z_]+)[^>]*>/g;
+// LOCAL: System-injected XML tags whose ENTIRE block (tags + content) should be stripped.
+// These tags and their enclosed text are purely system-generated and never represent user intent.
+const SYSTEM_BLOCK_RE = /<(local-command-caveat|local-command-stdout|local-command-stderr|command-name|command-message|command-args|system-reminder|user-prompt-submit-hook|antml:[a-z_]+)[^>]*>[\s\S]*?<\/\1>/g;
+// Residual standalone opening/closing tags left after block removal (e.g. unclosed or empty).
+const SYSTEM_TAG_RE = /<\/?(local-command-caveat|local-command-stdout|local-command-stderr|command-name|command-message|command-args|system-reminder|user-prompt-submit-hook|antml:[a-z_]+)[^>]*>/g;
 
-/** Strip Claude Code system-injected XML tags and their content from a message. */
+/** Strip Claude Code system-injected XML tags and their full block content from a message. */
 export function stripSystemTags(message: string): string {
-  return message.replace(SYSTEM_TAG_RE, "").replace(/\s+/g, " ").trim();
+  return message
+    .replace(SYSTEM_BLOCK_RE, "")   // strip full <tag>…</tag> blocks first
+    .replace(SYSTEM_TAG_RE, "")     // then remove any residual standalone tags
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // LOCAL: Truncate a message to use as a session title (max ~50 chars at word boundary).
 export function truncateTitle(message: string): string {
-  const cleaned = message.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+  // Use stripSystemTags to remove ALL system content before building the title.
+  // stripSystemTags removes known system blocks + tags; then strip any residual HTML-like tags.
+  const cleaned = stripSystemTags(message).replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
   if (cleaned.length <= 50) return cleaned;
   const words = cleaned.split(" ");
   let title = "";
@@ -377,6 +385,9 @@ export class WsBridge {
           const entry = JSON.parse(line);
 
           if (entry.type === "user") {
+            // isMeta entries are local-command caveats and other system housekeeping — never user content.
+            if (entry.isMeta === true) continue;
+
             // Extract text content from user message
             let textContent = "";
             if (typeof entry.message.content === "string") {
@@ -600,11 +611,14 @@ export class WsBridge {
 
   /** Set the title for a session, persist it, and notify browsers. */
   setTitle(sessionId: string, title: string): void {
+    // Strip any leaked system tags before persisting — last server-side defence.
+    const clean = stripSystemTags(title);
+    if (!clean) return;
     const session = this.sessions.get(sessionId);
     if (session) {
-      session.title = title;
+      session.title = clean;
       this.persistSession(session);
-      this.broadcastToBrowsers(session, { type: "title_updated", title });
+      this.broadcastToBrowsers(session, { type: "title_updated", title: clean });
     }
   }
 
