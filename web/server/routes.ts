@@ -89,7 +89,7 @@ export function createRoutes(
       return c.json({ error: "unauthorized" }, 401);
     }
 
-    const port = Number(process.env.PORT) || (process.env.NODE_ENV === "production" ? 3456 : 3457);
+    const port = Number(process.env.PORT) || 3456;
     const authToken = getToken();
 
     // Build QR codes for each remote address (skip localhost — it auto-auths).

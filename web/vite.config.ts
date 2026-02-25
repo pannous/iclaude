@@ -52,9 +52,9 @@ export default defineConfig({
     strictPort: true,
     allowedHosts: [".trycloudflare.com","mac.fritz.box"],
     proxy: {
-      "/api": "http://localhost:3457",
+      "/api": "http://localhost:3456",
       "/ws": {
-        target: "ws://localhost:3457",
+        target: "ws://localhost:3456",
         ws: true,
         rewriteWsOrigin: true,
         changeOrigin: true,

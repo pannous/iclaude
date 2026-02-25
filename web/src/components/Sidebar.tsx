@@ -746,7 +746,7 @@ export function Sidebar() {
                     </svg>
                     Archived ({archivedSessions.length})
                   </button>
-                  {showArchived && archivedSessions.length > 0 && (
+                  {archivedSessions.length > 0 && (
                     <button
                       onClick={clearAllArchived}
                       className="px-2 py-1 mr-1 text-[10px] text-cc-muted hover:text-cc-fg hover:bg-cc-hover rounded-md transition-colors cursor-pointer"

@@ -221,7 +221,7 @@ if (process.env.NODE_ENV === "production") {
   app.get("/*", serveStatic({ path: resolve(distDir, "index.html") }));
 } else {
   // In dev mode, proxy all frontend requests to the Vite dev server so the API
-  // port (3457) also serves the UI — enabling QR code access from phones on LAN.
+  // port (3456) also serves the UI — enabling QR code access from phones on LAN.
   const vitePort = Number(process.env.VITE_PORT) || DEFAULT_FRONTEND_PORT_DEV;
   app.all("/*", async (c) => {
     const url = new URL(c.req.url);
