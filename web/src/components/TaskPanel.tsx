@@ -10,7 +10,7 @@ import { formatResetTime, formatCodexResetTime, formatWindowDuration, formatToke
 import { timeAgo } from "../utils/time-ago.js";
 import { captureException } from "../analytics.js";
 import { SectionErrorBoundary } from "./SectionErrorBoundary.js";
-import { SKILL_ICON_PATHS, PUZZLE_ICON_PATH } from "../utils/skill-icons.js";
+import { PANEL_ICON_PATHS, PUZZLE_ICON_PATH } from "../utils/panel-icons.js";
 
 const EMPTY_TASKS: TaskItem[] = [];
 const COUNTDOWN_REFRESH_MS = 30_000;
@@ -924,17 +924,17 @@ function TasksSection({ sessionId }: { sessionId: string }) {
 // ─── Plugins Section ────────────────────────────────────────────────────────
 
 function PluginsSection({ sessionId: _sessionId }: { sessionId: string }) {
-  const [skills, setSkills] = useState<{ slug: string; name: string; icon?: string; type?: string }[]>([]);
+  const [panels, setPanels] = useState<{ slug: string; name: string; icon?: string; type?: string }[]>([]);
   const [expanded, setExpanded] = useState(false);
-  const openSkill = useStore((s) => s.openSkill);
+  const openPanel = useStore((s) => s.openPanel);
 
   useEffect(() => {
-    api.listSkills()
-      .then((list) => setSkills(list.filter((s) => s.type !== "markdown")))
-      .catch(() => setSkills([]));
+    api.listPanels()
+      .then((list) => setPanels(list.filter((s) => s.type !== "markdown")))
+      .catch(() => setPanels([]));
   }, []);
 
-  if (skills.length === 0) return null;
+  if (panels.length === 0) return null;
 
   return (
     <div className="shrink-0 border-b border-cc-border">
@@ -948,19 +948,19 @@ function PluginsSection({ sessionId: _sessionId }: { sessionId: string }) {
         <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 opacity-60">
           <path d={PUZZLE_ICON_PATH} />
         </svg>
-        Plugins ({skills.length})
+        Panels ({panels.length})
       </button>
       {expanded && (
         <div className="px-4 pb-3 space-y-0.5">
-          {skills.map((s) => (
+          {panels.map((s) => (
             <button
               key={s.slug}
-              onClick={() => openSkill(s.slug)}
+              onClick={() => openPanel(s.slug)}
               className="w-full text-left px-2 py-1.5 rounded-md text-[12px] text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer flex items-center gap-2"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                 strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-cc-muted shrink-0">
-                <path d={SKILL_ICON_PATHS[s.icon || ""] || SKILL_ICON_PATHS.terminal} />
+                <path d={PANEL_ICON_PATHS[s.icon || ""] || PANEL_ICON_PATHS.terminal} />
               </svg>
               <span className="truncate">{s.name}</span>
             </button>

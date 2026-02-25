@@ -1,12 +1,12 @@
 import { api } from "../api.js";
 
-export function SkillPanel({ slug }: { slug: string }) {
+export function Panel({ slug }: { slug: string }) {
   return (
     <div className="h-full flex flex-col bg-cc-bg">
       <iframe
-        src={api.getSkillPanelUrl(slug)}
+        src={api.getPanelUrl(slug)}
         className="flex-1 w-full border-0"
-        title={`Skill: ${slug}`}
+        title={`Panel: ${slug}`}
         sandbox="allow-scripts allow-same-origin allow-forms"
       />
     </div>

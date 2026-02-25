@@ -26,9 +26,9 @@ const EnvManager = lazy(() => import("./components/EnvManager.js").then((m) => (
 const CronManager = lazy(() => import("./components/CronManager.js").then((m) => ({ default: m.CronManager })));
 const AgentsPage = lazy(() => import("./components/AgentsPage.js").then((m) => ({ default: m.AgentsPage })));
 const TerminalPage = lazy(() => import("./components/TerminalPage.js").then((m) => ({ default: m.TerminalPage })));
-// LOCAL: Skill panel, skills page, and file editor lazy loads
-const SkillPanel = lazy(() => import("./components/SkillPanel.js").then((m) => ({ default: m.SkillPanel })));
-const SkillsPage = lazy(() => import("./components/SkillsPage.js").then((m) => ({ default: m.SkillsPage })));
+// LOCAL: Panel, panels page, and file editor lazy loads
+const Panel = lazy(() => import("./components/Panel.js").then((m) => ({ default: m.Panel })));
+const PanelsPage = lazy(() => import("./components/PanelsPage.js").then((m) => ({ default: m.PanelsPage })));
 const FileEditor = lazy(() => import("./components/FileEditor.js").then((m) => ({ default: m.FileEditor })));
 
 function LazyFallback() {
@@ -74,7 +74,7 @@ export default function App() {
   const isEnvironmentsPage = route.page === "environments";
   const isScheduledPage = route.page === "scheduled";
   const isAgentsPage = route.page === "agents" || route.page === "agent-detail";
-  const isSkillsPage = route.page === "skills";
+  const isPanelsPage = route.page === "panels";
   const isSessionView = route.page === "session" || route.page === "home";
 
   useEffect(() => {
@@ -191,7 +191,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Listen for postMessage from HTML fragment iframes and skill panels
+  // Listen for postMessage from HTML fragment iframes and panels
   useEffect(() => {
     function handleMessage(e: MessageEvent) {
       const d = e.data;
@@ -375,9 +375,9 @@ export default function App() {
             </div>
           )}
 
-          {isSkillsPage && (
+          {isPanelsPage && (
             <div className="absolute inset-0">
-              <Suspense fallback={<LazyFallback />}><SkillsPage /></Suspense>
+              <Suspense fallback={<LazyFallback />}><PanelsPage /></Suspense>
             </div>
           )}
 
@@ -407,15 +407,15 @@ export default function App() {
                 )}
               </div>
 
-              {/* Skill panels — lazy-loaded, one per open skill */}
-              {activeTab.startsWith("skill:") && (
+              {/* Panels — lazy-loaded, one per open panel */}
+              {activeTab.startsWith("panel:") && (
                 <div className="absolute inset-0">
                   <Suspense fallback={
                     <div className="h-full flex items-center justify-center">
                       <div className="w-5 h-5 border-2 border-cc-primary border-t-transparent rounded-full animate-spin" />
                     </div>
                   }>
-                    <SkillPanel slug={activeTab.slice(6)} />
+                    <Panel slug={activeTab.slice(6)} />
                   </Suspense>
                 </div>
               )}

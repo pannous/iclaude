@@ -649,7 +649,7 @@ function AgentEditor({
     url: "",
     env: "",
   });
-  const [availableSkills, setAvailableSkills] = useState<{ slug: string; name: string; description: string }[]>([]);
+  const [availablePanels, setAvailablePanels] = useState<{ slug: string; name: string; description: string }[]>([]);
   const [envProfiles, setEnvProfiles] = useState<CompanionEnv[]>([]);
   const [allowedToolInput, setAllowedToolInput] = useState("");
   const [showModelDropdown, setShowModelDropdown] = useState(false);
@@ -660,9 +660,9 @@ function AgentEditor({
   const modeDropdownRef = useRef<HTMLDivElement>(null);
   const envDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fetch skills and env profiles on mount
+  // Fetch panels and env profiles on mount
   useEffect(() => {
-    api.listSkills().then(setAvailableSkills).catch(() => {});
+    api.listPanels().then(setAvailablePanels).catch(() => {});
     api.listEnvs().then(setEnvProfiles).catch(() => {});
   }, []);
 
@@ -725,8 +725,8 @@ function AgentEditor({
     });
   }
 
-  // ── Skills toggle ──
-  function toggleSkill(slug: string) {
+  // ── Panels toggle ──
+  function togglePanel(slug: string) {
     setForm((prev) => ({
       ...prev,
       skills: prev.skills.includes(slug)
@@ -1275,28 +1275,28 @@ function AgentEditor({
                   )}
                 </div>
 
-                {/* ── Skills ── */}
+                {/* ── Panels ── */}
                 <div>
-                  <h3 className="text-xs font-medium text-cc-muted mb-2">Skills</h3>
-                  {availableSkills.length === 0 ? (
-                    <p className="text-[10px] text-cc-muted">No skills found in ~/.claude/skills/</p>
+                  <h3 className="text-xs font-medium text-cc-muted mb-2">Panels</h3>
+                  {availablePanels.length === 0 ? (
+                    <p className="text-[10px] text-cc-muted">No panels found in ~/.companion/panels/</p>
                   ) : (
                     <div className="space-y-1.5">
-                      {availableSkills.map((skill) => (
+                      {availablePanels.map((panel) => (
                         <label
-                          key={skill.slug}
+                          key={panel.slug}
                           className="flex items-start gap-2 text-sm text-cc-fg cursor-pointer"
                         >
                           <input
                             type="checkbox"
-                            checked={form.skills.includes(skill.slug)}
-                            onChange={() => toggleSkill(skill.slug)}
+                            checked={form.skills.includes(panel.slug)}
+                            onChange={() => togglePanel(panel.slug)}
                             className="rounded mt-0.5"
                           />
                           <div>
-                            <span className="text-xs">{skill.name}</span>
-                            {skill.description && (
-                              <p className="text-[10px] text-cc-muted">{skill.description}</p>
+                            <span className="text-xs">{panel.name}</span>
+                            {panel.description && (
+                              <p className="text-[10px] text-cc-muted">{panel.description}</p>
                             )}
                           </div>
                         </label>

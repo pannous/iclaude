@@ -16,6 +16,7 @@ const mockApi = {
   importAgent: vi.fn(),
   regenerateAgentWebhookSecret: vi.fn(),
   listSkills: vi.fn(),
+  listPanels: vi.fn(),
   listEnvs: vi.fn(),
 };
 
@@ -32,6 +33,7 @@ vi.mock("../api.js", () => ({
     regenerateAgentWebhookSecret: (...args: unknown[]) =>
       mockApi.regenerateAgentWebhookSecret(...args),
     listSkills: (...args: unknown[]) => mockApi.listSkills(...args),
+    listPanels: (...args: unknown[]) => mockApi.listPanels(...args),
     listEnvs: (...args: unknown[]) => mockApi.listEnvs(...args),
   },
 }));
@@ -75,8 +77,9 @@ const defaultRoute = { page: "agents" as const };
 beforeEach(() => {
   vi.clearAllMocks();
   mockApi.listAgents.mockResolvedValue([]);
-  // Default: no skills or envs fetched
+  // Default: no panels or envs fetched
   mockApi.listSkills.mockResolvedValue([]);
+  mockApi.listPanels.mockResolvedValue([]);
   mockApi.listEnvs.mockResolvedValue([]);
   window.location.hash = "#/agents";
 });
@@ -531,7 +534,7 @@ describe("AgentsPage", () => {
 
   it("Advanced section collapse/expand toggle works", async () => {
     // The Advanced section is collapsed by default for new agents.
-    // Clicking the toggle should expand and show MCP Servers, Skills,
+    // Clicking the toggle should expand and show MCP Servers, Panels,
     // Allowed Tools, and Environment Variables sub-sections.
     render(<AgentsPage route={defaultRoute} />);
     await waitFor(() => {
@@ -550,7 +553,7 @@ describe("AgentsPage", () => {
 
     // Sub-sections should now be visible
     expect(screen.getByText("MCP Servers")).toBeInTheDocument();
-    expect(screen.getByText("Skills")).toBeInTheDocument();
+    expect(screen.getByText("Panels")).toBeInTheDocument();
     expect(screen.getByText("Allowed Tools")).toBeInTheDocument();
     expect(screen.getByText("Environment Variables")).toBeInTheDocument();
   });
@@ -609,12 +612,12 @@ describe("AgentsPage", () => {
     expect(screen.getByText("No extra variables set.")).toBeInTheDocument();
   });
 
-  // ── Skills ─────────────────────────────────────────────────────────────
+  // ── Panels ─────────────────────────────────────────────────────────────
 
-  it("Skills checkbox list renders fetched skills", async () => {
-    // When the API returns skills, they should appear as checkboxes in the
-    // Advanced > Skills sub-section.
-    mockApi.listSkills.mockResolvedValue([
+  it("Panels checkbox list renders fetched panels", async () => {
+    // When the API returns panels, they should appear as checkboxes in the
+    // Advanced > Panels sub-section.
+    mockApi.listPanels.mockResolvedValue([
       { slug: "code-review", name: "Code Review", description: "Reviews code changes" },
       { slug: "testing", name: "Testing", description: "Writes tests" },
     ]);
@@ -633,9 +636,9 @@ describe("AgentsPage", () => {
     });
   });
 
-  it("Skills shows empty state when no skills found", async () => {
-    // When the API returns no skills, a helpful message should appear.
-    mockApi.listSkills.mockResolvedValue([]);
+  it("Panels shows empty state when no panels found", async () => {
+    // When the API returns no panels, a helpful message should appear.
+    mockApi.listPanels.mockResolvedValue([]);
     render(<AgentsPage route={defaultRoute} />);
     await waitFor(() => {
       expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
@@ -643,7 +646,7 @@ describe("AgentsPage", () => {
     fireEvent.click(screen.getByText("+ New Agent"));
     fireEvent.click(screen.getByText("Advanced"));
 
-    expect(screen.getByText("No skills found in ~/.claude/skills/")).toBeInTheDocument();
+    expect(screen.getByText("No panels found in ~/.companion/panels/")).toBeInTheDocument();
   });
 
   // ── MCP Servers ────────────────────────────────────────────────────────

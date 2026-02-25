@@ -8,7 +8,7 @@ import type { ModeOption } from "../utils/backends.js";
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
 import { scanContent } from "../utils/result-scanner.js";
 
-// LOCAL: slugify for skill names
+// LOCAL: slugify for panel names
 function slugify(input: string): string {
   return input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "untitled";
 }

@@ -49,7 +49,7 @@ export const SECTION_DEFINITIONS: TaskPanelSectionDef[] = [
   },
   {
     id: "plugins",
-    label: "Plugins",
+    label: "Panels",
     description: "Interactive HTML panels",
     backends: null,
   },
