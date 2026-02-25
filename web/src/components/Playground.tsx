@@ -31,6 +31,7 @@ import {
   MOCK_PR_FAILING, MOCK_PR_PASSING, MOCK_PR_DRAFT, MOCK_PR_MERGED,
   MOCK_MCP_SERVERS, MOCK_LINEAR_ISSUE_ACTIVE, MOCK_LINEAR_ISSUE_DONE, MOCK_LINEAR_COMMENTS,
   createMockSession,
+  type ToolItem,
 } from "./playground-mock-data.js";
 
 // ─── Playground Component ───────────────────────────────────────────────────
@@ -1289,7 +1290,6 @@ function PlaygroundTerminalTabsMock() {
 
 // ─── Inline Tool Group (mirrors MessageFeed's ToolMessageGroup) ─────────────
 
-interface ToolItem { id: string; name: string; input: Record<string, unknown> }
 
 function PlaygroundToolGroup({ toolName, items }: { toolName: string; items: ToolItem[] }) {
   const [open, toggleOpen] = useToggle();
@@ -1531,7 +1531,7 @@ function PlaygroundClaudeMdButton() {
 // ─── Inline MCP Server Row (static preview, no WebSocket) ──────────────────
 
 function PlaygroundMcpRow({ server }: { server: McpServerDetail }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, toggleExpanded] = useToggle();
   const statusMap: Record<string, { label: string; cls: string; dot: string }> = {
     connected: { label: "Connected", cls: "text-cc-success bg-cc-success/10", dot: "bg-cc-success" },
     connecting: { label: "Connecting", cls: "text-cc-warning bg-cc-warning/10", dot: "bg-cc-warning animate-pulse" },
@@ -1544,7 +1544,7 @@ function PlaygroundMcpRow({ server }: { server: McpServerDetail }) {
     <div className="rounded-lg border border-cc-border bg-cc-bg">
       <div className="flex items-center gap-2 px-2.5 py-2">
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${badge.dot}`} />
-        <button onClick={() => setExpanded(!expanded)} className="flex-1 min-w-0 text-left cursor-pointer">
+        <button onClick={toggleExpanded} className="flex-1 min-w-0 text-left cursor-pointer">
           <span className="text-[12px] font-medium text-cc-fg truncate block">{server.name}</span>
         </button>
         <span className={`text-[9px] font-medium px-1.5 rounded-full leading-[16px] shrink-0 ${badge.cls}`}>
