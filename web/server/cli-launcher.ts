@@ -167,6 +167,8 @@ export interface LaunchOptions {
   resumeSessionAt?: string;
   /** Fork a new Claude session when resuming from prior context. */
   forkSession?: boolean;
+  /** Pre-generated session ID to use instead of a random UUID. */
+  sessionId?: string;
 }
 
 /**
@@ -312,7 +314,7 @@ export class CliLauncher {
    * Launch a new CLI session (Claude Code or Codex).
    */
   launch(options: LaunchOptions = {}): SdkSessionInfo {
-    const sessionId = randomUUID();
+    const sessionId = options.sessionId ?? randomUUID();
     const cwd = options.cwd || process.cwd();
     const backendType = options.backendType || "claude";
 

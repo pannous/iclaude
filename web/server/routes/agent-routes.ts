@@ -149,7 +149,7 @@ export function registerAgentRoutes(
     if (!agent) return c.json({ error: "Agent not found" }, 404);
     const body = await c.req.json().catch(() => ({}));
     const input = typeof body.input === "string" ? body.input : undefined;
-    const sessionId = await agentExecutor?.executeAgentManually(id, input);
+    const sessionId = agentExecutor?.executeAgentManually(id, input);
     return c.json({ ok: true, message: "Agent triggered", sessionId });
   });
 

@@ -2,6 +2,7 @@ import { Cron } from "croner";
 import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
 import type { AgentConfig, AgentExecution } from "./agent-types.js";
 import type { CliLauncher, SdkSessionInfo } from "./cli-launcher.js";
 import type { WsBridge } from "./ws-bridge.js";
@@ -107,7 +108,7 @@ export class AgentExecutor {
   async executeAgent(
     agentId: string,
     input?: string,
-    opts?: { force?: boolean; triggerType?: "manual" | "webhook" | "schedule"; onLaunch?: (sessionId: string) => void },
+    opts?: { force?: boolean; triggerType?: "manual" | "webhook" | "schedule"; sessionId?: string },
   ): Promise<SdkSessionInfo | undefined> {
     const agent = agentStore.getAgent(agentId);
     if (!agent) return;
@@ -158,10 +159,10 @@ export class AgentExecutor {
         codexSandbox: agent.backendType === "codex"
           ? (agent.permissionMode === "bypassPermissions" ? "danger-full-access" : "workspace-write")
           : undefined,
+        sessionId: opts?.sessionId,
       });
 
       execution.sessionId = sessionInfo.sessionId;
-      opts?.onLaunch?.(sessionInfo.sessionId);
 
       // Tag the session as agent-originated
       sessionInfo.agentId = agentId;
@@ -234,20 +235,24 @@ export class AgentExecutor {
   }
 
   /** Manual trigger (run now regardless of schedule, bypasses enabled check).
-   *  Returns the sessionId as soon as the CLI process is spawned (before async setup completes). */
-  executeAgentManually(agentId: string, input?: string): Promise<string | undefined> {
-    return new Promise<string | undefined>((resolve) => {
-      let resolved = false;
-      this.executeAgent(agentId, input, {
-        force: true,
-        triggerType: "manual",
-        onLaunch: (sessionId) => { resolved = true; resolve(sessionId); },
-      }).catch((err) => {
-        console.error(`[agent-executor] Manual execution of agent "${agentId}" failed:`, err);
-      }).finally(() => {
-        if (!resolved) resolve(undefined);
-      });
+   *  Returns the sessionId immediately (before CLI connects) so the caller can navigate to it.
+   *  If the agent is already running, returns the existing session's ID so the UI navigates there. */
+  executeAgentManually(agentId: string, input?: string): string | undefined {
+    const agent = agentStore.getAgent(agentId);
+    if (!agent) return undefined;
+
+    // If already running, return the existing session so the UI can navigate to it
+    if (agent.lastSessionId && this.launcher.isAlive(agent.lastSessionId)) {
+      console.log(`[agent-executor] Agent "${agent.name}" already running — returning existing session`);
+      return agent.lastSessionId;
+    }
+
+    // Pre-generate sessionId so we can return it immediately while async setup runs in background
+    const sessionId = randomUUID();
+    this.executeAgent(agentId, input, { force: true, triggerType: "manual", sessionId }).catch((err) => {
+      console.error(`[agent-executor] Manual execution of agent "${agentId}" failed:`, err);
     });
+    return sessionId;
   }
 
   /** Wait for CLI to be connected (poll up to timeout). */
