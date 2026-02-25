@@ -1031,10 +1031,18 @@ export function Composer({ sessionId }: { sessionId: string }) {
               value={text}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
-              onClick={syncCaret}
+              // LOCAL: clicking at/after end-of-text accepts the ghost completion.
+              onClick={(e) => {
+                syncCaret();
+                const ta = e.currentTarget;
+                if (completionSuggestion && ta.selectionStart >= text.length) {
+                  acceptCompletion();
+                }
+              }}
               onKeyUp={syncCaret}
               onPaste={handlePaste}
-              onFocus={() => { if (!text) scheduleCompletion("", slashMenuOpen || mentionMenuOpen, isRunning); }}
+              // LOCAL: No onFocus scheduling — useEffect handles it; firing scheduleCompletion here
+              // would immediately clear any visible suggestion (onFocus fires on click + Tab-focus).
               aria-label="Message input"
               placeholder={isConnected && !completionSuggestion
                 ? "Type a message... (/ + @)"
