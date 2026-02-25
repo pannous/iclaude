@@ -1,5 +1,4 @@
 import type { ServerWebSocket } from "bun";
-// LOCAL: extra imports for title extraction from session files
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -19,6 +18,7 @@ import type {
   PermissionRequest,
   BackendType,
   McpServerConfig,
+  ContentBlock,
 } from "./session-types.js";
 import type { SessionStore } from "./session-store.js";
 import type { CodexAdapter } from "./codex-adapter.js";
@@ -124,6 +124,8 @@ export class WsBridge {
   private fragmentConsoleCache = new Map<string, Map<string, Array<{ level: string; args: string[]; ts: number }>>>();
   /** All browser sockets across all sessions, for global notifications. */
   private globalBrowserSockets = new Set<ServerWebSocket<SocketData>>();
+  /** Tracks sessions where we already warned about 0-browser broadcasts, to suppress repeats. */
+  private warnedNoBrowsers = new Set<string>();
   private userMsgCounter = 0;
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
   private sessionInfoLookup: ((sessionId: string) => { cliSessionId?: string; cwd?: string } | null) | null = null;
@@ -376,8 +378,17 @@ export class WsBridge {
 
       // Assistant messages arrive as streaming chunks with the same ID.
       // Collect all chunks per message ID and merge their content.
-      const assistantChunks = new Map<string, { chunks: any[]; timestamp: number; firstSeen: number }>();
-      const allMessages: Array<{ type: "user" | "assistant"; data: any; order: number }> = [];
+      interface AssistantChunk {
+        content?: ContentBlock[];
+        model?: string;
+        stop_reason?: string | null;
+        usage?: CLIAssistantMessage["message"]["usage"];
+      }
+      type HistoryEntry =
+        | { type: "user"; order: number; data: { content: string; timestamp: number } }
+        | { type: "assistant"; order: number; data: { id: string; content: ContentBlock[]; model?: string; stop_reason: string | null; usage?: CLIAssistantMessage["message"]["usage"]; timestamp: number } };
+      const assistantChunks = new Map<string, { chunks: AssistantChunk[]; timestamp: number; firstSeen: number }>();
+      const allMessages: HistoryEntry[] = [];
       let order = 0;
 
       for (const line of lines) {
@@ -388,14 +399,12 @@ export class WsBridge {
             // isMeta entries are local-command caveats and other system housekeeping — never user content.
             if (entry.isMeta === true) continue;
 
-            // Extract text content from user message
             let textContent = "";
             if (typeof entry.message.content === "string") {
               textContent = entry.message.content;
             } else if (Array.isArray(entry.message.content)) {
-              // Extract text from text blocks in the content array
-              const textBlocks = entry.message.content.filter((block: any) => block?.type === "text");
-              textContent = textBlocks.map((block: any) => block.text || "").join("\n").trim();
+              const textBlocks = entry.message.content.filter((block: ContentBlock) => block?.type === "text");
+              textContent = textBlocks.map((block: ContentBlock) => block.type === "text" ? block.text : "").join("\n").trim();
             }
 
             // Strip system-injected XML tags (e.g. <local-command-caveat>) from
@@ -427,24 +436,20 @@ export class WsBridge {
             assistantChunks.get(id)!.chunks.push(msg);
           }
         } catch (e) {
-          // Skip invalid lines
           console.warn(`[ws-bridge] Failed to parse CLI history line:`, e);
         }
       }
 
-      // Merge assistant chunks
       for (const [id, data] of assistantChunks.entries()) {
-        const mergedContent: any[] = [];
+        const mergedContent: ContentBlock[] = [];
         let model: string | undefined;
         let stop_reason: string | null = null;
-        let usage: any;
+        let usage: CLIAssistantMessage["message"]["usage"] | undefined;
 
-        // Merge content from all chunks
         for (const chunk of data.chunks) {
           if (Array.isArray(chunk.content)) {
             mergedContent.push(...chunk.content);
           }
-          // Use metadata from last chunk (most complete)
           model = chunk.model || model;
           stop_reason = chunk.stop_reason ?? stop_reason;
           usage = chunk.usage || usage;
@@ -464,7 +469,6 @@ export class WsBridge {
         });
       }
 
-      // Sort by order and build final message list
       allMessages.sort((a, b) => a.order - b.order);
       const messages: BrowserIncomingMessage[] = allMessages.map((m) => {
         if (m.type === "user") {
@@ -481,9 +485,9 @@ export class WsBridge {
               type: "message",
               role: "assistant",
               content: m.data.content,
-              model: m.data.model,
+              model: m.data.model ?? "",
               stop_reason: m.data.stop_reason,
-              usage: m.data.usage,
+              usage: m.data.usage ?? { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
             },
             parent_tool_use_id: null,
             timestamp: m.data.timestamp,
@@ -583,7 +587,8 @@ export class WsBridge {
     if (!session) return null;
     for (const msg of session.messageHistory) {
       if (msg.type !== "assistant") continue;
-      const content = (msg as any).message?.content;
+      const assistantMsg = msg as Extract<BrowserIncomingMessage, { type: "assistant" }>;
+      const content = assistantMsg.message?.content;
       if (!Array.isArray(content)) continue;
       for (const block of content) {
         if (block.type === "tool_result" && block.tool_use_id === toolUseId) {
@@ -749,10 +754,7 @@ export class WsBridge {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    // Record raw incoming CLI message before any parsing
     this.recorder?.record(sessionId, "in", data, "cli", session.backendType, session.state.cwd);
-
-    // NDJSON: split on newlines, parse each line
     const lines = data.split("\n").filter((l) => l.trim());
     for (const line of lines) {
       let msg: CLIMessage;
@@ -882,7 +884,6 @@ export class WsBridge {
     const session = this.sessions.get(sessionId);
     if (!session) return;
 
-    // Record raw incoming browser message
     this.recorder?.record(sessionId, "in", data, "browser", session.backendType, session.state.cwd);
 
     let msg: BrowserOutgoingMessage;
@@ -979,11 +980,9 @@ export class WsBridge {
         break;
 
       case "keep_alive":
-        // Silently consume keepalives
         break;
 
       default:
-        // Forward unknown messages as-is for debugging
         break;
     }
   }
@@ -1177,17 +1176,16 @@ export class WsBridge {
     // Deduplicate: skip if this message ID is already in history (e.g. from resume replay)
     const msgId = msg.message?.id;
     if (msgId && session.messageHistory.some(
-      m => m.type === "assistant" && (m as any).message?.id === msgId
+      m => m.type === "assistant" && (m as Extract<BrowserIncomingMessage, { type: "assistant" }>).message?.id === msgId
     )) {
       return;
     }
-    // Store full message in history (for on-demand API retrieval)
     session.messageHistory.push(browserMsg);
 
     // For subagent messages, strip tool_result content to save browser memory.
     // Results can be fetched on demand via GET /api/sessions/:id/tool-result/:toolUseId
     if (msg.parent_tool_use_id && msg.message?.content?.length) {
-      const lightContent = msg.message.content.map((block: any) => {
+      const lightContent = msg.message.content.map((block: ContentBlock) => {
         if (block.type === "tool_result" && block.content) {
           return { ...block, content: "__LAZY_RESULT__" };
         }
@@ -1561,7 +1559,6 @@ export class WsBridge {
       session.pendingMessages.push(ndjson);
       return;
     }
-    // Record raw outgoing CLI message (only when actually sending, not when queuing)
     this.recorder?.record(session.id, "out", ndjson, "cli", session.backendType, session.state.cwd);
     try {
       // NDJSON requires a newline delimiter
@@ -1592,16 +1589,15 @@ export class WsBridge {
     return true;
   }
 
-
   private broadcastToBrowsers(session: Session, msg: BrowserIncomingMessage) {
     // Warn once when assistant/stream messages reach 0 browsers; suppress repeats until browsers reconnect
     if (session.browserSockets.size === 0 && (msg.type === "assistant" || msg.type === "stream_event" || msg.type === "result")) {
-      if (!(session as any)._warnedNoBrowsers) {
-        (session as any)._warnedNoBrowsers = true;
-        console.log(`[ws-bridge] ⚠ Broadcasting ${msg.type} to 0 browsers for session ${session.id} (further warnings suppressed)`);
+      if (!this.warnedNoBrowsers.has(session.id)) {
+        this.warnedNoBrowsers.add(session.id);
+        console.log(`[ws-bridge] Broadcasting ${msg.type} to 0 browsers for session ${session.id} (further warnings suppressed)`);
       }
     } else {
-      (session as any)._warnedNoBrowsers = false;
+      this.warnedNoBrowsers.delete(session.id);
     }
     const json = JSON.stringify(
       sequenceEvent(
@@ -1612,7 +1608,6 @@ export class WsBridge {
       ),
     );
 
-    // Record raw outgoing browser message
     this.recorder?.record(session.id, "out", json, "browser", session.backendType, session.state.cwd);
 
     for (const ws of session.browserSockets) {
@@ -1631,8 +1626,6 @@ export class WsBridge {
       if (result === 0) {
         console.warn(`[ws-bridge] sendToBrowser: message dropped (backpressure) type=${msg.type} size=${json.length}`);
       }
-    } catch {
-      // Socket will be cleaned up on close
-    }
+    } catch {}
   }
 }

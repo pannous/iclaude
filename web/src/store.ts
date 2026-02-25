@@ -1,10 +1,8 @@
 import { create } from "zustand";
-import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem, ProcessItem, ProcessStatus, McpServerDetail } from "./types.js";
+import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem, ProcessItem, McpServerDetail } from "./types.js";
 import type { UpdateInfo, PRStatusResponse, CreationProgressEvent, LinearIssue } from "./api.js";
 import { safeStorage } from "./utils/safe-storage.js";
-import { type TaskPanelConfig, getInitialTaskPanelConfig, getDefaultConfig, persistTaskPanelConfig, SECTION_DEFINITIONS } from "./components/task-panel-sections.js";
-
-// ─── Immutable collection helpers ────────────────────────────────────────────
+import { type TaskPanelConfig, getInitialTaskPanelConfig, getDefaultConfig, persistTaskPanelConfig } from "./components/task-panel-sections.js";
 
 function setInMap<K, V>(map: Map<K, V>, key: K, value: V): Map<K, V> {
   const next = new Map(map);
@@ -70,88 +68,46 @@ function initTheme(): ThemeMode {
 
 const AUTH_STORAGE_KEY = "companion_auth_token";
 
-
 interface AppState {
-  // Auth
   authToken: string | null;
   isAuthenticated: boolean;
   // LOCAL: true while autoAuth is in flight — prevents login-page flash when auth is disabled
   authChecking: boolean;
 
-  // Sessions
   sessions: Map<string, SessionState>;
   sdkSessions: SdkSessionInfo[];
   currentSessionId: string | null;
-
-  // Messages per session
   messages: Map<string, ChatMessage[]>;
-
-  // Streaming partial text per session
   streaming: Map<string, string>;
-
-  // Streaming stats: start time + output tokens
   streamingStartedAt: Map<string, number>;
   streamingOutputTokens: Map<string, number>;
-
-  // Pending permissions per session (outer key = sessionId, inner key = request_id)
   pendingPermissions: Map<string, Map<string, PermissionRequest>>;
-
-  /** Browser↔Server WebSocket connection state per session */
   connectionStatus: Map<string, "connecting" | "connected" | "disconnected">;
-  /** CLI process↔Server connection state (pushed by server via "cli_connected"/"cli_disconnected") */
   cliConnected: Map<string, boolean>;
-
-  // Session status
   sessionStatus: Map<string, "idle" | "running" | "compacting" | null>;
-
-  // Plan mode: stores previous permission mode per session so we can restore it
   previousPermissionMode: Map<string, string>;
-
-  // Tasks per session
   sessionTasks: Map<string, TaskItem[]>;
 
-  // Tick incremented when agent edits an in-scope file — used to trigger DiffPanel re-fetch
+  // Tick incremented when agent edits an in-scope file — triggers DiffPanel re-fetch
   changedFilesTick: Map<string, number>;
-  // Count of files changed per session as reported by git (set by DiffPanel)
   gitChangedFilesCount: Map<string, number>;
 
-  // Background processes per session (Bash with run_in_background)
   sessionProcesses: Map<string, ProcessItem[]>;
-
-  // Session display names
   sessionNames: Map<string, string>;
   sessionSubtitles: Map<string, string>;
-  // Track sessions that were just renamed (for animation)
   recentlyRenamed: Set<string>;
-
-  // PR status per session (pushed by server via WebSocket)
   prStatus: Map<string, PRStatusResponse>;
-
-  // Linear issues linked to sessions
   linkedLinearIssues: Map<string, LinearIssue>;
-
-  // MCP servers per session
   mcpServers: Map<string, McpServerDetail[]>;
-
-  // Tool progress (session → tool_use_id → progress info)
   toolProgress: Map<string, Map<string, { toolName: string; elapsedSeconds: number }>>;
-
-  // HTML fragment state cache (last pushed via vibeReportState) and console logs
   fragmentState: Map<string, Record<string, unknown>>;
   fragmentConsole: Map<string, ConsoleLogEntry[]>;
-
-  // Sidebar project grouping
   collapsedProjects: Set<string>;
-
-  // Diff panel
   diffPanelSelectedFile: Map<string, string>;
-
-  // Update banner
   updateInfo: UpdateInfo | null;
   updateDismissedVersion: string | null;
   updateOverlayActive: boolean;
 
-  // Session creation progress (SSE streaming)
   creationProgress: CreationProgressEvent[] | null;
   creationError: string | null;
   sessionCreating: boolean;
@@ -161,7 +117,6 @@ interface AppState {
   setSessionCreating: (creating: boolean, backend?: "claude" | "codex") => void;
   setCreationError: (error: string | null) => void;
 
-  // UI
   theme: ThemeMode;
   darkMode: boolean;
   notificationSound: boolean;
@@ -175,22 +130,19 @@ interface AppState {
   editorTabEnabled: boolean;
   newSessionCwd: string | null; // LOCAL: custom cwd for new sessions
   activeTab: string; // LOCAL: "chat" | "diff" | "terminal" | "editor" | "processes" | "panel:<slug>"
-  openPanels: string[]; // LOCAL: panel tabs
-  editorOpenFile: Map<string, string>; // LOCAL: per-session editor file
-  editorUrl: Map<string, string>; // LOCAL: per-session editor URL
-  editorLoading: Map<string, boolean>; // LOCAL: per-session editor loading state
+  openPanels: string[];
+  editorOpenFile: Map<string, string>;
+  editorUrl: Map<string, string>;
+  editorLoading: Map<string, boolean>;
   chatTabReentryTickBySession: Map<string, number>;
 
-  // File editor tab state (global, not per-session)
-  editorFiles: string[]; // open file paths
+  editorFiles: string[];
   editorActiveFilePath: string | null;
 
-  // Auth actions
   setAuthToken: (token: string) => void;
   setAuthChecking: (checking: boolean) => void;
   logout: () => void;
 
-  // Actions
   setTheme: (theme: ThemeMode) => void;
   cycleTheme: () => void;
   setDarkMode: (v: boolean) => void;
@@ -211,83 +163,56 @@ interface AppState {
   newSession: () => void;
   newSessionInFolder: (cwd: string) => void;
 
-  // Session actions
   setCurrentSession: (id: string | null) => void;
   addSession: (session: SessionState) => void;
   updateSession: (sessionId: string, updates: Partial<SessionState>) => void;
   removeSession: (sessionId: string) => void;
   setSdkSessions: (sessions: SdkSessionInfo[]) => void;
 
-  // Message actions
   appendMessage: (sessionId: string, msg: ChatMessage) => void;
   setMessages: (sessionId: string, msgs: ChatMessage[]) => void;
   updateLastAssistantMessage: (sessionId: string, updater: (msg: ChatMessage) => ChatMessage) => void;
   setStreaming: (sessionId: string, text: string | null) => void;
   setStreamingStats: (sessionId: string, stats: { startedAt?: number; outputTokens?: number } | null) => void;
 
-  // Permission actions
   addPermission: (sessionId: string, perm: PermissionRequest) => void;
   removePermission: (sessionId: string, requestId: string) => void;
 
-  // Task actions
   addTask: (sessionId: string, task: TaskItem) => void;
   setTasks: (sessionId: string, tasks: TaskItem[]) => void;
   updateTask: (sessionId: string, taskId: string, updates: Partial<TaskItem>) => void;
 
-  // Changed files actions
   bumpChangedFilesTick: (sessionId: string) => void;
   setGitChangedFilesCount: (sessionId: string, count: number) => void;
 
-  // Process actions
   addProcess: (sessionId: string, process: ProcessItem) => void;
   updateProcess: (sessionId: string, taskId: string, updates: Partial<ProcessItem>) => void;
   updateProcessByToolUseId: (sessionId: string, toolUseId: string, updates: Partial<ProcessItem>) => void;
 
-  // Session name actions
   setSessionName: (sessionId: string, name: string) => void;
   setSessionSubtitle: (sessionId: string, subtitle: string) => void;
   markRecentlyRenamed: (sessionId: string) => void;
   clearRecentlyRenamed: (sessionId: string) => void;
 
-  // PR status action
   setPRStatus: (sessionId: string, status: PRStatusResponse) => void;
-
-  // Linear issue actions
   setLinkedLinearIssue: (sessionId: string, issue: LinearIssue | null) => void;
-
-  // MCP actions
   setMcpServers: (sessionId: string, servers: McpServerDetail[]) => void;
-
-  // Tool progress actions
   setToolProgress: (sessionId: string, toolUseId: string, data: { toolName: string; elapsedSeconds: number }) => void;
   clearToolProgress: (sessionId: string, toolUseId?: string) => void;
-
-  // Fragment bridge actions
   updateFragmentState: (fragmentId: string, state: Record<string, unknown>) => void;
   appendConsoleLog: (fragmentId: string, entry: ConsoleLogEntry) => void;
-
-  // Sidebar project grouping actions
   toggleProjectCollapse: (projectKey: string) => void;
   setAllProjectsCollapsed: (projectKeys: string[], collapsed: boolean) => void;
-
-  // Plan mode actions
   setPreviousPermissionMode: (sessionId: string, mode: string) => void;
-
-  // Connection actions
   setConnectionStatus: (sessionId: string, status: "connecting" | "connected" | "disconnected") => void;
   setCliConnected: (sessionId: string, connected: boolean) => void;
   setSessionStatus: (sessionId: string, status: "idle" | "running" | "compacting" | null) => void;
-
-  // Diff panel actions
   setDiffPanelSelectedFile: (sessionId: string, filePath: string) => void;
-
-  // Update banner actions
   setUpdateInfo: (info: UpdateInfo | null) => void;
   dismissUpdate: (version: string) => void;
   setUpdateOverlayActive: (active: boolean) => void;
   setEditorTabEnabled: (enabled: boolean) => void;
 
-  // LOCAL: Editor / Panel actions (string type for panel:<slug> tabs)
   setActiveTab: (tab: string) => void;
   markChatTabReentry: (sessionId: string) => void;
   openPanel: (slug: string) => void;
@@ -296,12 +221,10 @@ interface AppState {
   setEditorUrl: (sessionId: string, url: string) => void;
   setEditorLoading: (sessionId: string, loading: boolean) => void;
 
-  // File editor tab actions
   openFileInEditor: (filePath: string) => void;
   closeEditorFile: (filePath: string) => void;
   setEditorActiveFilePath: (filePath: string | null) => void;
 
-  // Session quick terminal (docked in session workspace)
   quickTerminalOpen: boolean;
   quickTerminalTabs: QuickTerminalTab[];
   activeQuickTerminalTabId: string | null;
@@ -309,25 +232,20 @@ interface AppState {
   quickTerminalNextHostIndex: number;
   quickTerminalNextDockerIndex: number;
 
-  // Diff settings
   diffBase: DiffBase;
 
-  // Session quick terminal actions
   setQuickTerminalOpen: (open: boolean) => void;
   openQuickTerminal: (opts: { target: "host" | "docker"; cwd: string; containerId?: string; reuseIfExists?: boolean }) => void;
   closeQuickTerminalTab: (tabId: string) => void;
   setActiveQuickTerminalTabId: (tabId: string | null) => void;
   resetQuickTerminal: () => void;
 
-  // Diff settings actions
   setDiffBase: (base: DiffBase) => void;
 
-  // Terminal state
   terminalOpen: boolean;
   terminalCwd: string | null;
   terminalId: string | null;
 
-  // Terminal actions
   setTerminalOpen: (open: boolean) => void;
   setTerminalCwd: (cwd: string | null) => void;
   setTerminalId: (id: string | null) => void;
@@ -966,7 +884,6 @@ export const useStore = create<AppState>((set) => ({
       quickTerminalNextDockerIndex: 1,
     }),
 
-
   setTerminalOpen: (open) => set({ terminalOpen: open }),
   setTerminalCwd: (cwd) => set({ terminalCwd: cwd }),
   setTerminalId: (id) => set({ terminalId: id }),
@@ -1005,7 +922,7 @@ export const useStore = create<AppState>((set) => ({
       linkedLinearIssues: new Map(),
       taskPanelConfigMode: false,
       editorTabEnabled: false,
-      activeTab: "chat" as const,
+      activeTab: "chat",
       editorOpenFile: new Map(), // LOCAL
       editorUrl: new Map(), // LOCAL
       editorLoading: new Map(), // LOCAL
