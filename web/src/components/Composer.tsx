@@ -44,8 +44,8 @@ interface SpeechRecognitionConstructor {
 
 const SpeechRecognitionAPI: SpeechRecognitionConstructor | undefined =
   typeof window !== "undefined"
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? ((window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition) as SpeechRecognitionConstructor | undefined
+    ? ((window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor }).SpeechRecognition
+      ?? (window as unknown as { webkitSpeechRecognition?: SpeechRecognitionConstructor }).webkitSpeechRecognition)
     : undefined;
 
 
@@ -157,10 +157,8 @@ export function Composer({ sessionId }: { sessionId: string }) {
       return;
     }
     scheduleCompletion(text, slashMenuOpen || mentionMenuOpen, false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, slashMenuOpen, mentionMenuOpen, isRunning]);
+  }, [text, slashMenuOpen, mentionMenuOpen, isRunning, scheduleCompletion]);
 
-  // Build command list from session data
   const allCommands = useMemo<CommandItem[]>(() => {
     const cmds: CommandItem[] = [];
     if (sessionData?.slash_commands) {
@@ -176,10 +174,8 @@ export function Composer({ sessionId }: { sessionId: string }) {
     return cmds;
   }, [sessionData?.slash_commands, sessionData?.skills]);
 
-  // Filter commands based on what the user typed after /
   const filteredCommands = useMemo(() => {
     if (!slashMenuOpen) return [];
-    // Extract the slash query: text starts with / and we match the part after /
     const match = text.match(/^\/(\S*)$/);
     if (!match) return [];
     const query = match[1].toLowerCase();
@@ -210,7 +206,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
     return [...startsWith, ...includes];
   }, [mentionMenuOpen, mentionContext, savedPrompts]);
 
-  // Open/close menu based on text
   useEffect(() => {
     const shouldOpen = text.startsWith("/") && /^\/\S*$/.test(text) && allCommands.length > 0;
     if (shouldOpen && !slashMenuOpen) {
@@ -231,7 +226,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
     }
   }, [slashMenuOpen, mentionContext, mentionMenuOpen]);
 
-  // Auto-send queued speech input after text state updates
   const [pendingAutoSend, setPendingAutoSend] = useState(false);
   useEffect(() => {
     if (pendingAutoSend && text.trim() && isConnected) {
@@ -245,7 +239,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ text: string; autoSend?: boolean }>).detail;
       if (!detail?.text) return;
-      (window as any).__speechInputReceived = true;
+      (window as unknown as Record<string, unknown>).__speechInputReceived = true;
       setText((prev) => (prev ? prev + " " + detail.text : detail.text));
       textareaRef.current?.focus();
       if (detail.autoSend) setPendingAutoSend(true);
@@ -254,7 +248,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
     return () => window.removeEventListener("speech-input", handler);
   }, []);
 
-  // Keep selected index in bounds
   useEffect(() => {
     if (slashMenuIndex >= filteredCommands.length) {
       setSlashMenuIndex(Math.max(0, filteredCommands.length - 1));
@@ -267,7 +260,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
     }
   }, [filteredPrompts.length, mentionMenuIndex]);
 
-  // Scroll selected item into view
   useEffect(() => {
     if (!menuRef.current || !slashMenuOpen) return;
     const items = menuRef.current.querySelectorAll("[data-cmd-index]");
@@ -340,7 +332,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
     const imageData = images.length > 0 ? images.map((img) => ({ media_type: img.mediaType, data: img.base64 })) : undefined;
 
     if (isAmend) {
-      // Replace the last user message in the local message list
       const existing = store.messages.get(sessionId) || [];
       let lastUserIndex = -1;
       for (let i = existing.length - 1; i >= 0; i--) {
@@ -358,7 +349,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
         };
         store.setMessages(sessionId, updated);
       } else {
-        // No previous user message to amend — just append as new
         store.appendMessage(sessionId, {
           id: msgId, role: "user", content: actualMsg, images: imageData, scannedHtml, scannedHtmlFiles, timestamp: Date.now(),
         });
@@ -369,7 +359,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
       });
     }
 
-    // Optimistically show "Generating..." indicator immediately
     store.setSessionStatus(sessionId, "running");
     store.setStreamingStats(sessionId, { startedAt: Date.now() });
 
@@ -386,7 +375,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    // Slash menu navigation
     if (slashMenuOpen && filteredCommands.length > 0) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -465,7 +453,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
     }
     if ((e.ctrlKey || e.metaKey) && e.key === "z" && completionSuggestion) {
       setCompletionSuggestion(null);
-      // let default undo proceed
     }
 
     if (e.key === "Tab" && e.shiftKey) {
@@ -585,7 +572,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
     setIsListening(true);
   }
 
-  // Auto-resize textarea when speech recognition adds text
   useEffect(() => {
     if (!isListening || !textareaRef.current) return;
     const ta = textareaRef.current;
@@ -593,7 +579,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
     ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
   }, [text, isListening]);
 
-  // Cleanup speech recognition on unmount
   useEffect(() => {
     return () => { recognitionRef.current?.stop(); };
   }, []);

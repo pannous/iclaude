@@ -129,8 +129,6 @@ export function Sidebar() {
   const setAllProjectsCollapsed = useStore((s) => s.setAllProjectsCollapsed);
   const route = parseHash(hash);
 
-
-  // Poll for SDK sessions on mount
   useEffect(() => {
     let active = true;
     async function poll() {
@@ -236,7 +234,6 @@ export function Sidebar() {
     setResumingId(null);
   }
 
-  // Focus edit input when entering edit mode
   useEffect(() => {
     if (editingSessionId && editInputRef.current) {
       editInputRef.current.focus();
@@ -369,29 +366,6 @@ export function Sidebar() {
     }
   }, []);
 
-  const handleClearArchived = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const store = useStore.getState();
-    const archived = store.sdkSessions.filter((s) => s.archived);
-    // Disconnect all archived sessions to cancel any pending reconnect timers
-    for (const s of archived) {
-      disconnectSession(s.sessionId);
-    }
-    // Optimistically remove all archived from local state
-    store.setSdkSessions(store.sdkSessions.filter((s) => !s.archived));
-    setShowArchived(false);
-    // Delete on server in parallel
-    await Promise.allSettled(
-      archived.map((s) => api.deleteSession(s.sessionId))
-    );
-    try {
-      const list = await api.listSessions();
-      useStore.getState().setSdkSessions(list);
-    } catch {
-      // best-effort
-    }
-  }, []);
-
   // Combine sessions from WsBridge state + SDK sessions list
   const allSessionIds = new Set<string>();
   for (const id of sessions.keys()) allSessionIds.add(id);
@@ -451,7 +425,6 @@ export function Sidebar() {
     prevAgentCountRef.current = agentSessions.length;
   }, [agentSessions.length]);
 
-  // Group active sessions by project
   const projectGroups = useMemo(
     () => groupSessionsByProject(activeSessions),
     [activeSessions],
@@ -500,7 +473,6 @@ export function Sidebar() {
     }
   }
 
-  // Shared props for SessionItem / ProjectGroup
   const sessionItemProps = {
     onSelect: handleSelectSession,
     onStartRename: handleStartRename,
@@ -518,7 +490,6 @@ export function Sidebar() {
 
   return (
     <aside className="w-full md:w-[260px] h-full flex flex-col bg-cc-sidebar">
-      {/* Header */}
       <div className="p-3.5 pb-2">
         {/* LOCAL: Link to GitHub repo */}
         <a href="https://github.com/pannous/companion" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 mb-3 hover:opacity-80 transition-opacity">
@@ -561,7 +532,6 @@ export function Sidebar() {
           </button>
         </div>
 
-
         {showResumePicker && (
           <div className="mt-1.5 rounded-[10px] border border-cc-border bg-cc-sidebar overflow-hidden">
             {resumeLoading ? (
@@ -600,11 +570,8 @@ export function Sidebar() {
             )}
           </div>
         )}
-
-
       </div>
 
-      {/* Container archive confirmation */}
       {confirmArchiveId && (
         <div className="mx-2 mb-1 p-2.5 rounded-[10px] bg-amber-500/10 border border-amber-500/20">
           <div className="flex items-start gap-2">
@@ -634,7 +601,6 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* Session list */}
       <div className="flex-1 overflow-y-auto px-2.5 pb-2">
         {activeSessions.length === 0 && cronSessions.length === 0 && archivedSessions.length === 0 ? (
           <p className="px-3 py-8 text-xs text-cc-muted text-center leading-relaxed">
@@ -784,7 +750,6 @@ export function Sidebar() {
 
       </div>
 
-      {/* Mobile FAB — New Session button in thumb zone */}
       <div className="md:hidden flex justify-end px-4 pb-2">
         <button
           onClick={handleNewSession}
@@ -798,7 +763,6 @@ export function Sidebar() {
         </button>
       </div>
 
-      {/* Footer */}
       <div className="p-2 pb-safe bg-cc-sidebar-footer">
         <div className="grid grid-cols-3 gap-1">
           {NAV_ITEMS.map((item) => {
