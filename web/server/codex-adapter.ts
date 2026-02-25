@@ -125,6 +125,20 @@ interface CodexMcpStatusListResponse {
   nextCursor?: string | null;
 }
 
+// ─── Transport Interface ─────────────────────────────────────────────────────
+
+/** Abstract transport for Codex JSON-RPC communication. */
+export interface ICodexTransport {
+  call(method: string, params?: Record<string, unknown>): Promise<unknown>;
+  notify(method: string, params?: Record<string, unknown>): Promise<void>;
+  respond(id: number, result: unknown): Promise<void>;
+  onNotification(handler: (method: string, params: Record<string, unknown>) => void): void;
+  onRequest(handler: (method: string, id: number, params: Record<string, unknown>) => void): void;
+  onRawIncoming(cb: (line: string) => void): void;
+  onRawOutgoing(cb: (data: string) => void): void;
+  isConnected(): boolean;
+}
+
 // ─── Adapter Options ──────────────────────────────────────────────────────────
 
 export interface CodexAdapterOptions {
@@ -138,11 +152,13 @@ export interface CodexAdapterOptions {
   threadId?: string;
   /** Optional recorder for raw message capture. */
   recorder?: RecorderManager;
+  /** Callback to kill the underlying process/connection on disconnect. */
+  killProcess?: () => Promise<void> | void;
 }
 
-// ─── JSON-RPC Transport ───────────────────────────────────────────────────────
+// ─── Stdio JSON-RPC Transport ────────────────────────────────────────────────
 
-class JsonRpcTransport {
+export class StdioTransport implements ICodexTransport {
   private nextId = 1;
   private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   private notificationHandler: ((method: string, params: Record<string, unknown>) => void) | null = null;
@@ -315,8 +331,7 @@ export class CodexAdapter {
     "gpt-5.3-codex": "gpt-5.2",
   };
 
-  private transport: JsonRpcTransport;
-  private proc: Subprocess;
+  private transport: ICodexTransport;
   private sessionId: string;
   private options: CodexAdapterOptions;
 
@@ -386,8 +401,12 @@ export class CodexAdapter {
     return this.options.executionCwd || this.options.cwd || "";
   }
 
-  constructor(proc: Subprocess, sessionId: string, options: CodexAdapterOptions = {}) {
-    this.proc = proc;
+  /**
+   * Create a CodexAdapter.
+   * @param transportOrProc - Either a pre-built ICodexTransport or a Bun Subprocess
+   *   (backward compat: when given a Subprocess, a StdioTransport is built from its pipes).
+   */
+  constructor(transportOrProc: ICodexTransport | Subprocess, sessionId: string, options: CodexAdapterOptions = {}) {
     this.sessionId = sessionId;
     this.options = options;
     this.currentPermissionMode = options.approvalMode || "default";
@@ -398,16 +417,50 @@ export class CodexAdapter {
       ? "plan"
       : "default";
 
-    const stdout = proc.stdout;
-    const stdin = proc.stdin;
-    if (!stdout || !stdin || typeof stdout === "number" || typeof stdin === "number") {
-      throw new Error("Codex process must have stdio pipes");
+    // Determine whether we received a transport or a subprocess
+    if (this.isTransport(transportOrProc)) {
+      // Pre-built transport (e.g. WebSocketTransport)
+      this.transport = transportOrProc;
+    } else {
+      // Subprocess — build StdioTransport from its pipes (legacy path)
+      const proc = transportOrProc;
+      const stdout = proc.stdout;
+      const stdin = proc.stdin;
+      if (!stdout || !stdin || typeof stdout === "number" || typeof stdin === "number") {
+        throw new Error("Codex process must have stdio pipes");
+      }
+
+      this.transport = new StdioTransport(
+        stdin as WritableStream<Uint8Array> | { write(data: Uint8Array): number },
+        stdout as ReadableStream<Uint8Array>,
+      );
+
+      // Monitor process exit — when using a subprocess directly,
+      // set up the exit handler here. For transport-only mode,
+      // the caller provides killProcess and the transport's own
+      // close handling triggers disconnectCb.
+      if (!options.killProcess) {
+        options.killProcess = async () => {
+          try {
+            proc.kill("SIGTERM");
+            await Promise.race([
+              proc.exited,
+              new Promise((r) => setTimeout(r, 5000)),
+            ]);
+          } catch {}
+        };
+      }
+
+      proc.exited.then(() => {
+        this.connected = false;
+        for (const pending of this.pendingDynamicToolCalls.values()) {
+          clearTimeout(pending.timeout);
+        }
+        this.pendingDynamicToolCalls.clear();
+        this.disconnectCb?.();
+      });
     }
 
-    this.transport = new JsonRpcTransport(
-      stdin as WritableStream<Uint8Array> | { write(data: Uint8Array): number },
-      stdout as ReadableStream<Uint8Array>,
-    );
     this.transport.onNotification((method, params) => this.handleNotification(method, params));
     this.transport.onRequest((method, id, params) => this.handleRequest(method, id, params));
 
@@ -423,18 +476,30 @@ export class CodexAdapter {
       });
     }
 
-    // Monitor process exit
-    proc.exited.then(() => {
-      this.connected = false;
-      for (const pending of this.pendingDynamicToolCalls.values()) {
-        clearTimeout(pending.timeout);
-      }
-      this.pendingDynamicToolCalls.clear();
-      this.disconnectCb?.();
-    });
-
     // Start initialization
     this.initialize();
+  }
+
+  /** Type guard: is the argument an ICodexTransport (vs a Subprocess)? */
+  private isTransport(obj: ICodexTransport | Subprocess): obj is ICodexTransport {
+    return typeof (obj as ICodexTransport).call === "function"
+      && typeof (obj as ICodexTransport).notify === "function"
+      && typeof (obj as ICodexTransport).respond === "function"
+      && typeof (obj as ICodexTransport).onNotification === "function";
+  }
+
+  /**
+   * Notify the adapter that the underlying transport has closed.
+   * Used by WebSocket transport mode — the launcher wires the WS close
+   * event to this method so the adapter can clean up and fire disconnectCb.
+   */
+  handleTransportClose(): void {
+    this.connected = false;
+    for (const pending of this.pendingDynamicToolCalls.values()) {
+      clearTimeout(pending.timeout);
+    }
+    this.pendingDynamicToolCalls.clear();
+    this.disconnectCb?.();
   }
 
   // ── Public API ──────────────────────────────────────────────────────────
@@ -526,13 +591,11 @@ export class CodexAdapter {
 
   async disconnect(): Promise<void> {
     this.connected = false;
-    try {
-      this.proc.kill("SIGTERM");
-      await Promise.race([
-        this.proc.exited,
-        new Promise((r) => setTimeout(r, 5000)),
-      ]);
-    } catch {}
+    if (this.options.killProcess) {
+      try {
+        await this.options.killProcess();
+      } catch {}
+    }
   }
 
   getThreadId(): string | null {

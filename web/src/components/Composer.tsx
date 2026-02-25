@@ -4,6 +4,7 @@ import { sendToSession } from "../ws.js";
 import { CLAUDE_MODES, CODEX_MODES } from "../utils/backends.js";
 import { api, type SavedPrompt } from "../api.js";
 import type { ModeOption } from "../utils/backends.js";
+import { ModelSwitcher } from "./ModelSwitcher.js";
 
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
 import { scanContent } from "../utils/result-scanner.js";
@@ -567,7 +568,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const canSend = text.trim().length > 0 && isConnected;
 
   return (
-    <div className="shrink-0 px-0 sm:px-6 pt-0 sm:pt-3 pb-safe bg-cc-input-bg sm:bg-transparent">
+    <div className="shrink-0 px-0 sm:px-6 pt-0 sm:pt-3 pb-5 sm:pb-4 bg-cc-input-bg sm:bg-transparent">
       <div className="max-w-3xl mx-auto">
         {/* Image thumbnails */}
         {images.length > 0 && (
@@ -582,7 +583,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 <button
                   onClick={() => removeImage(i)}
                   aria-label="Remove image"
-                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-cc-error text-white flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-cc-error text-white flex items-center justify-center text-[10px] opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity cursor-pointer"
                 >
                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5">
                     <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
@@ -732,7 +733,8 @@ export function Composer({ sessionId }: { sessionId: string }) {
             </div>
           )}
 
-          {/* Toolbar: mode toggle + actions + send — ABOVE textarea so it's
+
+          {/* Toolbar: mode toggle + actions + send -- ABOVE textarea so it's
               never behind the iOS keyboard (Safari ignores interactive-widget) */}
           <div className="flex items-center justify-between px-3 pt-2 pb-0.5">
             {/* Left: mode toggle */}
@@ -740,6 +742,77 @@ export function Composer({ sessionId }: { sessionId: string }) {
               onClick={toggleMode}
               disabled={!isConnected}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-semibold transition-all border select-none shrink-0 ${
+                !isConnected
+                  ? "opacity-30 cursor-not-allowed text-cc-muted border-transparent"
+                  : isPlan
+                    ? "text-cc-primary border-cc-primary/30 bg-cc-primary/8 hover:bg-cc-primary/12 cursor-pointer"
+                    : "text-cc-muted border-cc-border hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
+              }`}
+              title="Toggle mode (Shift+Tab)"
+            >
+              {isPlan ? (
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                  <rect x="3" y="3" width="3.5" height="10" rx="0.75" />
+                  <rect x="9.5" y="3" width="3.5" height="10" rx="0.75" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                  <path d="M2.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                  <path d="M8.5 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                </svg>
+              )}
+              <span>{modeLabel}</span>
+            </button>
+
+            <ModelSwitcher sessionId={sessionId} />
+
+            <div className="flex-1" />
+
+            <button
+              onClick={() => {
+                const defaultName = text.trim().slice(0, 32);
+                setSavePromptName(defaultName || "");
+                setSavePromptError(null);
+                setSavePromptOpen((v) => !v);
+              }}
+              disabled={!isConnected || !text.trim()}
+              className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
+                isConnected && text.trim()
+                  ? "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
+                  : "text-cc-muted opacity-30 cursor-not-allowed"
+              }`}
+              title="Save as prompt"
+            >
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+                <path d="M4 2.75h8A1.25 1.25 0 0113.25 4v9.25L8 10.5l-5.25 2.75V4A1.25 1.25 0 014 2.75z" />
+              </svg>
+            </button>
+
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!isConnected}
+              className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
+                isConnected
+                  ? "text-cc-muted hover:text-cc-fg hover:bg-cc-hover cursor-pointer"
+                  : "text-cc-muted opacity-30 cursor-not-allowed"
+              }`}
+              title="Upload image"
+            >
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+                <rect x="2" y="2" width="12" height="12" rx="2" />
+                <circle cx="5.5" cy="5.5" r="1" fill="currentColor" stroke="none" />
+                <path d="M2 11l3-3 2 2 3-4 4 5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Main input row */}
+          <div className="flex items-end gap-2 px-3 sm:px-2.5 py-1 sm:py-2">
+            {/* Desktop mode toggle (hidden on mobile) */}
+            <button
+              onClick={toggleMode}
+              disabled={!isConnected}
+              className={`mb-0.5 hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-semibold transition-all border select-none shrink-0 ${
                 !isConnected
                   ? "opacity-30 cursor-not-allowed text-cc-muted border-transparent"
                   : isPlan
@@ -801,7 +874,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   <path d="M4 2.75h8A1.25 1.25 0 0113.25 4v9.25L8 10.5l-5.25 2.75V4A1.25 1.25 0 014 2.75z" />
                 </svg>
               </button>
-
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={!isConnected}
@@ -840,6 +912,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 </button>
               )}
 
+              {/* Model switcher */}
+              <ModelSwitcher sessionId={sessionId} />
+
               {/* Send/stop */}
               {isRunning ? (
                 <button
@@ -870,12 +945,14 @@ export function Composer({ sessionId }: { sessionId: string }) {
             </div>
           </div>
 
-          {/* Textarea — full width, at the bottom (closest to iOS keyboard) */}
+          {/* Textarea -- full width, at the bottom (closest to iOS keyboard) */}
           <textarea
             ref={textareaRef}
             value={text}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
+            onClick={syncCaret}
+            onKeyUp={syncCaret}
             onPaste={handlePaste}
             aria-label="Message input"
             placeholder={isConnected

@@ -8,17 +8,21 @@ vi.mock("../api.js", () => ({
   },
 }));
 
+vi.mock("../ws.js", () => ({
+  sendToSession: vi.fn(),
+}));
+
 interface MockStoreState {
   currentSessionId: string | null;
   cliConnected: Map<string, boolean>;
   sessionStatus: Map<string, "idle" | "running" | "compacting" | null>;
+  sessionNames: Map<string, string>;
   sidebarOpen: boolean;
   setSidebarOpen: ReturnType<typeof vi.fn>;
   taskPanelOpen: boolean;
   setTaskPanelOpen: ReturnType<typeof vi.fn>;
   messages: Map<string, unknown[]>;
-  editorTabEnabled: boolean;
-  activeTab: string;
+  activeTab: "chat" | "diff" | "terminal" | "processes" | "editor";
   setActiveTab: ReturnType<typeof vi.fn>;
   openPanels: string[];
   closePanel: ReturnType<typeof vi.fn>;
@@ -28,11 +32,11 @@ interface MockStoreState {
   openQuickTerminal: ReturnType<typeof vi.fn>;
   resetQuickTerminal: ReturnType<typeof vi.fn>;
   sessions: Map<string, { cwd?: string; is_containerized?: boolean }>;
-  sdkSessions: { sessionId: string; cwd?: string; title?: string; containerId?: string }[];
+  sdkSessions: { sessionId: string; cwd?: string; title?: string; containerId?: string; model?: string; backendType?: string }[];
   gitChangedFilesCount: Map<string, number>;
-  sessionNames: Map<string, string>;
   sessionSubtitles: Map<string, string>;
   editorFiles: string[];
+  sessionProcesses: Map<string, { status: string }[]>;
 }
 
 let storeState: MockStoreState;
@@ -42,12 +46,12 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     currentSessionId: "s1",
     cliConnected: new Map([["s1", true]]),
     sessionStatus: new Map([["s1", "idle"]]),
+    sessionNames: new Map(),
     sidebarOpen: true,
     setSidebarOpen: vi.fn(),
     taskPanelOpen: false,
     setTaskPanelOpen: vi.fn(),
     messages: new Map(),
-    editorTabEnabled: true,
     activeTab: "chat",
     setActiveTab: vi.fn(),
     openPanels: [],
@@ -60,15 +64,20 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     sessions: new Map([["s1", { cwd: "/repo" }]]),
     sdkSessions: [],
     gitChangedFilesCount: new Map(),
-    sessionNames: new Map(),
     sessionSubtitles: new Map(),
     editorFiles: [],
+    sessionProcesses: new Map(),
     ...overrides,
   };
 }
 
 vi.mock("../store.js", () => ({
-  useStore: (selector: (s: MockStoreState) => unknown) => selector(storeState),
+  useStore: Object.assign(
+    (selector: (s: MockStoreState) => unknown) => selector(storeState),
+    {
+      getState: () => ({ ...storeState, setSdkSessions: vi.fn() }),
+    },
+  ),
 }));
 
 import { TopBar } from "./TopBar.js";
@@ -158,10 +167,10 @@ describe("TopBar", () => {
     expect(storeState.openQuickTerminal).not.toHaveBeenCalled();
   });
 
-  it("hides editor tab when editor feature is disabled in settings", () => {
-    resetStore({ editorTabEnabled: false });
+  it("always shows editor tab", () => {
+    // Editor tab is always present (replaced the old Files tab)
     render(<TopBar />);
-    expect(screen.queryByRole("button", { name: "Editor tab" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Editor tab" })).toBeInTheDocument();
   });
 
   it("keeps terminal tab active when clicking shell while already active", () => {
@@ -216,6 +225,18 @@ describe("TopBar", () => {
     expect(screen.getByRole("button", { name: "Session tab" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Diffs tab" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Shell tab" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Processes tab" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Editor tab" })).toBeInTheDocument();
+  });
+
+  it("cycles from processes to editor on Cmd+J", () => {
+    // Tabs: chat, diff, terminal, processes, editor
+    // Starting from processes, Cmd+J should cycle to editor
+    resetStore({ activeTab: "processes" });
+    render(<TopBar />);
+
+    fireEvent.keyDown(window, { key: "j", metaKey: true });
+    expect(storeState.setActiveTab).toHaveBeenCalledWith("editor");
   });
 
   it("passes axe accessibility checks", async () => {

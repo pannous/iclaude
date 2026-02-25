@@ -13,3 +13,7 @@ web/.env.local
 .dev-*.log
 .error-monitor*
 .error-monitor-logs/
+docs/mocks/
+docs/repo-only/
+scripts/test-codex-*.ts
+web/dev-dist/

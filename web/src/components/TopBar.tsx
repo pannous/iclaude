@@ -10,7 +10,7 @@ import { parseHash } from "../utils/routing.js";
 
 const EMPTY_MESSAGES: import("../types.js").ChatMessage[] = [];
 
-type WorkspaceTab = "chat" | "diff" | "terminal" | "editor";
+type WorkspaceTab = "chat" | "diff" | "terminal" | "processes" | "editor";
 
 export function TopBar() {
   const hash = useSyncExternalStore(
@@ -34,7 +34,6 @@ export function TopBar() {
   const messages = useStore((s) => currentSessionId ? s.messages.get(currentSessionId) ?? EMPTY_MESSAGES : EMPTY_MESSAGES);
   const getConversationText = useCallback(() => conversationToText(messages), [messages]);
   const activeTab = useStore((s) => s.activeTab);
-  const editorTabEnabled = useStore((s) => s.editorTabEnabled);
   const setActiveTab = useStore((s) => s.setActiveTab);
   const markChatTabReentry = useStore((s) => s.markChatTabReentry);
   const quickTerminalOpen = useStore((s) => s.quickTerminalOpen);
@@ -50,6 +49,14 @@ export function TopBar() {
     const sdkTitle = s.sdkSessions.find((ss) => ss.sessionId === currentSessionId)?.title;
     return sdkTitle || s.sessionNames.get(currentSessionId);
   });
+
+  const runningProcessCount = useStore((s) => {
+    if (!currentSessionId) return 0;
+    const processes = s.sessionProcesses.get(currentSessionId);
+    if (!processes) return 0;
+    return processes.filter((p) => p.status === "running").length;
+  });
+
   const cwd = useStore((s) => {
     if (!currentSessionId) return null;
     return (
@@ -96,12 +103,7 @@ export function TopBar() {
     : null;
   const showWorkspaceControls = !!(currentSessionId && isSessionView);
   const showContextToggle = route.page === "session" && !!currentSessionId;
-  const editorFileCount = useStore((s) => s.editorFiles.length);
-  const workspaceTabs = useMemo(() => {
-    const tabs: WorkspaceTab[] = ["chat", "diff", "terminal"];
-    if (editorTabEnabled) tabs.push("editor");
-    return tabs;
-  }, [editorTabEnabled, editorFileCount]);
+  const workspaceTabs: WorkspaceTab[] = ["chat", "diff", "terminal", "processes", "editor"];
 
   const activateWorkspaceTab = (tab: WorkspaceTab) => {
     if (tab === "terminal") {
@@ -150,11 +152,15 @@ export function TopBar() {
   }, [showWorkspaceControls, workspaceTabs, activeTab, cwd, quickTerminalOpen, quickTerminalTabs.length, openQuickTerminal, defaultTerminalOpts, setActiveTab, markChatTabReentry, currentSessionId]);
 
   return (
-    <header className="relative shrink-0 h-11 px-4 bg-cc-bg border-b border-cc-separator">
+    <header className="relative shrink-0 h-11 px-4 bg-cc-bg">
       <div className="h-full flex items-center gap-1 min-w-0">
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="flex items-center justify-center w-7 h-7 rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer shrink-0"
+          className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors cursor-pointer shrink-0 ${
+            sidebarOpen
+              ? "text-cc-primary bg-cc-active"
+              : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+          }`}
           aria-label="Toggle sidebar"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[15px] h-[15px]">
@@ -164,10 +170,10 @@ export function TopBar() {
         </button>
 
         {showWorkspaceControls && (
-          <div className="flex-1 flex items-center justify-center gap-0.5 min-w-0">
+          <div className="flex-1 flex items-center justify-center gap-0.5 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <button
                 onClick={() => activateWorkspaceTab("chat")}
-                className={`h-full px-3 text-[12px] font-medium transition-colors cursor-pointer min-w-0 max-w-[44vw] sm:max-w-[30vw] truncate flex items-center gap-1.5 border-b-[1.5px] ${
+                className={`h-full px-3 text-[12px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 border-b-[1.5px] shrink-0 ${
                   activeTab === "chat"
                     ? "text-cc-fg border-cc-primary"
                     : "text-cc-muted hover:text-cc-fg border-transparent"
@@ -184,11 +190,11 @@ export function TopBar() {
                           ? "bg-cc-warning"
                           : "bg-cc-success"
                   }`} />
-                  <span className="truncate">{sessionName || "Session"}</span>
+                  Session
               </button>
               <button
                 onClick={() => activateWorkspaceTab("diff")}
-                className={`h-full px-3 text-[12px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 border-b-[1.5px] ${
+                className={`h-full px-3 text-[12px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 border-b-[1.5px] shrink-0 ${
                   activeTab === "diff"
                     ? "text-cc-fg border-cc-primary"
                     : "text-cc-muted hover:text-cc-fg border-transparent"
@@ -205,7 +211,7 @@ export function TopBar() {
               <button
                 onClick={() => activateWorkspaceTab("terminal")}
                 disabled={!cwd}
-                className={`h-full px-3 text-[12px] font-medium transition-colors flex items-center border-b-[1.5px] ${
+                className={`h-full px-3 text-[12px] font-medium transition-colors flex items-center border-b-[1.5px] shrink-0 ${
                   !cwd
                     ? "text-cc-muted/50 border-transparent cursor-not-allowed"
                     : activeTab === "terminal"
@@ -217,23 +223,37 @@ export function TopBar() {
               >
                 Shell
               </button>
-              {editorTabEnabled && (
-                <button
-                  onClick={() => activateWorkspaceTab("editor")}
-                  disabled={!cwd}
-                  className={`h-full px-3 text-[12px] font-medium transition-colors flex items-center border-b-[1.5px] ${
-                    !cwd
-                      ? "text-cc-muted/50 border-transparent cursor-not-allowed"
-                      : activeTab === "editor"
-                        ? "text-cc-fg border-cc-primary cursor-pointer"
-                        : "text-cc-muted hover:text-cc-fg border-transparent cursor-pointer"
-                  }`}
-                  title={!cwd ? "Editor unavailable while session is reconnecting" : "Editor"}
-                  aria-label="Editor tab"
-                >
-                  Editor
-                </button>
-              )}
+              <button
+                onClick={() => activateWorkspaceTab("processes")}
+                className={`h-full px-3 text-[12px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 border-b-[1.5px] shrink-0 ${
+                  activeTab === "processes"
+                    ? "text-cc-fg border-cc-primary"
+                    : "text-cc-muted hover:text-cc-fg border-transparent"
+                }`}
+                aria-label="Processes tab"
+              >
+                Processes
+                {runningProcessCount > 0 && (
+                  <span className="text-[9px] rounded-full min-w-[15px] h-[15px] px-1 flex items-center justify-center font-semibold leading-none bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300">
+                    {runningProcessCount}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => activateWorkspaceTab("editor")}
+                disabled={!cwd}
+                className={`h-full px-3 text-[12px] font-medium transition-colors flex items-center border-b-[1.5px] shrink-0 ${
+                  !cwd
+                    ? "text-cc-muted/50 border-transparent cursor-not-allowed"
+                    : activeTab === "editor"
+                      ? "text-cc-fg border-cc-primary cursor-pointer"
+                      : "text-cc-muted hover:text-cc-fg border-transparent cursor-pointer"
+                }`}
+                title={!cwd ? "Editor unavailable while session is reconnecting" : "Editor"}
+                aria-label="Editor tab"
+              >
+                Editor
+              </button>
           </div>
         )}
 
@@ -287,10 +307,12 @@ export function TopBar() {
             </svg>
           </button>
         )}
+
+          <ThemeToggle />
           {showContextToggle && (
             <button
               onClick={() => setTaskPanelOpen(!taskPanelOpen)}
-              className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors cursor-pointer ${
+              className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors cursor-pointer ${
                 taskPanelOpen
                   ? "text-cc-primary bg-cc-active"
                   : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
@@ -316,5 +338,30 @@ export function TopBar() {
         />
       )}
     </header>
+  );
+}
+
+function ThemeToggle() {
+  const darkMode = useStore((s) => s.darkMode);
+  const toggle = useCallback(() => useStore.getState().toggleDarkMode(), []);
+
+  return (
+    <button
+      onClick={toggle}
+      className="flex items-center justify-center w-8 h-8 rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+      title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      {darkMode ? (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[15px] h-[15px]">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[15px] h-[15px]">
+          <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z" />
+        </svg>
+      )}
+    </button>
   );
 }

@@ -4,6 +4,7 @@ import { connectSession, disconnectSession, sendToSession } from "./ws.js";
 import { api } from "./api.js";
 import { parseHash, navigateToSession, navigateHome } from "./utils/routing.js";
 import { handleKeyDown, createMouseHandler } from "./utils/keybindings.js";
+import { LoginPage } from "./components/LoginPage.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
@@ -30,6 +31,8 @@ const TerminalPage = lazy(() => import("./components/TerminalPage.js").then((m) 
 const Panel = lazy(() => import("./components/Panel.js").then((m) => ({ default: m.Panel })));
 const PanelsPage = lazy(() => import("./components/PanelsPage.js").then((m) => ({ default: m.PanelsPage })));
 const FileEditor = lazy(() => import("./components/FileEditor.js").then((m) => ({ default: m.FileEditor })));
+const ProcessPanel = lazy(() => import("./components/ProcessPanel.js").then((m) => ({ default: m.ProcessPanel })));
+
 
 function LazyFallback() {
   return (
@@ -49,6 +52,7 @@ function useHash() {
 
 export default function App() {
   const theme = useStore((s) => s.theme);
+  const isAuthenticated = useStore((s) => s.isAuthenticated);
   const darkMode = useStore((s) => s.darkMode);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const sidebarOpen = useStore((s) => s.sidebarOpen);
@@ -92,17 +96,23 @@ export default function App() {
     return () => mq.removeEventListener("change", onChange);
   }, [theme]);
 
+  // Migrate legacy "files" tab to "editor"
   useEffect(() => {
+    // Migrate legacy "files" tab to "editor"
+    if ((activeTab as string) === "files") {
+      setActiveTab("editor");
+      return;
+    }
     api.getSettings().then((settings) => {
       setEditorTabEnabled(settings.editorTabEnabled);
     }).catch((e) => console.warn("[app] getSettings", e));
-  }, [setEditorTabEnabled]);
+  }, [setEditorTabEnabled, activeTab, setActiveTab]);
 
   useEffect(() => {
     if (!editorTabEnabled && activeTab === "editor") {
       setActiveTab("chat");
     }
-  }, [editorTabEnabled, activeTab, setActiveTab]);
+  }, [activeTab, setActiveTab]);
 
   // Capture the localStorage-restored session ID during render (before any effects run)
   // so the mount logic can use it even if the hash-sync branch would clear it.
@@ -201,15 +211,12 @@ export default function App() {
           if (Notification.permission === "granted") new Notification(d.title, { body: d.body });
           break;
         case "vibe:console": {
-          // Forward console logs to store for dev tooling
           useStore.getState().appendConsoleLog(d.fragmentId, { level: d.level, args: d.args, timestamp: Date.now() });
-          // Push to server so agents can query via REST
           const sid = useStore.getState().currentSessionId;
           if (sid) sendToSession(sid, { type: "fragment_console_log", fragmentId: d.fragmentId, level: d.level, args: d.args });
           break;
         }
         case "vibe:state_update": {
-          // Cache locally and push to server so agents can query via REST
           useStore.getState().updateFragmentState(d.fragmentId, d.state);
           const sessionId = useStore.getState().currentSessionId;
           if (sessionId) sendToSession(sessionId, { type: "fragment_state_update", fragmentId: d.fragmentId, state: d.state });
@@ -239,36 +246,30 @@ export default function App() {
     const store = useStore.getState();
     const sdkSessions = store.sdkSessions;
     const activeSessions = sdkSessions.filter(s => !s.archived);
-
-    // Disconnect all active sessions immediately
     for (const session of activeSessions) {
       disconnectSession(session.sessionId);
     }
-
-    // Optimistically mark all active sessions as archived so no reconnects happen
     store.setSdkSessions(sdkSessions.map(s => s.archived ? s : { ...s, archived: true }));
-
-    // Go back to home page
     store.newSession();
     setShowArchiveAllConfirm(false);
-
-    // Archive on server (await to ensure consistent state before refreshing)
     await Promise.allSettled(activeSessions.map(s => api.archiveSession(s.sessionId)));
-
-    // Refresh from server
     api.listSessions().then((list) => {
       store.setSdkSessions(list);
-    }).catch(() => {
-      // best-effort
-    });
+    }).catch(() => {});
   }
+
+  // Auth gate: show login page when not authenticated
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
 
   if (route.page === "playground") {
     return <Suspense fallback={<LazyFallback />}><Playground /></Suspense>;
   }
 
   return (
-    <div className="h-[100dvh] flex font-sans-ui bg-cc-bg text-cc-fg antialiased pt-safe">
+    <div className="fixed inset-0 flex font-sans-ui bg-cc-bg text-cc-fg antialiased pt-safe overflow-hidden overscroll-none">
       {/* Archive All Confirmation Modal */}
       {showArchiveAllConfirm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -313,9 +314,9 @@ export default function App() {
       {/* Sidebar — overlay on mobile, inline on desktop */}
       <div
         className={`
-          fixed md:relative z-40 md:z-auto
-          h-full shrink-0 transition-all duration-200
-          ${sidebarOpen ? "w-[260px] translate-x-0" : "w-0 -translate-x-full md:w-0 md:-translate-x-full"}
+          fixed inset-y-0 left-0 md:relative md:inset-auto z-40 md:z-auto
+          h-full shrink-0 transition-all duration-200 pt-safe md:pt-0
+          ${sidebarOpen ? "w-full md:w-[260px] translate-x-0" : "w-0 -translate-x-full md:w-0 md:-translate-x-full"}
           overflow-hidden
         `}
       >
@@ -393,9 +394,11 @@ export default function App() {
                         onClosePanel={() => useStore.getState().setActiveTab("chat")}
                       />
                     )
-                    : activeTab === "editor" && editorTabEnabled
-                      ? <SessionEditorPane sessionId={currentSessionId} />
-                      : (
+                    : activeTab === "processes"
+                      ? <Suspense fallback={<LazyFallback />}><ProcessPanel sessionId={currentSessionId} /></Suspense>
+                      : activeTab === "editor"
+                        ? <SessionEditorPane sessionId={currentSessionId} />
+                        : (
                         <SessionTerminalDock sessionId={currentSessionId} suppressPanel>
                           {activeTab === "diff"
                             ? <DiffPanel sessionId={currentSessionId} />
@@ -462,9 +465,9 @@ export default function App() {
 
           <div
             className={`
-              fixed lg:relative z-40 lg:z-auto right-0 top-0
-              h-full shrink-0 transition-all duration-200
-              ${taskPanelOpen ? "w-[320px] translate-x-0" : "w-0 translate-x-full lg:w-0 lg:translate-x-full"}
+              fixed inset-y-0 right-0 lg:relative lg:inset-auto z-40 lg:z-auto
+              h-full shrink-0 transition-all duration-200 pt-safe lg:pt-0
+              ${taskPanelOpen ? "w-full lg:w-[320px] translate-x-0" : "w-0 translate-x-full lg:w-0 lg:translate-x-full"}
               overflow-hidden
             `}
           >

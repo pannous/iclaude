@@ -89,7 +89,7 @@ function McpServerRow({
 
       {/* Expanded details */}
       {expanded && (
-        <div className="px-2.5 pb-2.5 space-y-1.5 border-t border-cc-border pt-2">
+        <div className="px-2.5 pb-2.5 space-y-1.5 pt-2">
           {/* Config info */}
           <div className="text-[11px] text-cc-muted space-y-0.5">
             <div className="flex items-center gap-1">
@@ -336,7 +336,7 @@ export function McpSection({ sessionId }: { sessionId: string }) {
         }));
 
   return (
-    <div className="shrink-0 border-b border-cc-border">
+    <div className="shrink-0">
       {/* Collapsible MCP section header */}
       <button
         onClick={() => setExpanded(!expanded)}

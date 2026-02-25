@@ -536,19 +536,15 @@ export function Playground() {
     store.setConnectionStatus(sessionId, "connected");
     store.setCliConnected(sessionId, true);
     store.setSessionStatus(sessionId, "running");
+    const streamingText = "I'm updating tests and then I'll run the full suite.";
     store.setMessages(sessionId, [
       MSG_USER,
       MSG_ASSISTANT,
       MSG_ASSISTANT_TOOLS,
       MSG_TOOL_ERROR,
-      {
-        id: "msg-streaming-live",
-        role: "assistant" as const,
-        content: "I'm updating tests and then I'll run the full suite.",
-        isStreaming: true,
-        timestamp: Date.now(),
-      },
+      { id: "msg-streaming-live", role: "assistant" as const, content: streamingText, isStreaming: true, timestamp: Date.now() },
     ]);
+    store.setStreaming(sessionId, streamingText);
     store.setStreamingStats(sessionId, { startedAt: Date.now() - 12000, outputTokens: 1200 });
     store.addPermission(sessionId, PERM_BASH);
     store.addPermission(sessionId, PERM_DYNAMIC);

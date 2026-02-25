@@ -105,12 +105,15 @@ function setupMockStore(overrides: {
     sessionStatus: sessionStatusMap,
     previousPermissionMode: previousPermissionModeMap,
     messages: new Map<string, unknown[]>([["s1", messages]]),
+    sdkSessions: [{ sessionId: "s1", model: "claude-sonnet-4-6", backendType: "claude", cwd: "/test" }],
+    sessionNames: new Map<string, string>(),
     appendMessage: mockAppendMessage,
     setMessages: mockSetMessages,
     updateSession: mockUpdateSession,
     setPreviousPermissionMode: mockSetPreviousPermissionMode,
     setSessionStatus: mockSetSessionStatus,
     setStreamingStats: mockSetStreamingStats,
+    setSdkSessions: vi.fn(),
   };
 }
 
@@ -136,7 +139,7 @@ describe("Composer basic rendering", () => {
     const textarea = container.querySelector("textarea");
     expect(textarea).toBeTruthy();
     // Send button (the round one with the arrow SVG) - identified by title
-    const sendBtn = screen.getByTitle("Send message");
+    const sendBtn = screen.getAllByTitle("Send message")[0];
     expect(sendBtn).toBeTruthy();
   });
 });
@@ -146,14 +149,14 @@ describe("Composer basic rendering", () => {
 describe("Composer send button state", () => {
   it("send button is disabled when text is empty", () => {
     render(<Composer sessionId="s1" />);
-    const sendBtn = screen.getByTitle("Send message");
+    const sendBtn = screen.getAllByTitle("Send message")[0];
     expect(sendBtn.hasAttribute("disabled")).toBe(true);
   });
 
   it("send button is disabled when CLI is not connected", () => {
     setupMockStore({ isConnected: false });
     render(<Composer sessionId="s1" />);
-    const sendBtn = screen.getByTitle("Send message");
+    const sendBtn = screen.getAllByTitle("Send message")[0];
     expect(sendBtn.hasAttribute("disabled")).toBe(true);
   });
 
@@ -163,7 +166,7 @@ describe("Composer send button state", () => {
 
     fireEvent.change(textarea, { target: { value: "Hello world" } });
 
-    const sendBtn = screen.getByTitle("Send message");
+    const sendBtn = screen.getAllByTitle("Send message")[0];
     expect(sendBtn.hasAttribute("disabled")).toBe(false);
   });
 });
@@ -200,7 +203,7 @@ describe("Composer sending messages", () => {
     const textarea = container.querySelector("textarea")!;
 
     fireEvent.change(textarea, { target: { value: "click send" } });
-    fireEvent.click(screen.getByTitle("Send message"));
+    fireEvent.click(screen.getAllByTitle("Send message")[0]);
 
     expect(mockSendToSession).toHaveBeenCalledWith("s1", expect.objectContaining({
       type: "user_message",
@@ -259,17 +262,17 @@ describe("Composer interrupt button", () => {
     setupMockStore({ sessionStatus: "running" });
     render(<Composer sessionId="s1" />);
 
-    const stopBtn = screen.getByTitle("Stop generation");
+    const stopBtn = screen.getAllByTitle("Stop generation")[0];
     expect(stopBtn).toBeTruthy();
-    // Send button should not be present
-    expect(screen.queryByTitle("Send message")).toBeNull();
+    // Send button should not be present (both mobile and desktop show stop)
+    expect(screen.queryAllByTitle("Send message")).toHaveLength(0);
   });
 
   it("interrupt button sends interrupt message", () => {
     setupMockStore({ sessionStatus: "running" });
     render(<Composer sessionId="s1" />);
 
-    fireEvent.click(screen.getByTitle("Stop generation"));
+    fireEvent.click(screen.getAllByTitle("Stop generation")[0]);
 
     expect(mockSendToSession).toHaveBeenCalledWith("s1", { type: "interrupt" });
   });
@@ -278,8 +281,8 @@ describe("Composer interrupt button", () => {
     setupMockStore({ sessionStatus: "idle" });
     render(<Composer sessionId="s1" />);
 
-    expect(screen.getByTitle("Send message")).toBeTruthy();
-    expect(screen.queryByTitle("Stop generation")).toBeNull();
+    expect(screen.getAllByTitle("Send message")[0]).toBeTruthy();
+    expect(screen.queryAllByTitle("Stop generation")).toHaveLength(0);
   });
 });
 
@@ -553,6 +556,7 @@ describe("Composer layout", () => {
 
   it("send button has consistent dimensions", () => {
     // Verifies the send button has explicit sizing classes for consistent layout.
+    // Both mobile (w-10 h-10) and desktop (w-9 h-9) send buttons exist in JSDOM.
     render(<Composer sessionId="s1" />);
     const sendBtn = screen.getByTitle("Send message");
     expect(sendBtn.className).toContain("w-10");

@@ -56,6 +56,8 @@ describe("PromptsPage", () => {
   it("creates a prompt with cwd", async () => {
     // Validates create payload includes cwd for file-based storage.
     render(<PromptsPage embedded />);
+    // Open the collapsible create form first
+    fireEvent.click(screen.getByRole("button", { name: /new prompt/i }));
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "review-pr" } });
     fireEvent.change(screen.getByLabelText("Content"), { target: { value: "Review this PR" } });
     fireEvent.click(screen.getByRole("button", { name: "Create Prompt" }));
@@ -77,6 +79,8 @@ describe("PromptsPage", () => {
       sdkSessions: [],
     };
     render(<PromptsPage embedded />);
+    // Open the collapsible create form first
+    fireEvent.click(screen.getByRole("button", { name: /new prompt/i }));
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "global" } });
     fireEvent.change(screen.getByLabelText("Content"), { target: { value: "Always do X" } });
     const btn = screen.getByRole("button", { name: "Create Prompt" });

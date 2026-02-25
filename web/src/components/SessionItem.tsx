@@ -84,15 +84,18 @@ export function SessionItem({
 
   const derivedStatus = archived ? ("exited" as DerivedStatus) : deriveStatus(s);
 
+  // Show the full cwd path below the session name
+  const cwdTail = s.cwd || "";
+
   return (
-    <div className={`relative group ${archived ? "opacity-50" : ""}`}>
+    <div className="relative group">
       <button
         onClick={() => onSelect(s.id)}
         onDoubleClick={(e) => {
           e.preventDefault();
           onStartRename(s.id, label);
         }}
-        className={`w-full flex items-center gap-2 py-2 pl-2.5 pr-12 min-h-[44px] rounded-lg transition-colors duration-100 cursor-pointer ${
+        className={`w-full flex items-center gap-1.5 py-2 pl-1 pr-12 min-h-[44px] rounded-lg transition-colors duration-100 cursor-pointer ${
           isActive
             ? "bg-cc-active"
             : "hover:bg-cc-hover"
@@ -125,14 +128,21 @@ export function SessionItem({
             className="text-[13px] font-medium flex-1 min-w-0 text-cc-fg bg-transparent border border-cc-border rounded px-1.5 py-0.5 outline-none focus:border-cc-primary/50 focus:ring-1 focus:ring-cc-primary/20"
           />
         ) : (
-          <span
-            className={`text-[13px] font-medium truncate text-cc-fg leading-snug flex-1 min-w-0 ${
-              isRecentlyRenamed ? "animate-name-appear" : ""
-            }`}
-            onAnimationEnd={() => onClearRecentlyRenamed(s.id)}
-          >
-            {label}
-          </span>
+          <div className="flex-1 min-w-0">
+            <span
+              className={`text-[13px] font-medium truncate text-cc-fg leading-snug block ${
+                isRecentlyRenamed ? "animate-name-appear" : ""
+              }`}
+              onAnimationEnd={() => onClearRecentlyRenamed(s.id)}
+            >
+              {label}
+            </span>
+            {cwdTail && (
+              <span className="text-[10px] text-cc-muted truncate block leading-tight">
+                {cwdTail}
+              </span>
+            )}
+          </div>
         )}
 
         {/* LOCAL: removed CC/CX BackendBadge — upstream shows backend type here */}

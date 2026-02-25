@@ -104,6 +104,11 @@ describe("no raw localStorage in source files", () => {
     "utils/safe-storage.ts", // the wrapper itself
     "test-setup.ts",         // test polyfills
     "analytics.ts",          // upstream telemetry uses raw localStorage intentionally
+    "api.ts",                // auth token storage (upstream auth system)
+    "store.ts",              // auth state persistence (upstream auth system)
+    "ws.ts",                 // WS auth token for connection (upstream auth system)
+    "terminal-ws.ts",        // terminal WS auth token (upstream auth system)
+    "components/UpdateOverlay.tsx", // auth token for update check (upstream auth system)
   ]);
 
   function collectSourceFiles(dir: string, base: string): string[] {

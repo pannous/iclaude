@@ -222,7 +222,8 @@ describe("Sidebar", () => {
     expect(screen.queryByText(/secret\.txt/)).not.toBeInTheDocument();
   });
 
-  it("session items show project name in group header (not in session row)", () => {
+  it("session items show project name in group header and full cwd path in session row", () => {
+    // "myapp" appears in the project group header, full cwd path appears in the session row
     const session = makeSession("s1", { cwd: "/home/user/projects/myapp" });
     const sdk = makeSdkSession("s1", { title: "Test Session" });
     mockState = createMockState({
@@ -231,8 +232,11 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    // "myapp" appears in the project group header
-    expect(screen.getByText("myapp")).toBeInTheDocument();
+    // Group header shows "myapp"
+    const matches = screen.getAllByText("myapp");
+    expect(matches.length).toBeGreaterThanOrEqual(1);
+    // Session row shows the full cwd path
+    expect(screen.getByText("/home/user/projects/myapp")).toBeInTheDocument();
   });
 
   it("session items do not show git branch (removed in redesign)", () => {
@@ -316,6 +320,7 @@ describe("Sidebar", () => {
   });
 
   it("New Session button calls newSession", () => {
+    // There are two New Session buttons: desktop header + mobile FAB
     render(<Sidebar />);
     fireEvent.click(screen.getByText("New"));
 

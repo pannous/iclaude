@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.61.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.61.0...the-companion-v0.61.1) (2026-02-24)
+
+
+### Bug Fixes
+
+* **agents:** replace emoji icons with SVG icon system ([#406](https://github.com/The-Vibe-Company/companion/issues/406)) ([d2ed31b](https://github.com/The-Vibe-Company/companion/commit/d2ed31b477e07d7f8d17e2a19c01599b45e05f69))
+
+## [0.61.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.60.1...the-companion-v0.61.0) (2026-02-24)
+
+
+### Features
+
+* **web:** add auth, PWA, process panel, editor/files, page redesigns, and theme polish ([#396](https://github.com/The-Vibe-Company/companion/issues/396)) ([cb2f101](https://github.com/The-Vibe-Company/companion/commit/cb2f101d7c2764fbaa0d582ed1022763706c9283))
+
+## [0.60.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.60.0...the-companion-v0.60.1) (2026-02-24)
+
+
+### Bug Fixes
+
+* **agents:** add resilient webhook copy URL behavior ([#400](https://github.com/The-Vibe-Company/companion/issues/400)) ([07bbf9b](https://github.com/The-Vibe-Company/companion/commit/07bbf9b8e63ec9e20f0bb4ac52fd6d0d18614f71))
+
 ## [0.60.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.59.0...the-companion-v0.60.0) (2026-02-24)
 
 

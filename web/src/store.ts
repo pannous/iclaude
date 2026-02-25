@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem, McpServerDetail } from "./types.js";
+import type { SessionState, PermissionRequest, ChatMessage, SdkSessionInfo, TaskItem, ProcessItem, ProcessStatus, McpServerDetail } from "./types.js";
 import type { UpdateInfo, PRStatusResponse, CreationProgressEvent, LinearIssue } from "./api.js";
 import { safeStorage } from "./utils/safe-storage.js";
 import { type TaskPanelConfig, getInitialTaskPanelConfig, getDefaultConfig, persistTaskPanelConfig, SECTION_DEFINITIONS } from "./components/task-panel-sections.js";
@@ -62,14 +62,20 @@ function initTheme(): ThemeMode {
   const valid: ThemeMode[] = ["system", "dark", "light"];
   const stored = typeof window !== "undefined" ? safeStorage.getItem("cc-theme") : null;
   if (stored && valid.includes(stored as ThemeMode)) return stored as ThemeMode;
-  // Migrate from old boolean key
   const legacy = typeof window !== "undefined" ? safeStorage.getItem("cc-dark-mode") : null;
   if (legacy === "true") return "dark";
   if (legacy === "false") return "light";
   return "system";
 }
 
+const AUTH_STORAGE_KEY = "companion_auth_token";
+
+
 interface AppState {
+  // Auth
+  authToken: string | null;
+  isAuthenticated: boolean;
+
   // Sessions
   sessions: Map<string, SessionState>;
   sdkSessions: SdkSessionInfo[];
@@ -106,6 +112,9 @@ interface AppState {
   changedFilesTick: Map<string, number>;
   // Count of files changed per session as reported by git (set by DiffPanel)
   gitChangedFilesCount: Map<string, number>;
+
+  // Background processes per session (Bash with run_in_background)
+  sessionProcesses: Map<string, ProcessItem[]>;
 
   // Session display names
   sessionNames: Map<string, string>;
@@ -163,7 +172,7 @@ interface AppState {
   homeResetKey: number;
   editorTabEnabled: boolean;
   newSessionCwd: string | null; // LOCAL: custom cwd for new sessions
-  activeTab: string; // LOCAL: "chat" | "diff" | "terminal" | "editor" | "panel:<slug>"
+  activeTab: string; // LOCAL: "chat" | "diff" | "terminal" | "editor" | "processes" | "panel:<slug>"
   openPanels: string[]; // LOCAL: panel tabs
   editorOpenFile: Map<string, string>; // LOCAL: per-session editor file
   editorUrl: Map<string, string>; // LOCAL: per-session editor URL
@@ -173,6 +182,10 @@ interface AppState {
   // File editor tab state (global, not per-session)
   editorFiles: string[]; // open file paths
   editorActiveFilePath: string | null;
+
+  // Auth actions
+  setAuthToken: (token: string) => void;
+  logout: () => void;
 
   // Actions
   setTheme: (theme: ThemeMode) => void;
@@ -221,6 +234,11 @@ interface AppState {
   // Changed files actions
   bumpChangedFilesTick: (sessionId: string) => void;
   setGitChangedFilesCount: (sessionId: string, count: number) => void;
+
+  // Process actions
+  addProcess: (sessionId: string, process: ProcessItem) => void;
+  updateProcess: (sessionId: string, taskId: string, updates: Partial<ProcessItem>) => void;
+  updateProcessByToolUseId: (sessionId: string, toolUseId: string, updates: Partial<ProcessItem>) => void;
 
   // Session name actions
   setSessionName: (sessionId: string, name: string) => void;
@@ -346,7 +364,14 @@ function initEnum<T extends string>(key: string, valid: readonly T[], fallback: 
   return valid.includes(stored) ? stored : fallback;
 }
 
+function getInitialAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(AUTH_STORAGE_KEY) || null;
+}
+
 export const useStore = create<AppState>((set) => ({
+  authToken: getInitialAuthToken(),
+  isAuthenticated: getInitialAuthToken() !== null,
   sessions: new Map(),
   sdkSessions: [],
   currentSessionId: initString("cc-current-session"),
@@ -363,6 +388,7 @@ export const useStore = create<AppState>((set) => ({
   changedFilesTick: new Map(),
   gitChangedFilesCount: new Map(),
   diffPanelSelectedFile: new Map(),
+  sessionProcesses: new Map(),
   sessionNames: initParsed("cc-session-names", (r) => new Map(JSON.parse(r) as [string, string][]), new Map<string, string>()),
   sessionSubtitles: new Map(),
   recentlyRenamed: new Set(),
@@ -436,6 +462,15 @@ export const useStore = create<AppState>((set) => ({
       safeStorage.setItem("cc-theme", next);
       return { theme: next, darkMode: resolveThemeDark(next) };
     }),
+  setAuthToken: (token) => {
+    localStorage.setItem(AUTH_STORAGE_KEY, token);
+    set({ authToken: token, isAuthenticated: true });
+  },
+  logout: () => {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    set({ authToken: null, isAuthenticated: false });
+  },
+
   setDarkMode: (v) => {
     const theme = v ? "dark" : "light";
     safeStorage.setItem("cc-theme", theme);
@@ -571,6 +606,7 @@ export const useStore = create<AppState>((set) => ({
         changedFilesTick: deleteFromMap(s.changedFilesTick, sessionId),
         gitChangedFilesCount: deleteFromMap(s.gitChangedFilesCount, sessionId),
         diffPanelSelectedFile: deleteFromMap(s.diffPanelSelectedFile, sessionId),
+        sessionProcesses: deleteFromMap(s.sessionProcesses, sessionId),
         sessionNames,
         recentlyRenamed: deleteFromSet(s.recentlyRenamed, sessionId),
         editorOpenFile: deleteFromMap(s.editorOpenFile, sessionId), // LOCAL
@@ -679,6 +715,40 @@ export const useStore = create<AppState>((set) => ({
       const gitChangedFilesCount = new Map(s.gitChangedFilesCount);
       gitChangedFilesCount.set(sessionId, count);
       return { gitChangedFilesCount };
+    }),
+
+  addProcess: (sessionId, process) =>
+    set((s) => {
+      const sessionProcesses = new Map(s.sessionProcesses);
+      const processes = [...(sessionProcesses.get(sessionId) || []), process];
+      sessionProcesses.set(sessionId, processes);
+      return { sessionProcesses };
+    }),
+
+  updateProcess: (sessionId, taskId, updates) =>
+    set((s) => {
+      const sessionProcesses = new Map(s.sessionProcesses);
+      const processes = sessionProcesses.get(sessionId);
+      if (processes) {
+        sessionProcesses.set(
+          sessionId,
+          processes.map((p) => (p.taskId === taskId ? { ...p, ...updates } : p)),
+        );
+      }
+      return { sessionProcesses };
+    }),
+
+  updateProcessByToolUseId: (sessionId, toolUseId, updates) =>
+    set((s) => {
+      const sessionProcesses = new Map(s.sessionProcesses);
+      const processes = sessionProcesses.get(sessionId);
+      if (processes) {
+        sessionProcesses.set(
+          sessionId,
+          processes.map((p) => (p.toolUseId === toolUseId ? { ...p, ...updates } : p)),
+        );
+      }
+      return { sessionProcesses };
     }),
 
   setSessionName: (sessionId, name) =>
@@ -915,6 +985,7 @@ export const useStore = create<AppState>((set) => ({
       changedFilesTick: new Map(),
       gitChangedFilesCount: new Map(),
       diffPanelSelectedFile: new Map(),
+      sessionProcesses: new Map(),
       updateInfo: null,
       updateDismissedVersion: null,
       sessionNames: new Map(),
