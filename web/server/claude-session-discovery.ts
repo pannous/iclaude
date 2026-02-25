@@ -125,9 +125,8 @@ export function discoverClaudeSessions(
   sessionFiles.sort((a, b) => b.mtimeMs - a.mtimeMs);
 
   const uniqueBySessionId = new Map<string, DiscoveredClaudeSession>();
-  for (const candidate of sessionFiles) {
-    if (uniqueBySessionId.size >= limit) break;
-
+  // Scan up to 3× the requested limit to absorb ghosts/duplicates; apply the return limit last.
+  for (const candidate of sessionFiles.slice(0, limit * 3)) {
     const metadata = extractMetadataFromJsonl(candidate.filePath);
     if (!metadata) continue;
 

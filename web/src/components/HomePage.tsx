@@ -50,7 +50,7 @@ type SessionLaunchOverride = {
 };
 
 const RECENT_SESSIONS_WINDOW_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
-const INITIAL_VISIBLE_SESSION_ROWS = 12; // NOTE: HomePage.test.tsx hardcodes "12 of 16" — update test before increasing
+const INITIAL_VISIBLE_SESSION_ROWS = 12;
 const LOAD_MORE_SESSION_ROWS = 24;
 
 function getResumeCandidateProject(cwd: string): string {

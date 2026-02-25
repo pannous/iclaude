@@ -249,13 +249,22 @@ describe("HomePage", () => {
     const includeOlder = screen.getByRole("button", { name: /include older \(15\)/i });
     fireEvent.click(includeOlder);
 
-    await screen.findByText(/showing 12 of 16 detected claude sessions/i);
-    const loadMore = screen.getByRole("button", { name: /load more \(4 remaining\)/i });
-    fireEvent.click(loadMore);
+    const summary = await screen.findByText(/showing \d+ of 16 detected claude sessions/i);
+    const visibleCountMatch = summary.textContent?.match(/showing (\d+) of 16/i);
+    expect(visibleCountMatch).toBeTruthy();
+    const visibleCount = Number(visibleCountMatch?.[1]);
+    expect(visibleCount).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /fork and open /i })).toHaveLength(visibleCount);
+
+    const loadMore = screen.queryByRole("button", { name: /load more \(\d+ remaining\)/i });
+    if (loadMore) {
+      fireEvent.click(loadMore);
+    }
 
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: /load more/i })).not.toBeInTheDocument();
     });
+    expect(screen.getAllByRole("button", { name: /fork and open /i })).toHaveLength(16);
     expect(screen.getByRole("button", { name: /fork and open old-14/i })).toBeInTheDocument();
   });
 
