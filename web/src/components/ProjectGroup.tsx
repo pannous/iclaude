@@ -55,7 +55,7 @@ export function ProjectGroup({
   const collapsedPreview = isCollapsed
     ? group.sessions
         .slice(0, 2)
-        .map((s) => s.title || sessionNames.get(s.id) || s.model || s.id.slice(0, 8))
+        .map((s) => (s.title?.replace(/<[^>]*>/g, "").trim() || undefined) || sessionNames.get(s.id) || s.model || s.id.slice(0, 8))
         .join(", ") + (group.sessions.length > 2 ? ", ..." : "")
     : "";
 

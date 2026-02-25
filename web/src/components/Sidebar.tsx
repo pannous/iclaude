@@ -199,7 +199,12 @@ export function Sidebar() {
       const activeCliIds = new Set(
         useStore.getState().sdkSessions.map((s) => s.cliSessionId).filter(Boolean)
       );
-      setResumableSessions(list.filter((rs) => !activeCliIds.has(rs.sessionId)));
+      const cleanTag = (t: string) => t.replace(/<[^>]*>/g, "").trim();
+      setResumableSessions(
+        list
+          .filter((rs) => !activeCliIds.has(rs.sessionId))
+          .map((rs) => ({ ...rs, title: cleanTag(rs.title || "") || rs.title }))
+      );
     } catch {
       setResumableSessions([]);
     }
@@ -427,7 +432,7 @@ export function Sidebar() {
   const validSessions = allSessionList.filter((s) => {
     if (!s.cwd && !s.title) return false;
     const name = sessionNames.get(s.id);
-    const label = s.title || name;
+    const label = (s.title?.replace(/<[^>]*>/g, "").trim() || undefined) || name;
     if (!label || label === s.model) return false;
     if (SPAM_PATTERNS.some((re) => re.test(label))) return false;
     return true;

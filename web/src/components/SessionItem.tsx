@@ -75,7 +75,9 @@ export function SessionItem({
 }: SessionItemProps) {
   const shortId = s.id.slice(0, 8);
   // LOCAL: s.title takes priority — upstream only uses sessionName || s.model || shortId
-  const rawLabel = s.title || sessionName || s.model || shortId;
+  // Strip any leaked XML/HTML tags (e.g. <local-command-caveat>) as a last-resort defence before render
+  const cleanTitle = s.title?.replace(/<[^>]*>/g, "").trim() || undefined;
+  const rawLabel = cleanTitle || sessionName || s.model || shortId;
   // For agent sessions: prefer agentName, strip "agent: " prefix (already in dedicated section)
   const label = s.agentName
     ? s.agentName
