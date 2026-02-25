@@ -1,9 +1,12 @@
+import { readFileSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { Hono } from "hono";
 import type { WsBridge } from "../ws-bridge.js";
 
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 /** Fast, cheap model for inline completions. */
-const COMPLETION_MODEL = "claude-haiku-4-5-20251001";
+const COMPLETION_MODEL = "gpt-4o-mini";
 const MAX_HISTORY_MESSAGES = 20;
 
 const SYSTEM_PROMPT =
@@ -11,6 +14,20 @@ const SYSTEM_PROMPT =
   "Predict what the user wants to type next. " +
   "Return ONLY the completion text — no explanations, no quotes, no preamble. " +
   "If you cannot make a useful prediction, return an empty string.";
+
+/** Read OPENAI_API_KEY from env, falling back to ~/.keys export lines. */
+function resolveOpenAiKey(): string | null {
+  if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
+  const keysFile = join(homedir(), ".keys");
+  if (!existsSync(keysFile)) return null;
+  try {
+    const content = readFileSync(keysFile, "utf-8");
+    const match = content.match(/^export OPENAI_API_KEY="([^"]+)"/m);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
 
 function extractAssistantText(message: { content: unknown }): string {
   const blocks = message.content;
@@ -33,7 +50,7 @@ export function registerCompleteRoutes(api: Hono, deps: { wsBridge: WsBridge }):
     const body = await c.req.json<{ partial?: string }>().catch(() => ({ partial: "" }));
     const partial = body.partial ?? "";
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = resolveOpenAiKey();
     if (!apiKey) return c.json({ suggestion: null });
 
     const session = deps.wsBridge.resolveSession(sessionId);
@@ -47,7 +64,10 @@ export function registerCompleteRoutes(api: Hono, deps: { wsBridge: WsBridge }):
     // Require at least one prior exchange so suggestions are meaningful
     if (history.length < 2 && !partial) return c.json({ suggestion: null });
 
-    const messages: Array<{ role: "user" | "assistant"; content: string }> = [];
+    const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+      { role: "system", content: SYSTEM_PROMPT },
+    ];
+
     for (const msg of history) {
       if (msg.type === "user_message") {
         messages.push({ role: "user", content: msg.content });
@@ -64,25 +84,23 @@ export function registerCompleteRoutes(api: Hono, deps: { wsBridge: WsBridge }):
     messages.push({ role: "user", content: taskContent });
 
     try {
-      const res = await fetch(ANTHROPIC_API_URL, {
+      const res = await fetch(OPENAI_API_URL, {
         method: "POST",
         headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
+          "Authorization": `Bearer ${apiKey}`,
           "content-type": "application/json",
         },
         body: JSON.stringify({
           model: COMPLETION_MODEL,
           max_tokens: 200,
-          system: SYSTEM_PROMPT,
           messages,
         }),
       });
 
       if (!res.ok) return c.json({ suggestion: null });
 
-      const data = await res.json() as { content?: Array<{ type: string; text: string }> };
-      const raw = data.content?.find((b) => b.type === "text")?.text.trim() ?? "";
+      const data = await res.json() as { choices?: Array<{ message: { content: string } }> };
+      const raw = data.choices?.[0]?.message.content.trim() ?? "";
       return c.json({ suggestion: raw || null });
     } catch {
       return c.json({ suggestion: null });

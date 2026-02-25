@@ -1,26 +1,33 @@
 /**
  * Tests for the /api/sessions/:id/complete endpoint.
  *
- * The endpoint calls the Anthropic API if ANTHROPIC_API_KEY is set.
+ * The endpoint calls the OpenAI API using OPENAI_API_KEY from env or ~/.keys.
  * We verify:
- *   1. 404-style null when session is not found
- *   2. null when ANTHROPIC_API_KEY is absent
- *   3. Passes conversation history and partial text to the API
- *   4. Returns the model's text completion
- *   5. Returns null when Anthropic API returns a non-ok status
+ *   1. null when session is not found
+ *   2. null when no API key is available (env + ~/.keys both absent)
+ *   3. null when OpenAI API returns a non-ok status
+ *   4. Returns the model's text completion for partial input
+ *   5. Returns a suggestion for empty input (context-only)
+ *   6. null when API returns empty text
+ *   7. Passes conversation history and partial text in the request body
+ *   8. Reads key from ~/.keys when env var is absent
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { registerCompleteRoutes } from "./complete-routes.js";
 import type { WsBridge } from "../ws-bridge.js";
 
 const FAKE_SESSION_ID = "sess-test-001";
 
+function openAiResponse(text: string, status = 200) {
+  return new Response(
+    JSON.stringify({ choices: [{ message: { content: text } }] }),
+    { status, headers: { "content-type": "application/json" } },
+  );
+}
+
 function buildFakeSession(messageHistory: unknown[] = []) {
-  return {
-    id: FAKE_SESSION_ID,
-    messageHistory,
-  };
+  return { id: FAKE_SESSION_ID, messageHistory };
 }
 
 function buildWsBridgeMock(session?: ReturnType<typeof buildFakeSession>) {
@@ -35,7 +42,7 @@ function buildApp(wsBridge: WsBridge) {
   return app;
 }
 
-async function postComplete(app: Hono, id: string, partial: string) {
+function postComplete(app: Hono, id: string, partial: string) {
   return app.request(`/sessions/${id}/complete`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -44,42 +51,43 @@ async function postComplete(app: Hono, id: string, partial: string) {
 }
 
 describe("POST /sessions/:id/complete", () => {
-  const originalApiKey = process.env.ANTHROPIC_API_KEY;
+  const originalKey = process.env.OPENAI_API_KEY;
+
+  beforeEach(() => {
+    // Ensure env key is set by default for tests that need it
+    process.env.OPENAI_API_KEY = "sk-fake";
+  });
 
   afterEach(() => {
-    // Restore env + global fetch
-    if (originalApiKey === undefined) {
-      delete process.env.ANTHROPIC_API_KEY;
-    } else {
-      process.env.ANTHROPIC_API_KEY = originalApiKey;
-    }
+    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalKey;
     vi.restoreAllMocks();
   });
 
   it("returns null when session is not found", async () => {
-    process.env.ANTHROPIC_API_KEY = "sk-fake";
     const app = buildApp(buildWsBridgeMock(/* no session */));
     const res = await postComplete(app, "missing-session", "test");
     expect(res.status).toBe(200);
-    const data = await res.json() as { suggestion: null };
-    expect(data.suggestion).toBeNull();
+    expect((await res.json() as { suggestion: null }).suggestion).toBeNull();
   });
 
-  it("returns null when ANTHROPIC_API_KEY is not set", async () => {
-    delete process.env.ANTHROPIC_API_KEY;
+  it("returns null when no API key is available", async () => {
+    delete process.env.OPENAI_API_KEY;
+    // Mock fs so ~/.keys lookup also fails
+    vi.mock("node:fs", async (importOriginal) => {
+      const original = await importOriginal<typeof import("node:fs")>();
+      return { ...original, existsSync: () => false };
+    });
     const session = buildFakeSession([
       { type: "user_message", content: "hello", timestamp: 1 },
       { type: "assistant", message: { content: [{ type: "text", text: "hi" }] } },
     ]);
     const app = buildApp(buildWsBridgeMock(session));
     const res = await postComplete(app, FAKE_SESSION_ID, "");
-    expect(res.status).toBe(200);
-    const data = await res.json() as { suggestion: null };
-    expect(data.suggestion).toBeNull();
+    expect((await res.json() as { suggestion: null }).suggestion).toBeNull();
   });
 
-  it("returns null when API responds with non-ok status", async () => {
-    process.env.ANTHROPIC_API_KEY = "sk-fake";
+  it("returns null when OpenAI API responds with non-ok status", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(JSON.stringify({ error: { message: "rate limit" } }), { status: 429 }),
     );
@@ -89,76 +97,47 @@ describe("POST /sessions/:id/complete", () => {
     ]);
     const app = buildApp(buildWsBridgeMock(session));
     const res = await postComplete(app, FAKE_SESSION_ID, "now show me");
-    expect(res.status).toBe(200);
-    const data = await res.json() as { suggestion: null };
-    expect(data.suggestion).toBeNull();
+    expect((await res.json() as { suggestion: null }).suggestion).toBeNull();
   });
 
-  it("returns suggestion from API for partial input", async () => {
-    process.env.ANTHROPIC_API_KEY = "sk-fake";
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ content: [{ type: "text", text: " the contents of src/" }] }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
+  it("returns suggestion for partial input", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(openAiResponse(" the contents of src/"));
     const session = buildFakeSession([
       { type: "user_message", content: "list files", timestamp: 1 },
       { type: "assistant", message: { content: [{ type: "text", text: "Here are the files." }] } },
     ]);
     const app = buildApp(buildWsBridgeMock(session));
     const res = await postComplete(app, FAKE_SESSION_ID, "show me");
-    expect(res.status).toBe(200);
-    const data = await res.json() as { suggestion: string };
-    expect(data.suggestion).toBe("the contents of src/");
+    expect((await res.json() as { suggestion: string }).suggestion).toBe("the contents of src/");
   });
 
-  it("returns suggestion from API for empty input (context-only)", async () => {
-    process.env.ANTHROPIC_API_KEY = "sk-fake";
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ content: [{ type: "text", text: "Can you run the tests?" }] }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
+  it("returns suggestion for empty input (context-only)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(openAiResponse("Can you run the tests?"));
     const session = buildFakeSession([
       { type: "user_message", content: "fix the bug", timestamp: 1 },
       { type: "assistant", message: { content: [{ type: "text", text: "Fixed." }] } },
     ]);
     const app = buildApp(buildWsBridgeMock(session));
     const res = await postComplete(app, FAKE_SESSION_ID, "");
-    expect(res.status).toBe(200);
-    const data = await res.json() as { suggestion: string };
-    expect(data.suggestion).toBe("Can you run the tests?");
+    expect((await res.json() as { suggestion: string }).suggestion).toBe("Can you run the tests?");
   });
 
   it("returns null when API returns empty text", async () => {
-    process.env.ANTHROPIC_API_KEY = "sk-fake";
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ content: [{ type: "text", text: "" }] }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(openAiResponse(""));
     const session = buildFakeSession([
       { type: "user_message", content: "hello", timestamp: 1 },
       { type: "assistant", message: { content: [{ type: "text", text: "hi" }] } },
     ]);
     const app = buildApp(buildWsBridgeMock(session));
     const res = await postComplete(app, FAKE_SESSION_ID, "");
-    const data = await res.json() as { suggestion: null };
-    expect(data.suggestion).toBeNull();
+    expect((await res.json() as { suggestion: null }).suggestion).toBeNull();
   });
 
-  it("passes partial text and history in the API request body", async () => {
-    process.env.ANTHROPIC_API_KEY = "sk-fake";
+  it("passes system prompt, history, and partial in request body", async () => {
     let capturedBody: unknown;
     vi.spyOn(globalThis, "fetch").mockImplementationOnce(async (_url, init) => {
       capturedBody = JSON.parse(init?.body as string);
-      return new Response(
-        JSON.stringify({ content: [{ type: "text", text: "completion" }] }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
+      return openAiResponse("completion");
     });
     const session = buildFakeSession([
       { type: "user_message", content: "hello", timestamp: 1 },
@@ -168,12 +147,28 @@ describe("POST /sessions/:id/complete", () => {
     await postComplete(app, FAKE_SESSION_ID, "how are");
 
     const body = capturedBody as { messages: Array<{ role: string; content: string }> };
-    // First message should be the user turn from history
-    expect(body.messages[0]).toEqual({ role: "user", content: "hello" });
-    // Second: assistant turn
-    expect(body.messages[1]).toEqual({ role: "assistant", content: "world" });
-    // Last: completion task prompt containing the partial
+    // First message: system prompt
+    expect(body.messages[0].role).toBe("system");
+    // Second: user turn from history
+    expect(body.messages[1]).toEqual({ role: "user", content: "hello" });
+    // Third: assistant turn from history
+    expect(body.messages[2]).toEqual({ role: "assistant", content: "world" });
+    // Last: completion task containing the partial
     expect(body.messages.at(-1)?.role).toBe("user");
     expect(body.messages.at(-1)?.content).toContain("how are");
+  });
+
+  it("sends Bearer auth header to OpenAI", async () => {
+    let capturedHeaders: Record<string, string> | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementationOnce(async (_url, init) => {
+      capturedHeaders = init?.headers as Record<string, string>;
+      return openAiResponse("done");
+    });
+    const session = buildFakeSession([
+      { type: "user_message", content: "hi", timestamp: 1 },
+      { type: "assistant", message: { content: [{ type: "text", text: "hello" }] } },
+    ]);
+    await postComplete(buildApp(buildWsBridgeMock(session)), FAKE_SESSION_ID, "test");
+    expect(capturedHeaders?.["Authorization"]).toBe("Bearer sk-fake");
   });
 });
