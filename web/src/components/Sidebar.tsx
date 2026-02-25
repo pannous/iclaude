@@ -221,6 +221,7 @@ export function Sidebar() {
       setCurrentSession(sessionId);
       connectSession(sessionId);
       await waitForConnection(sessionId);
+      setResumableSessions((prev) => prev.filter((s) => s.sessionId !== rs.sessionId));
       setShowResumePicker(false);
       if (window.innerWidth < 768) {
         useStore.getState().setSidebarOpen(false);
@@ -451,6 +452,11 @@ export function Sidebar() {
   const logoSrc = currentSession?.backendType === "codex" ? "/logo-codex.svg" : "/logo.svg";
   const [showCronSessions, setShowCronSessions] = useState(true);
   const [showAgentSessions, setShowAgentSessions] = useState(false);
+  const prevAgentCountRef = useRef(0);
+  useEffect(() => {
+    if (agentSessions.length > prevAgentCountRef.current) setShowAgentSessions(true);
+    prevAgentCountRef.current = agentSessions.length;
+  }, [agentSessions.length]);
 
   // Group active sessions by project
   const projectGroups = useMemo(
