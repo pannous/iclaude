@@ -168,12 +168,8 @@ export default function App() {
             useStore.getState().newSession();
             navigateHome(true);
           });
-        } else if (session.archived) {
-          // Session is archived — disconnect and go home
-          disconnectSession(route.sessionId);
-          useStore.getState().newSession();
-          navigateHome(true);
         }
+        // LOCAL: allow viewing archived sessions — do not redirect home
       }).catch((e) => console.warn("[app] listSessions", e));
     } else if (route.page === "home") {
       const store = useStore.getState();
