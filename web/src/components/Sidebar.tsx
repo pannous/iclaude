@@ -749,7 +749,7 @@ export function Sidebar() {
                   {showArchived && archivedSessions.length > 0 && (
                     <button
                       onClick={clearAllArchived}
-                      className="px-2 py-1 mr-1 text-[10px] text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors cursor-pointer"
+                      className="px-2 py-1 mr-1 text-[10px] text-cc-muted hover:text-cc-fg hover:bg-cc-hover rounded-md transition-colors cursor-pointer"
                       title="Clear all archived sessions (resumable via Resume button)"
                     >
                       Clear all
