@@ -9,7 +9,8 @@ import type { Hono } from "hono";
 function guardPath(raw: string, allowedBases: string[]): string | null {
   const abs = resolve(raw);
   for (const base of allowedBases) {
-    if (abs === base || abs.startsWith(base + "/")) return abs;
+    const norm = base.replace(/\/+$/, "");
+    if (abs === norm || abs.startsWith(norm + "/")) return abs;
   }
   return null;
 }

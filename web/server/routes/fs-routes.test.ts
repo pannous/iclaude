@@ -214,4 +214,20 @@ describe("path traversal protection", () => {
     const body = await res.json();
     expect(body.content).toBe("hello");
   });
+
+  it('allows all absolute paths when allowedBases is ["/"] (YOLO mode)', async () => {
+    // When the server is configured with "/" as the allowed base, any absolute path
+    // should pass guardPath — the bug was base + "/" = "//" which never matched.
+    const rootApp = new Hono();
+    registerFsRoutes(rootApp, { allowedBases: ["/"] });
+
+    const filePath = join(tempDir, "yolo.txt");
+    writeFileSync(filePath, "yolo");
+
+    const res = await rootApp.request(`/fs/read?path=${encodeURIComponent(filePath)}`);
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.content).toBe("yolo");
+  });
 });
