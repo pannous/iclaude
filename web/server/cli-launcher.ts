@@ -41,9 +41,7 @@ async function findFreePort(start = 4500, end = 4600): Promise<number> {
       });
       server.stop(true);
       return port;
-    } catch {
-      // Port in use, try next
-    }
+    } catch {}
   }
   throw new Error(`No free port found in range ${start}-${end}`);
 }
@@ -236,7 +234,7 @@ export class CliLauncher {
       // Check if the process is still alive
       if (info.pid && info.state !== "exited") {
         try {
-          process.kill(info.pid, 0); // signal 0 = just check if alive
+          process.kill(info.pid, 0);
           info.state = "starting"; // WS not yet re-established, wait for CLI to reconnect
           this.sessions.set(info.sessionId, info);
           recovered++;
@@ -338,7 +336,6 @@ export class CliLauncher {
       info.codexSandbox = options.codexSandbox;
     }
 
-    // Store container metadata if provided
     if (options.containerId) {
       info.containerId = options.containerId;
       info.containerName = options.containerName;
@@ -623,10 +620,8 @@ export class CliLauncher {
     info.pid = proc.pid;
     this.processes.set(sessionId, proc);
 
-    // Stream stdout/stderr for debugging
     this.pipeOutput(sessionId, proc);
 
-    // Monitor process exit
     const spawnedAt = Date.now();
     proc.exited.then((exitCode) => {
       console.log(`[cli-launcher] Session ${sessionId} exited (code=${exitCode})`);
@@ -839,7 +834,6 @@ export class CliLauncher {
     // Pipe stdout/stderr for debugging (JSON-RPC goes over WebSocket now)
     this.pipeOutput(sessionId, proc);
 
-    // Store WS metadata
     const wsUrl = `ws://127.0.0.1:${proxyConnectPort}`;
     info.codexWsPort = proxyConnectPort;
     info.codexWsUrl = wsUrl;
@@ -1095,7 +1089,6 @@ export class CliLauncher {
     // Mark as connected immediately (no WS handshake needed for stdio)
     info.state = "connected";
 
-    // Monitor process exit
     proc.exited.then((exitCode) => {
       console.log(`[cli-launcher] Codex session ${sessionId} exited (code=${exitCode})`);
       const session = this.sessions.get(sessionId);
@@ -1270,9 +1263,7 @@ export class CliLauncher {
           log(`[session:${sessionId}:${label}] ${text.trimEnd()}`);
         }
       }
-    } catch {
-      // stream closed
-    }
+    } catch {}
   }
 
   private pipeOutput(sessionId: string, proc: Subprocess): void {
