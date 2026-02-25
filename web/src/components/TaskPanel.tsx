@@ -21,6 +21,17 @@ function barColor(pct: number): string {
   return "bg-cc-primary";
 }
 
+function UsageBar({ value, color }: { value: number; color?: string }) {
+  return (
+    <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
+      <div
+        className={`h-full rounded-full transition-all duration-500 ${color ?? barColor(value)}`}
+        style={{ width: `${Math.min(value, 100)}%` }}
+      />
+    </div>
+  );
+}
+
 function UsageLimitsSection({ sessionId }: { sessionId: string }) {
   const [limits, setLimits] = useState<UsageLimits | null>(null);
 
@@ -75,14 +86,7 @@ function UsageLimitsSection({ sessionId }: { sessionId: string }) {
               )}
             </span>
           </div>
-          <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${barColor(limits.five_hour.utilization)}`}
-              style={{
-                width: `${Math.min(limits.five_hour.utilization, 100)}%`,
-              }}
-            />
-          </div>
+          <UsageBar value={limits.five_hour.utilization} />
         </div>
       )}
 
@@ -102,14 +106,7 @@ function UsageLimitsSection({ sessionId }: { sessionId: string }) {
               )}
             </span>
           </div>
-          <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${barColor(limits.seven_day.utilization)}`}
-              style={{
-                width: `${Math.min(limits.seven_day.utilization, 100)}%`,
-              }}
-            />
-          </div>
+          <UsageBar value={limits.seven_day.utilization} />
         </div>
       )}
 
@@ -126,14 +123,7 @@ function UsageLimitsSection({ sessionId }: { sessionId: string }) {
             </span>
           </div>
           {limits.extra_usage.utilization !== null && (
-            <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${barColor(limits.extra_usage.utilization)}`}
-                style={{
-                  width: `${Math.min(limits.extra_usage.utilization, 100)}%`,
-                }}
-              />
-            </div>
+            <UsageBar value={limits.extra_usage.utilization} />
           )}
         </div>
       )}
@@ -175,12 +165,7 @@ function CodexRateLimitsSection({ sessionId }: { sessionId: string }) {
               )}
             </span>
           </div>
-          <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${barColor(primary.usedPercent)}`}
-              style={{ width: `${Math.min(primary.usedPercent, 100)}%` }}
-            />
-          </div>
+          <UsageBar value={primary.usedPercent} />
         </div>
       )}
       {secondary && (
@@ -198,12 +183,7 @@ function CodexRateLimitsSection({ sessionId }: { sessionId: string }) {
               )}
             </span>
           </div>
-          <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${barColor(secondary.usedPercent)}`}
-              style={{ width: `${Math.min(secondary.usedPercent, 100)}%` }}
-            />
-          </div>
+          <UsageBar value={secondary.usedPercent} />
         </div>
       )}
     </div>
@@ -250,12 +230,7 @@ function CodexTokenDetailsSection({ sessionId }: { sessionId: string }) {
             <span className="text-[11px] text-cc-muted">Context</span>
             <span className="text-[11px] text-cc-muted tabular-nums">{contextPct}%</span>
           </div>
-          <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${barColor(contextPct)}`}
-              style={{ width: `${Math.min(contextPct, 100)}%` }}
-            />
-          </div>
+          <UsageBar value={contextPct} />
         </div>
       )}
     </div>
@@ -781,12 +756,7 @@ function ProgressBar({ label, pct }: { label: string; pct: number }) {
         <span className="text-[11px] text-cc-muted uppercase tracking-wider">{label}</span>
         <span className="text-[11px] text-cc-muted tabular-nums">{pct}%</span>
       </div>
-      <div className="w-full h-1.5 rounded-full bg-cc-hover overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-500 ${barColor(pct)}`}
-          style={{ width: `${Math.min(pct, 100)}%` }}
-        />
-      </div>
+      <UsageBar value={pct} />
     </div>
   );
 }
