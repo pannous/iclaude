@@ -57,8 +57,20 @@ const IMAGE_PULL_TIMEOUT_MS = 300_000; // 5 min for pulling images
 
 const DOCKER_REGISTRY = "docker.io/stangirard";
 
+const CONTAINER_WORKSPACE_PATH = "/workspace";
+const HOST_CLAUDE_MOUNT_PATH = "/companion-host-claude";
+const HOST_CODEX_MOUNT_PATH = "/companion-host-codex";
+const CONTAINER_CLAUDE_HOME = "/root/.claude";
+const CONTAINER_CODEX_HOME = "/root/.codex";
+const SHORT_CONTAINER_ID_LENGTH = 12;
+
 function exec(cmd: string, opts?: ExecSyncOptionsWithStringEncoding): string {
   return execSync(cmd, { ...EXEC_OPTS, ...opts }).trim();
+}
+
+/** Execute a command, silently swallowing any errors. */
+function safeExec(cmd: string, opts?: ExecSyncOptionsWithStringEncoding): void {
+  try { exec(cmd, opts); } catch { /* best-effort */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -161,15 +173,15 @@ export class ContainerManager {
       // Desktop, but required explicitly on Linux)
       "--add-host=host.docker.internal:host-gateway",
       // Seed auth/config from host home, but keep runtime writes inside container.
-      "-v", `${homedir}/.claude:/companion-host-claude:ro`,
-      "--tmpfs", "/root/.claude",
+      "-v", `${homedir}/.claude:${HOST_CLAUDE_MOUNT_PATH}:ro`,
+      "--tmpfs", CONTAINER_CLAUDE_HOME,
       // Seed Codex auth/config from host (if present)
       ...(existsSync(join(homedir, ".codex"))
-        ? ["-v", `${homedir}/.codex:/companion-host-codex:ro`, "--tmpfs", "/root/.codex"]
+        ? ["-v", `${homedir}/.codex:${HOST_CODEX_MOUNT_PATH}:ro`, "--tmpfs", CONTAINER_CODEX_HOME]
         : []),
       // Isolated workspace: named volume populated later via docker cp
-      "-v", `${volumeName}:/workspace`,
-      "-w", "/workspace",
+      "-v", `${volumeName}:${CONTAINER_WORKSPACE_PATH}`,
+      "-w", CONTAINER_WORKSPACE_PATH,
     ];
 
     // Mount host .gitconfig at a staging path (not /root/.gitconfig) so the
@@ -209,7 +221,7 @@ export class ContainerManager {
       image: config.image,
       portMappings: [],
       hostCwd,
-      containerCwd: "/workspace",
+      containerCwd: CONTAINER_WORKSPACE_PATH,
       state: "creating",
       volumeName,
     };
@@ -238,15 +250,15 @@ export class ContainerManager {
 
       this.containers.set(sessionId, info);
       console.log(
-        `[container-manager] Created container ${name} (${containerId.slice(0, 12)}) ` +
+        `[container-manager] Created container ${name} (${containerId.slice(0, SHORT_CONTAINER_ID_LENGTH)}) ` +
         `ports: ${info.portMappings.map((p) => `${p.containerPort}->${p.hostPort}`).join(", ")}`,
       );
 
       return info;
     } catch (e) {
       // Cleanup partial creation (container + volume)
-      try { exec(`docker rm -f ${shellEscape(name)}`); } catch { /* ignore */ }
-      try { exec(`docker volume rm ${shellEscape(volumeName)}`); } catch { /* ignore */ }
+      safeExec(`docker rm -f ${shellEscape(name)}`);
+      safeExec(`docker volume rm ${shellEscape(volumeName)}`);
       info.state = "removed";
       throw new Error(
         `Failed to create container: ${e instanceof Error ? e.message : String(e)}`,
@@ -267,16 +279,16 @@ export class ContainerManager {
       this.execInContainer(containerId, [
         "sh", "-lc",
         [
-          "mkdir -p /root/.claude",
-          "for f in .credentials.json auth.json .auth.json credentials.json; do " +
-            "[ -f /companion-host-claude/$f ] && cp /companion-host-claude/$f /root/.claude/$f 2>/dev/null; done",
-          "for f in settings.json settings.local.json; do " +
-            "[ -f /companion-host-claude/$f ] && cp /companion-host-claude/$f /root/.claude/$f 2>/dev/null; done",
-          "[ -d /companion-host-claude/skills ] && cp -r /companion-host-claude/skills /root/.claude/skills 2>/dev/null",
+          `mkdir -p ${CONTAINER_CLAUDE_HOME}`,
+          `for f in .credentials.json auth.json .auth.json credentials.json; do ` +
+            `[ -f ${HOST_CLAUDE_MOUNT_PATH}/$f ] && cp ${HOST_CLAUDE_MOUNT_PATH}/$f ${CONTAINER_CLAUDE_HOME}/$f 2>/dev/null; done`,
+          `for f in settings.json settings.local.json; do ` +
+            `[ -f ${HOST_CLAUDE_MOUNT_PATH}/$f ] && cp ${HOST_CLAUDE_MOUNT_PATH}/$f ${CONTAINER_CLAUDE_HOME}/$f 2>/dev/null; done`,
+          `[ -d ${HOST_CLAUDE_MOUNT_PATH}/skills ] && cp -r ${HOST_CLAUDE_MOUNT_PATH}/skills ${CONTAINER_CLAUDE_HOME}/skills 2>/dev/null`,
           "true",
         ].join("; "),
       ]);
-    } catch { /* best-effort — container may not have /companion-host-claude mounted */ }
+    } catch { /* best-effort */ }
   }
 
   /**
@@ -289,16 +301,16 @@ export class ContainerManager {
       this.execInContainer(containerId, [
         "sh", "-lc",
         [
-          "[ -d /companion-host-codex ] || exit 0",
-          "mkdir -p /root/.codex",
-          "for f in auth.json config.toml models_cache.json version.json; do " +
-            "[ -f /companion-host-codex/$f ] && cp /companion-host-codex/$f /root/.codex/$f 2>/dev/null; done",
-          "for d in skills vendor_imports prompts rules; do " +
-            "[ -d /companion-host-codex/$d ] && cp -r /companion-host-codex/$d /root/.codex/$d 2>/dev/null; done",
+          `[ -d ${HOST_CODEX_MOUNT_PATH} ] || exit 0`,
+          `mkdir -p ${CONTAINER_CODEX_HOME}`,
+          `for f in auth.json config.toml models_cache.json version.json; do ` +
+            `[ -f ${HOST_CODEX_MOUNT_PATH}/$f ] && cp ${HOST_CODEX_MOUNT_PATH}/$f ${CONTAINER_CODEX_HOME}/$f 2>/dev/null; done`,
+          `for d in skills vendor_imports prompts rules; do ` +
+            `[ -d ${HOST_CODEX_MOUNT_PATH}/$d ] && cp -r ${HOST_CODEX_MOUNT_PATH}/$d ${CONTAINER_CODEX_HOME}/$d 2>/dev/null; done`,
           "true",
         ].join("; "),
       ]);
-    } catch { /* best-effort — container may not have /companion-host-codex mounted */ }
+    } catch { /* best-effort */ }
   }
 
   /**
@@ -320,7 +332,7 @@ export class ContainerManager {
         encoding: "utf-8",
         timeout: QUICK_EXEC_TIMEOUT_MS,
       });
-    } catch { /* best-effort — gh may not be installed on host */ }
+    } catch { /* best-effort */ }
 
     // If host token exists, seed gh auth state in the container.
     if (token) {
@@ -362,9 +374,9 @@ export class ContainerManager {
           // Mark /workspace as safe — the workspace volume may be owned by a
           // different uid (e.g. ubuntu) than the container user (root), which
           // triggers git's "dubious ownership" check.
-          "git config --global safe.directory /workspace 2>/dev/null",
+          `git config --global safe.directory ${CONTAINER_WORKSPACE_PATH} 2>/dev/null`,
           // Rewrite git@github.com:org/repo → https://github.com/org/repo for all remotes
-          "cd /workspace 2>/dev/null && " +
+          `cd ${CONTAINER_WORKSPACE_PATH} 2>/dev/null && ` +
             "git remote -v 2>/dev/null | grep 'git@github.com:' | awk '{print $1}' | sort -u | " +
             "while read remote; do " +
               "url=$(git remote get-url \"$remote\" 2>/dev/null); " +
@@ -391,7 +403,7 @@ export class ContainerManager {
     const cmd = [
       "set -o pipefail",
       `COPYFILE_DISABLE=1 tar -C ${shellEscape(hostCwd)} -cf - . | ` +
-        `docker exec -i ${shellEscape(containerId)} tar -xf - -C /workspace`,
+        `docker exec -i ${shellEscape(containerId)} tar -xf - -C ${CONTAINER_WORKSPACE_PATH}`,
     ].join("; ");
 
     const proc = Bun.spawn(["bash", "-lc", cmd], {
@@ -445,7 +457,7 @@ export class ContainerManager {
         }
       } catch {
         console.warn(
-          `[container-manager] Could not resolve port ${containerPort} for ${containerId.slice(0, 12)}`,
+          `[container-manager] Could not resolve port ${containerPort} for ${containerId.slice(0, SHORT_CONTAINER_ID_LENGTH)}`,
         );
       }
     }
@@ -574,7 +586,7 @@ export class ContainerManager {
       exec(`docker rm -f ${shellEscape(info.containerId)}`);
       info.state = "removed";
       console.log(
-        `[container-manager] Removed container ${info.name} (${info.containerId.slice(0, 12)})`,
+        `[container-manager] Removed container ${info.name} (${info.containerId.slice(0, SHORT_CONTAINER_ID_LENGTH)})`,
       );
     } catch (e) {
       console.warn(
@@ -682,13 +694,13 @@ export class ContainerManager {
       }
       this.containers.set(sessionId, info);
       console.log(
-        `[container-manager] Restored container ${info.name} (${info.containerId.slice(0, 12)}) state=${info.state}`,
+        `[container-manager] Restored container ${info.name} (${info.containerId.slice(0, SHORT_CONTAINER_ID_LENGTH)}) state=${info.state}`,
       );
       return true;
     } catch {
       // Container no longer exists in Docker
       console.warn(
-        `[container-manager] Container ${info.name} (${info.containerId.slice(0, 12)}) no longer exists, skipping restore`,
+        `[container-manager] Container ${info.name} (${info.containerId.slice(0, SHORT_CONTAINER_ID_LENGTH)}) no longer exists, skipping restore`,
       );
       return false;
     }
@@ -850,7 +862,7 @@ export class ContainerManager {
       return { success: false, log };
     } finally {
       // Clean up temp build directory
-      try { rmSync(buildDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      try { rmSync(buildDir, { recursive: true, force: true }); } catch { /* best-effort */ }
     }
   }
 
