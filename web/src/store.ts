@@ -75,6 +75,8 @@ interface AppState {
   // Auth
   authToken: string | null;
   isAuthenticated: boolean;
+  // LOCAL: true while autoAuth is in flight — prevents login-page flash when auth is disabled
+  authChecking: boolean;
 
   // Sessions
   sessions: Map<string, SessionState>;
@@ -185,6 +187,7 @@ interface AppState {
 
   // Auth actions
   setAuthToken: (token: string) => void;
+  setAuthChecking: (checking: boolean) => void;
   logout: () => void;
 
   // Actions
@@ -371,7 +374,9 @@ function getInitialAuthToken(): string | null {
 
 export const useStore = create<AppState>((set) => ({
   authToken: getInitialAuthToken(),
+  // LOCAL: if no stored token, start in "checking" state to avoid login-page flash
   isAuthenticated: getInitialAuthToken() !== null,
+  authChecking: getInitialAuthToken() === null,
   sessions: new Map(),
   sdkSessions: [],
   currentSessionId: initString("cc-current-session"),
@@ -464,8 +469,9 @@ export const useStore = create<AppState>((set) => ({
     }),
   setAuthToken: (token) => {
     localStorage.setItem(AUTH_STORAGE_KEY, token);
-    set({ authToken: token, isAuthenticated: true });
+    set({ authToken: token, isAuthenticated: true, authChecking: false });
   },
+  setAuthChecking: (checking) => set({ authChecking: checking }),
   logout: () => {
     localStorage.removeItem(AUTH_STORAGE_KEY);
     set({ authToken: null, isAuthenticated: false });

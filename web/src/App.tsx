@@ -5,6 +5,7 @@ import { api } from "./api.js";
 import { parseHash, navigateToSession, navigateHome } from "./utils/routing.js";
 import { handleKeyDown, createMouseHandler } from "./utils/keybindings.js";
 import { LoginPage } from "./components/LoginPage.js";
+import { autoAuth } from "./api.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { ChatView } from "./components/ChatView.js";
 import { TopBar } from "./components/TopBar.js";
@@ -53,6 +54,9 @@ function useHash() {
 export default function App() {
   const theme = useStore((s) => s.theme);
   const isAuthenticated = useStore((s) => s.isAuthenticated);
+  const authChecking = useStore((s) => s.authChecking);
+  const setAuthToken = useStore((s) => s.setAuthToken);
+  const setAuthChecking = useStore((s) => s.setAuthChecking);
   const darkMode = useStore((s) => s.darkMode);
   const currentSessionId = useStore((s) => s.currentSessionId);
   const sidebarOpen = useStore((s) => s.sidebarOpen);
@@ -80,6 +84,19 @@ export default function App() {
   const isAgentsPage = route.page === "agents" || route.page === "agent-detail";
   const isPanelsPage = route.page === "panels";
   const isSessionView = route.page === "session" || route.page === "home";
+
+  // LOCAL: On startup, attempt autoAuth so the login page never flashes when auth is disabled
+  useEffect(() => {
+    if (isAuthenticated) return; // already logged in (token in localStorage)
+    autoAuth().then((token) => {
+      if (token) {
+        setAuthToken(token);
+      } else {
+        setAuthChecking(false); // no auto-token — show login form
+      }
+    }).catch(() => setAuthChecking(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
@@ -258,7 +275,8 @@ export default function App() {
     }).catch(() => {});
   }
 
-  // Auth gate: show login page when not authenticated
+  // LOCAL: auth gate — show nothing while autoAuth is in flight to avoid login-page flash
+  if (authChecking) return null;
   if (!isAuthenticated) {
     return <LoginPage />;
   }
