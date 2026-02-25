@@ -146,13 +146,14 @@ describe("ModelSwitcher", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("is hidden when session has no model set", () => {
+  it("shows Default when session has no explicit model set", () => {
+    // When no model is explicitly chosen, the switcher shows "Default"
     resetStore({
       sdkSessions: [{ sessionId: "s1", backendType: "claude", cwd: "/repo" }],
       sessions: new Map([["s1", {}]]),
     });
-    const { container } = render(<ModelSwitcher sessionId="s1" />);
-    expect(container.innerHTML).toBe("");
+    render(<ModelSwitcher sessionId="s1" />);
+    expect(screen.getByText("Default")).toBeInTheDocument();
   });
 
   it("shows raw model string for unrecognized models", () => {

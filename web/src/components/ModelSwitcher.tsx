@@ -20,19 +20,29 @@ export function ModelSwitcher({ sessionId }: ModelSwitcherProps) {
   const cliConnected = useStore((s) => s.cliConnected.get(sessionId) ?? false);
 
   const backendType = sdkSession?.backendType ?? runtimeSession?.backend_type ?? "claude";
-  // Prefer runtime model (from CLI init) over sdkSession model (from launch config)
-  const currentModel = runtimeSession?.model ?? sdkSession?.model ?? "";
+  // selectedModel = what user chose ("default", "claude-opus-4-6", etc.)
+  // actualModel = what CLI is actually running (from system/init)
+  const selectedModel = sdkSession?.model ?? "default";
+  const actualModel = runtimeSession?.model ?? "";
   const models = getModelsForBackend(backendType);
+
+  // Resolve display: for "default", show the actual CLI model name as hint
+  const actualModelOption = actualModel ? models.find((m) => m.value === actualModel) : null;
+  const defaultLabel = actualModelOption
+    ? `Default (${actualModelOption.label})`
+    : "Default";
 
   // Find the matching model option, or build a fallback for custom models
   const currentOption: ModelOption | null =
-    models.find((m) => m.value === currentModel) ||
-    (currentModel ? { value: currentModel, label: currentModel, icon: "?" } : null);
+    selectedModel === "default"
+      ? { value: "default", label: defaultLabel, icon: "" }
+      : models.find((m) => m.value === selectedModel) ||
+        (selectedModel ? { value: selectedModel, label: selectedModel, icon: "?" } : null);
 
   const handleSelect = useCallback(
     (model: string) => {
       setOpen(false);
-      if (model === currentModel) return;
+      if (model === selectedModel) return;
 
       // Send set_model to CLI via WebSocket
       sendToSession(sessionId, { type: "set_model", model });
@@ -45,7 +55,7 @@ export function ModelSwitcher({ sessionId }: ModelSwitcherProps) {
         ),
       );
     },
-    [sessionId, currentModel],
+    [sessionId, selectedModel],
   );
 
   // Close on click outside
@@ -104,27 +114,30 @@ export function ModelSwitcher({ sessionId }: ModelSwitcherProps) {
           role="listbox"
           aria-label="Select model"
         >
-          {models.map((model) => (
-            <button
-              key={model.value}
-              onClick={() => handleSelect(model.value)}
-              className={`w-full flex items-center gap-2 px-3 min-h-[44px] text-[13px] transition-colors cursor-pointer ${
-                model.value === currentModel
-                  ? "text-cc-fg bg-cc-active font-medium"
-                  : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
-              }`}
-              role="option"
-              aria-selected={model.value === currentModel}
-            >
-              {model.icon && <span className="text-[14px] leading-none w-5 text-center">{model.icon}</span>}
-              <span className="flex-1 text-left">{model.label}</span>
-              {model.value === currentModel && (
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-cc-primary shrink-0">
-                  <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" />
-                </svg>
-              )}
-            </button>
-          ))}
+          {models.map((model) => {
+            const isSelected = model.value === selectedModel;
+            return (
+              <button
+                key={model.value}
+                onClick={() => handleSelect(model.value)}
+                className={`w-full flex items-center gap-2 px-3 min-h-[44px] text-[13px] transition-colors cursor-pointer ${
+                  isSelected
+                    ? "text-cc-fg bg-cc-active font-medium"
+                    : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                }`}
+                role="option"
+                aria-selected={isSelected}
+              >
+                {model.icon && <span className="text-[14px] leading-none w-5 text-center">{model.icon}</span>}
+                <span className="flex-1 text-left">{model.label}</span>
+                {isSelected && (
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-cc-primary shrink-0">
+                    <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

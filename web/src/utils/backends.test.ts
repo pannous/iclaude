@@ -141,9 +141,9 @@ describe("static model/mode lists", () => {
     }
   });
 
-  it("has claude models with claude- prefix", () => {
+  it("has claude models with claude- prefix (plus 'default')", () => {
     for (const m of CLAUDE_MODELS) {
-      expect(m.value).toMatch(/^claude-/);
+      expect(m.value).toMatch(/^(claude-|default$)/);
     }
   });
 
