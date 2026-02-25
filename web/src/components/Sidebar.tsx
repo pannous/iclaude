@@ -5,6 +5,7 @@ import { connectSession, disconnectSession, disconnectAllExcept, waitForConnecti
 import { navigateToSession, navigateHome, parseHash } from "../utils/routing.js";
 import { ProjectGroup } from "./ProjectGroup.js";
 import { SessionItem } from "./SessionItem.js";
+import { ThemeToggle } from "./TopBar.js";
 import { groupSessionsByProject, type SessionItem as SessionItemType } from "../utils/project-grouping.js";
 
 function formatTimeAgo(timestamp: number): string {
@@ -55,6 +56,15 @@ const NAV_ITEMS: NavItem[] = [
     hash: "#/terminal",
     viewBox: "0 0 16 16",
     iconPath: "M2 3a1 1 0 011-1h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm2 1.5l3 2.5-3 2.5V4.5zM8.5 10h3v1h-3v-1z",
+  },
+  {
+    // LOCAL: moved from TopBar workspace tabs to sidebar nav
+    id: "processes",
+    label: "Processes",
+    shortLabel: "Procs",
+    hash: "#/processes",
+    viewBox: "0 0 16 16",
+    iconPath: "M2.5 1A1.5 1.5 0 001 2.5v11A1.5 1.5 0 002.5 15h11a1.5 1.5 0 001.5-1.5v-11A1.5 1.5 0 0013.5 1h-11zM8 4.5a.5.5 0 01.5.5v2.5H11a.5.5 0 010 1H8.5V11a.5.5 0 01-1 0V8.5H5a.5.5 0 010-1h2.5V5a.5.5 0 01.5-.5z",
   },
   {
     id: "environments",
@@ -832,6 +842,8 @@ export function Sidebar() {
               </button>
             );
           })}
+          {/* LOCAL: theme toggle as grid item — matches nav item styling */}
+          <ThemeToggle />
         </div>
       </div>
 

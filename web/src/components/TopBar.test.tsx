@@ -225,7 +225,7 @@ describe("TopBar", () => {
     expect(screen.getByRole("button", { name: "Session tab" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Diffs tab" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Shell tab" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Processes tab" })).toBeInTheDocument();
+    // Processes tab moved to sidebar nav
     expect(screen.getByRole("button", { name: "Editor tab" })).toBeInTheDocument();
   });
 

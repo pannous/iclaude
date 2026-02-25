@@ -50,13 +50,6 @@ export function TopBar() {
     return sdkTitle || s.sessionNames.get(currentSessionId);
   });
 
-  const runningProcessCount = useStore((s) => {
-    if (!currentSessionId) return 0;
-    const processes = s.sessionProcesses.get(currentSessionId);
-    if (!processes) return 0;
-    return processes.filter((p) => p.status === "running").length;
-  });
-
   const cwd = useStore((s) => {
     if (!currentSessionId) return null;
     return (
@@ -224,22 +217,6 @@ export function TopBar() {
                 Shell
               </button>
               <button
-                onClick={() => activateWorkspaceTab("processes")}
-                className={`h-full px-3 text-[12px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 border-b-[1.5px] shrink-0 ${
-                  activeTab === "processes"
-                    ? "text-cc-fg border-cc-primary"
-                    : "text-cc-muted hover:text-cc-fg border-transparent"
-                }`}
-                aria-label="Processes tab"
-              >
-                Processes
-                {runningProcessCount > 0 && (
-                  <span className="text-[9px] rounded-full min-w-[15px] h-[15px] px-1 flex items-center justify-center font-semibold leading-none bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300">
-                    {runningProcessCount}
-                  </span>
-                )}
-              </button>
-              <button
                 onClick={() => activateWorkspaceTab("editor")}
                 disabled={!cwd}
                 className={`h-full px-3 text-[12px] font-medium transition-colors flex items-center border-b-[1.5px] shrink-0 ${
@@ -308,7 +285,6 @@ export function TopBar() {
           </button>
         )}
 
-          <ThemeToggle />
           {showContextToggle && (
             <button
               onClick={() => setTaskPanelOpen(!taskPanelOpen)}
@@ -341,27 +317,29 @@ export function TopBar() {
   );
 }
 
-function ThemeToggle() {
+/** Theme toggle — styled as sidebar nav grid item */
+export function ThemeToggle() {
   const darkMode = useStore((s) => s.darkMode);
   const toggle = useCallback(() => useStore.getState().toggleDarkMode(), []);
 
   return (
     <button
       onClick={toggle}
-      className="flex items-center justify-center w-8 h-8 rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+      className="flex flex-col items-center justify-center gap-0.5 py-2.5 px-1.5 min-h-[44px] rounded-lg transition-colors cursor-pointer text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
       title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
       aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
     >
       {darkMode ? (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[15px] h-[15px]">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
           <circle cx="12" cy="12" r="4" />
           <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41" />
         </svg>
       ) : (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-[15px] h-[15px]">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
           <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z" />
         </svg>
       )}
+      <span className="text-[10px] font-medium leading-none">Theme</span>
     </button>
   );
 }

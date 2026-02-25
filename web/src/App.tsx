@@ -83,6 +83,7 @@ export default function App() {
   const isScheduledPage = route.page === "scheduled";
   const isAgentsPage = route.page === "agents" || route.page === "agent-detail";
   const isPanelsPage = route.page === "panels";
+  const isProcessesPage = route.page === "processes";
   const isSessionView = route.page === "session" || route.page === "home";
 
   // LOCAL: On startup, attempt autoAuth so the login page never flashes when auth is disabled
@@ -400,6 +401,18 @@ export default function App() {
             </div>
           )}
 
+          {/* LOCAL: processes moved from TopBar workspace tab to sidebar nav page */}
+          {isProcessesPage && currentSessionId && (
+            <div className="absolute inset-0">
+              <Suspense fallback={<LazyFallback />}><ProcessPanel sessionId={currentSessionId} /></Suspense>
+            </div>
+          )}
+          {isProcessesPage && !currentSessionId && (
+            <div className="absolute inset-0 flex items-center justify-center text-sm text-cc-muted">
+              Select a session to view its processes.
+            </div>
+          )}
+
           {isSessionView && (
             <>
               <div className="absolute inset-0">
@@ -412,9 +425,7 @@ export default function App() {
                         onClosePanel={() => useStore.getState().setActiveTab("chat")}
                       />
                     )
-                    : activeTab === "processes"
-                      ? <Suspense fallback={<LazyFallback />}><ProcessPanel sessionId={currentSessionId} /></Suspense>
-                      : activeTab === "editor"
+                    : activeTab === "editor"
                         ? <SessionEditorPane sessionId={currentSessionId} />
                         : (
                         <SessionTerminalDock sessionId={currentSessionId} suppressPanel>

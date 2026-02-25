@@ -84,8 +84,7 @@ export function SessionItem({
 
   const derivedStatus = archived ? ("exited" as DerivedStatus) : deriveStatus(s);
 
-  // Show the full cwd path below the session name
-  const cwdTail = s.cwd || "";
+  // LOCAL: folder path removed — sessions are already grouped by project in sidebar
 
   return (
     <div className="relative group">
@@ -137,11 +136,6 @@ export function SessionItem({
             >
               {label}
             </span>
-            {cwdTail && (
-              <span className="text-[10px] text-cc-muted truncate block leading-tight">
-                {cwdTail}
-              </span>
-            )}
           </div>
         )}
 

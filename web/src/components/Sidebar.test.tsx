@@ -222,8 +222,9 @@ describe("Sidebar", () => {
     expect(screen.queryByText(/secret\.txt/)).not.toBeInTheDocument();
   });
 
-  it("session items show project name in group header and full cwd path in session row", () => {
-    // "myapp" appears in the project group header, full cwd path appears in the session row
+  it("session items show project name in group header but not cwd path (grouped by project)", () => {
+    // "myapp" appears in the project group header; cwd path removed from session row
+    // because sessions are already grouped by project folder
     const session = makeSession("s1", { cwd: "/home/user/projects/myapp" });
     const sdk = makeSdkSession("s1", { title: "Test Session" });
     mockState = createMockState({
@@ -235,8 +236,8 @@ describe("Sidebar", () => {
     // Group header shows "myapp"
     const matches = screen.getAllByText("myapp");
     expect(matches.length).toBeGreaterThanOrEqual(1);
-    // Session row shows the full cwd path
-    expect(screen.getByText("/home/user/projects/myapp")).toBeInTheDocument();
+    // Session row no longer shows the full cwd path (redundant with group header)
+    expect(screen.queryByText("/home/user/projects/myapp")).not.toBeInTheDocument();
   });
 
   it("session items do not show git branch (removed in redesign)", () => {
