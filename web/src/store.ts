@@ -105,6 +105,8 @@ interface AppState {
   fragmentConsole: Map<string, ConsoleLogEntry[]>;
   collapsedProjects: Set<string>;
   diffPanelSelectedFile: Map<string, string>;
+  /** Last folder path clicked in the sidebar — panels can react to this */
+  focusedFolder: string | null;
   updateInfo: UpdateInfo | null;
   updateDismissedVersion: string | null;
   updateOverlayActive: boolean;
@@ -244,6 +246,7 @@ interface AppState {
   resetQuickTerminal: () => void;
 
   setDiffBase: (base: DiffBase) => void;
+  setFocusedFolder: (folder: string | null) => void;
 
   terminalOpen: boolean;
   terminalCwd: string | null;
@@ -315,6 +318,7 @@ export const useStore = create<AppState>((set) => ({
   changedFilesTick: new Map(),
   gitChangedFilesCount: new Map(),
   diffPanelSelectedFile: new Map(),
+  focusedFolder: null,
   sessionProcesses: new Map(),
   sessionNames: initParsed("cc-session-names", (r) => new Map(JSON.parse(r) as [string, string][]), new Map<string, string>()),
   sessionSubtitles: new Map(),
@@ -897,6 +901,7 @@ export const useStore = create<AppState>((set) => ({
     }
     set({ diffBase: base });
   },
+  setFocusedFolder: (folder) => set({ focusedFolder: folder }),
   resetQuickTerminal: () =>
     set({
       quickTerminalOpen: false,

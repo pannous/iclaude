@@ -17,6 +17,8 @@ interface ProjectGroupProps {
   group: ProjectGroupType;
   isCollapsed: boolean;
   onToggleCollapse: (projectKey: string) => void;
+  /** Called when the folder label is clicked — for context-aware actions (e.g. update git log panel) */
+  onFolderClick?: (cwd: string) => void;
   currentSessionId: string | null;
   sessionNames: Map<string, string>;
   pendingPermissions: Map<string, Map<string, unknown>>;
@@ -45,6 +47,7 @@ export function ProjectGroup({
   group,
   isCollapsed,
   onToggleCollapse,
+  onFolderClick,
   currentSessionId,
   sessionNames,
   pendingPermissions,
@@ -100,9 +103,9 @@ export function ProjectGroup({
           </svg>
         </button>
 
-        {/* Folder label — also toggles collapse */}
+        {/* Folder label — toggles collapse + notifies context-aware panels */}
         <button
-          onClick={() => onToggleCollapse(group.key)}
+          onClick={() => { onToggleCollapse(group.key); onFolderClick?.(group.key); }}
           className="min-w-0 py-1.5 pr-1 text-[12px] font-semibold text-cc-fg/80 truncate hover:bg-cc-hover rounded-md transition-colors cursor-pointer"
         >
           {group.label}
