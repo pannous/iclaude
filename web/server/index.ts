@@ -158,7 +158,10 @@ wsBridge.onFirstTurnCompletedCallback(async (sessionId, firstUserMessage) => {
   if (title && !sessionNames.getName(sessionId)) {
     console.log(`[server] Auto-named session ${sessionId}: "${title}"`);
     sessionNames.setName(sessionId, title);
-    wsBridge.broadcastNameUpdate(sessionId, title);
+    // Use setTitle (not broadcastNameUpdate) so the browser updates sdkSessions[i].title,
+    // which takes priority over sessionName in SessionItem rendering.
+    launcher.setTitle(sessionId, title);
+    wsBridge.setTitle(sessionId, title);
   }
 });
 
