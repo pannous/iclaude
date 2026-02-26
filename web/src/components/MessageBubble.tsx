@@ -23,48 +23,79 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
   }
 
   if (message.role === "user") {
-    const cleanUserContent = stripScannedHtml(message.content, message.scannedHtml);
-    return (
-      <div className="flex flex-col items-end gap-2 animate-[fadeSlideIn_0.2s_ease-out]">
-        <div className="flex justify-end gap-1.5 items-start">
-          <div className="max-w-[85%] sm:max-w-[80%] px-3 sm:px-4 py-2.5 rounded-[14px] rounded-br-[4px] bg-cc-user-bubble text-cc-fg">
-            {message.images && message.images.length > 0 && (
-              <div className="flex gap-2 flex-wrap mb-2">
-                {message.images.map((img, i) => (
-                  <img
-                    key={i}
-                    src={`data:${img.media_type};base64,${img.data}`}
-                    alt="attachment"
-                    className="max-w-[150px] sm:max-w-[200px] max-h-[120px] sm:max-h-[150px] rounded-lg object-cover"
-                  />
-                ))}
-              </div>
-            )}
-            {cleanUserContent && (
-              <div className="text-[13px] sm:text-[14px] leading-relaxed break-words">
-                <MarkdownContent text={cleanUserContent} />
-              </div>
-            )}
-          </div>
-          <div className="mt-2">
-            <CopyButton getText={() => messageToText(message)} title="Copy message" />
-          </div>
-        </div>
-        {message.scannedHtml && message.scannedHtml.length > 0 && (
-          <div className="w-full space-y-2">
-            {message.scannedHtml.map((htmlFragment) => (
-              <HtmlPreview key={htmlFragment.fragmentId} html={htmlFragment.html} preview={htmlFragment.preview} fragmentId={htmlFragment.fragmentId} />
-            ))}
-          </div>
-        )}
-      </div>
-    );
+    return <UserMessage message={message} />;
   }
 
   // Assistant message
   return (
     <div className="animate-[fadeSlideIn_0.2s_ease-out]">
       <AssistantMessage message={message} />
+    </div>
+  );
+}
+
+function UserMessage({ message }: { message: ChatMessage }) {
+  const sessionId = useContext(FeedSessionIdContext);
+  const isQueued = useStore(
+    (s) => !!message.id && (s.queuedMessageIds.get(sessionId ?? "") ?? new Set()).has(message.id)
+  );
+  const unmarkMessageQueued = useStore((s) => s.unmarkMessageQueued);
+  const setMessages = useStore((s) => s.setMessages);
+
+  const handleCancel = useCallback(async () => {
+    if (!sessionId || !message.id) return;
+    // Optimistically remove from store; server will echo user_message_dequeued to confirm.
+    unmarkMessageQueued(sessionId, message.id);
+    const current = useStore.getState().messages.get(sessionId) ?? [];
+    setMessages(sessionId, current.filter(m => m.id !== message.id));
+    await api.cancelQueuedMessage(sessionId, message.id).catch(() => {});
+  }, [sessionId, message.id, unmarkMessageQueued, setMessages]);
+
+  const cleanUserContent = stripScannedHtml(message.content, message.scannedHtml);
+  return (
+    <div className="flex flex-col items-end gap-2 animate-[fadeSlideIn_0.2s_ease-out]">
+      <div className="flex justify-end gap-1.5 items-start">
+        {isQueued && (
+          <button
+            onClick={handleCancel}
+            title="Cancel queued message"
+            className="mt-2 p-1 rounded-full text-cc-muted hover:text-cc-fg hover:bg-cc-surface-raised transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="2" y1="2" x2="12" y2="12" /><line x1="12" y1="2" x2="2" y2="12" />
+            </svg>
+          </button>
+        )}
+        <div className="max-w-[85%] sm:max-w-[80%] px-3 sm:px-4 py-2.5 rounded-[14px] rounded-br-[4px] bg-cc-user-bubble text-cc-fg">
+          {message.images && message.images.length > 0 && (
+            <div className="flex gap-2 flex-wrap mb-2">
+              {message.images.map((img, i) => (
+                <img
+                  key={i}
+                  src={`data:${img.media_type};base64,${img.data}`}
+                  alt="attachment"
+                  className="max-w-[150px] sm:max-w-[200px] max-h-[120px] sm:max-h-[150px] rounded-lg object-cover"
+                />
+              ))}
+            </div>
+          )}
+          {cleanUserContent && (
+            <div className="text-[13px] sm:text-[14px] leading-relaxed break-words">
+              <MarkdownContent text={cleanUserContent} />
+            </div>
+          )}
+        </div>
+        <div className="mt-2">
+          <CopyButton getText={() => messageToText(message)} title="Copy message" />
+        </div>
+      </div>
+      {message.scannedHtml && message.scannedHtml.length > 0 && (
+        <div className="w-full space-y-2">
+          {message.scannedHtml.map((htmlFragment) => (
+            <HtmlPreview key={htmlFragment.fragmentId} html={htmlFragment.html} preview={htmlFragment.preview} fragmentId={htmlFragment.fragmentId} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -44,6 +44,10 @@ export interface Session {
   pendingControlRequests: Map<string, PendingControlRequest>;
   messageHistory: BrowserIncomingMessage[];
   pendingMessages: string[];
+  /** True while the CLI is processing a turn (between user message sent and result received). */
+  cliIsRunning: boolean;
+  /** User messages held back while the CLI is running; flushed (or cancelled) before the next turn. */
+  pendingUserInput: Array<{ ndjson: string; id: string }>;
   /** CLI's internal session ID (for resuming) */
   cliSessionId?: string; // LOCAL: used for title extraction
   /** Auto-generated or user-set title */

@@ -262,6 +262,8 @@ export class WsBridge {
         pendingControlRequests: new Map(),
         messageHistory: p.messageHistory || [],
         pendingMessages: p.pendingMessages || [],
+        cliIsRunning: false,
+        pendingUserInput: [],
         cliSessionId: p.cliSessionId,
         title: p.title ? (truncateTitle(p.title) || undefined) : p.title,
         createdAt: p.createdAt,
@@ -517,6 +519,8 @@ export class WsBridge {
         pendingControlRequests: new Map(),
         messageHistory: [],
         pendingMessages: [],
+        cliIsRunning: false,
+        pendingUserInput: [],
         createdAt: Date.now(),
         nextEventSeq: 1,
         eventBuffer: [],
@@ -1242,6 +1246,9 @@ export class WsBridge {
     };
     session.messageHistory.push(browserMsg);
     this.broadcastToBrowsers(session, browserMsg);
+    // Mark CLI as idle, then flush the next queued user message if any.
+    session.cliIsRunning = false;
+    this.flushPendingUserInput(session);
     this.persistSession(session);
 
     // Trigger auto-naming after the first successful result for this session.
@@ -1513,11 +1520,12 @@ export class WsBridge {
     // Prefer the client-provided id (from Composer) so history replay deduplicates
     // correctly against the optimistic message already in the browser store.
     const ts = Date.now();
+    const msgId = msg.id || `user-${ts}-${this.userMsgCounter++}`;
     session.messageHistory.push({
       type: "user_message",
       content: msg.content,
       timestamp: ts,
-      id: msg.id || `user-${ts}-${this.userMsgCounter++}`,
+      id: msgId,
     });
 
     // Use the user's first message directly as the initial title
@@ -1548,8 +1556,50 @@ export class WsBridge {
       parent_tool_use_id: null,
       session_id: msg.session_id || session.state.session_id || "",
     });
-    this.sendToCLI(session, ndjson);
+
+    // Queue the message if the CLI is busy; flush immediately otherwise.
+    if (session.cliIsRunning) {
+      session.pendingUserInput.push({ ndjson, id: msgId });
+      this.broadcastToBrowsers(session, { type: "user_message_queued", msgId });
+    } else {
+      this.sendToCLI(session, ndjson);
+      session.cliIsRunning = true;
+    }
     this.persistSession(session);
+  }
+
+  /** Flush the next queued user message to the CLI (called after a result). */
+  private flushPendingUserInput(session: Session) {
+    const next = session.pendingUserInput.shift();
+    if (!next) return;
+    this.sendToCLI(session, next.ndjson);
+    session.cliIsRunning = true;
+    // Let the browser know this message is now in flight (no longer cancellable)
+    this.broadcastToBrowsers(session, { type: "user_message_dequeued", msgId: next.id });
+  }
+
+  /** Cancel a specific queued user message before it reaches the CLI.
+   *  Returns true if the message was found and removed. */
+  cancelPendingUserInput(sessionId: string, msgId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    const idx = session.pendingUserInput.findIndex(m => m.id === msgId);
+    if (idx === -1) return false;
+    session.pendingUserInput.splice(idx, 1);
+    // Remove from messageHistory so it won't be replayed on reconnect.
+    // Scan from the end to find the most-recent match (findLastIndex not available in target lib).
+    let histIdx = -1;
+    for (let i = session.messageHistory.length - 1; i >= 0; i--) {
+      const m = session.messageHistory[i];
+      if (m.type === "user_message" && "id" in m && (m as { type: string; id?: string }).id === msgId) {
+        histIdx = i;
+        break;
+      }
+    }
+    if (histIdx !== -1) session.messageHistory.splice(histIdx, 1);
+    this.broadcastToBrowsers(session, { type: "user_message_dequeued", msgId });
+    this.persistSession(session);
+    return true;
   }
 
   // ── Transport helpers ───────────────────────────────────────────────────

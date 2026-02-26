@@ -30,21 +30,27 @@ vi.mock("../api.js", () => ({
 // Build a mock for the store that returns configurable values per session
 const mockStoreValues: Record<string, unknown> = {};
 
-vi.mock("../store.js", () => ({
-  useStore: (selector: (state: Record<string, unknown>) => unknown) => {
-    const state = {
-      messages: mockStoreValues.messages ?? new Map(),
-      streaming: mockStoreValues.streaming ?? new Map(),
-      streamingStartedAt: mockStoreValues.streamingStartedAt ?? new Map(),
-      streamingOutputTokens: mockStoreValues.streamingOutputTokens ?? new Map(),
-      sessionStatus: mockStoreValues.sessionStatus ?? new Map(),
-      toolProgress: mockStoreValues.toolProgress ?? new Map(),
-      chatTabReentryTickBySession: mockStoreValues.chatTabReentryTickBySession ?? new Map(),
-      sdkSessions: mockStoreValues.sdkSessions ?? [],
-    };
-    return selector(state);
-  },
-}));
+vi.mock("../store.js", () => {
+  const storeGetState = () => ({
+    messages: mockStoreValues.messages ?? new Map(),
+    streaming: mockStoreValues.streaming ?? new Map(),
+    streamingStartedAt: mockStoreValues.streamingStartedAt ?? new Map(),
+    streamingOutputTokens: mockStoreValues.streamingOutputTokens ?? new Map(),
+    sessionStatus: mockStoreValues.sessionStatus ?? new Map(),
+    toolProgress: mockStoreValues.toolProgress ?? new Map(),
+    chatTabReentryTickBySession: mockStoreValues.chatTabReentryTickBySession ?? new Map(),
+    sdkSessions: mockStoreValues.sdkSessions ?? [],
+    queuedMessageIds: mockStoreValues.queuedMessageIds ?? new Map(),
+    unmarkMessageQueued: vi.fn(),
+    setMessages: vi.fn(),
+  });
+  const useStore = (selector?: (state: ReturnType<typeof storeGetState>) => unknown) => {
+    const state = storeGetState();
+    return selector ? selector(state) : state;
+  };
+  useStore.getState = storeGetState;
+  return { useStore };
+});
 
 import { MessageFeed } from "./MessageFeed.js";
 

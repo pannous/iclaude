@@ -300,7 +300,9 @@ export type BrowserIncomingMessageBase =
   | { type: "pr_status_update"; pr: import("./github-pr.js").GitHubPRInfo | null; available: boolean }
   | { type: "mcp_status"; servers: McpServerDetail[] }
   | { type: "session_archived" }
-  | { type: "sessions_updated" };
+  | { type: "sessions_updated" }
+  | { type: "user_message_queued"; msgId: string }
+  | { type: "user_message_dequeued"; msgId: string };
 
 export type BrowserIncomingMessage = BrowserIncomingMessageBase & { seq?: number };
 

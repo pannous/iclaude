@@ -830,6 +830,14 @@ function handleParsedMessage(
       break;
     }
 
+    case "user_message_queued":
+      store.markMessageQueued(sessionId, data.msgId);
+      break;
+
+    case "user_message_dequeued":
+      store.unmarkMessageQueued(sessionId, data.msgId);
+      break;
+
     case "auth_status": {
       if (data.error) {
         store.appendMessage(sessionId, {

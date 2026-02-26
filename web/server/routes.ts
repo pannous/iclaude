@@ -1391,6 +1391,13 @@ export function createRoutes(
     }
   });
 
+  api.delete("/sessions/:id/pending-input/:msgId", (c) => {
+    const sessionId = c.req.param("id");
+    const msgId = c.req.param("msgId");
+    const removed = wsBridge.cancelPendingUserInput(sessionId, msgId);
+    return removed ? c.json({ ok: true }) : c.json({ ok: false, error: "not found" }, 404);
+  });
+
   api.delete("/sessions/:id", async (c) => {
     const id = c.req.param("id");
     await launcher.kill(id);

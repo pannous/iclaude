@@ -85,6 +85,8 @@ interface AppState {
   cliConnected: Map<string, boolean>;
   sessionStatus: Map<string, "idle" | "running" | "compacting" | null>;
   previousPermissionMode: Map<string, string>;
+  /** msgIds currently queued server-side (not yet sent to CLI), cancellable. */
+  queuedMessageIds: Map<string, Set<string>>;
   sessionTasks: Map<string, TaskItem[]>;
 
   // Tick incremented when agent edits an in-scope file — triggers DiffPanel re-fetch
@@ -206,6 +208,8 @@ interface AppState {
   setConnectionStatus: (sessionId: string, status: "connecting" | "connected" | "disconnected") => void;
   setCliConnected: (sessionId: string, connected: boolean) => void;
   setSessionStatus: (sessionId: string, status: "idle" | "running" | "compacting" | null) => void;
+  markMessageQueued: (sessionId: string, msgId: string) => void;
+  unmarkMessageQueued: (sessionId: string, msgId: string) => void;
   setDiffPanelSelectedFile: (sessionId: string, filePath: string) => void;
   setUpdateInfo: (info: UpdateInfo | null) => void;
   dismissUpdate: (version: string) => void;
@@ -306,6 +310,7 @@ export const useStore = create<AppState>((set) => ({
   cliConnected: new Map(),
   sessionStatus: new Map(),
   previousPermissionMode: new Map(),
+  queuedMessageIds: new Map<string, Set<string>>(),
   sessionTasks: new Map(),
   changedFilesTick: new Map(),
   gitChangedFilesCount: new Map(),
@@ -757,6 +762,24 @@ export const useStore = create<AppState>((set) => ({
   setSessionStatus: (sessionId, status) =>
     set((s) => ({ sessionStatus: setInMap(s.sessionStatus, sessionId, status) })),
 
+  markMessageQueued: (sessionId: string, msgId: string) =>
+    set((s) => {
+      const next = new Map(s.queuedMessageIds);
+      const ids = new Set(next.get(sessionId) ?? []);
+      ids.add(msgId);
+      next.set(sessionId, ids);
+      return { queuedMessageIds: next };
+    }),
+
+  unmarkMessageQueued: (sessionId: string, msgId: string) =>
+    set((s) => {
+      const next = new Map(s.queuedMessageIds);
+      const ids = new Set(next.get(sessionId) ?? []);
+      ids.delete(msgId);
+      next.set(sessionId, ids);
+      return { queuedMessageIds: next };
+    }),
+
   setUpdateInfo: (info) => set({ updateInfo: info }),
   dismissUpdate: (version) => {
     safeStorage.setItem("cc-update-dismissed", version);
@@ -903,6 +926,7 @@ export const useStore = create<AppState>((set) => ({
       cliConnected: new Map(),
       sessionStatus: new Map(),
       previousPermissionMode: new Map(),
+      queuedMessageIds: new Map<string, Set<string>>(),
       sessionTasks: new Map(),
       changedFilesTick: new Map(),
       gitChangedFilesCount: new Map(),
