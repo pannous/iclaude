@@ -24,6 +24,7 @@ export interface SessionItem {
   cronJobName?: string;
   agentId?: string;
   agentName?: string;
+  isFork?: boolean;
 }
 
 export interface ProjectGroup {

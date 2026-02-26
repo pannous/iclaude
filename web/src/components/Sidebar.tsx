@@ -407,6 +407,7 @@ export function Sidebar() {
       cronJobName: bridgeState?.cronJobName || sdkInfo?.cronJobName,
       agentId: bridgeState?.agentId || sdkInfo?.agentId,
       agentName: bridgeState?.agentName || sdkInfo?.agentName,
+      isFork: sdkInfo?.forkSession === true,
     };
   }).sort((a, b) => b.createdAt - a.createdAt);
 
@@ -439,15 +440,13 @@ export function Sidebar() {
     [activeSessions],
   );
 
-  // Per-group resumable sessions: filter by project key, exclude active CLI sessions
+  // Per-group resumable sessions: match by project key, up to 16 (no filtering)
   const resumableByGroup = useMemo(() => {
-    const activeCliIds = new Set<string>(sdkSessions.map((s) => s.cliSessionId).filter((id): id is string => !!id));
-    const filtered = allResumable.filter((rs) => !activeCliIds.has(rs.sessionId));
     return new Map(projectGroups.map((g) => [
       g.key,
-      filtered.filter((rs) => rs.project.startsWith(g.key)).slice(0, 10),
+      allResumable.filter((rs) => rs.project.startsWith(g.key)).slice(0, 16),
     ]));
-  }, [allResumable, sdkSessions, projectGroups]);
+  }, [allResumable, projectGroups]);
 
   const handleArchiveGroup = useCallback(async (e: React.MouseEvent, projectKey: string) => {
     e.stopPropagation();

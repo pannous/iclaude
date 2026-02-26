@@ -124,6 +124,8 @@ function setupMockStore(overrides: {
     setSessionStatus: mockSetSessionStatus,
     setStreamingStats: mockSetStreamingStats,
     setSdkSessions: vi.fn(),
+    setSessionName: vi.fn(),
+    addCreationProgress: vi.fn(),
   };
 }
 

@@ -142,8 +142,19 @@ export function SessionItem({
         )}
 
         {/* LOCAL: removed CC/CX BackendBadge — upstream shows backend type here */}
-        {!isEditing && (s.isContainerized || s.cronJobId) && (
+        {!isEditing && (s.isContainerized || s.cronJobId || s.isFork) && (
           <span className="flex items-center gap-1 shrink-0">
+            {s.isFork && (
+              <span className="flex items-center px-1 py-0.5 rounded bg-cc-primary/10" title="Forked session">
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 text-cc-primary">
+                  <circle cx="5" cy="3" r="1.5" />
+                  <circle cx="11" cy="3" r="1.5" />
+                  <circle cx="5" cy="13" r="1.5" />
+                  <path d="M5 4.5v3C5 9.5 7 11 9 11h2" stroke="currentColor" strokeWidth="1.2" fill="none" />
+                  <path d="M11 4.5v6.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
+                </svg>
+              </span>
+            )}
             {s.isContainerized && (
               <span className="flex items-center px-1 py-0.5 rounded bg-blue-400/10" title="Docker">
                 <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 text-blue-400">

@@ -6,6 +6,7 @@ import { api, createSessionStream, type SavedPrompt } from "../api.js";
 import type { ModeOption } from "../utils/backends.js";
 import { ModelSwitcher } from "./ModelSwitcher.js";
 import { navigateToSession } from "../utils/routing.js";
+import { generateUniqueSessionName } from "../utils/names.js";
 
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
 import { scanContent } from "../utils/result-scanner.js";
@@ -172,6 +173,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
           forkSession: true,
         },
       ]);
+      // Assign a unique name so it passes the sidebar's validSessions filter
+      const existingNames = new Set(useStore.getState().sessionNames.values());
+      useStore.getState().setSessionName(result.sessionId, generateUniqueSessionName(existingNames));
       navigateToSession(result.sessionId, true);
       connectSession(result.sessionId);
     } catch (err) {
