@@ -1602,6 +1602,19 @@ export class WsBridge {
     return true;
   }
 
+  /** Send a queued message to the CLI immediately, bypassing the idle wait.
+   *  Returns true if the message was found and sent. */
+  flushPendingUserInputNow(sessionId: string, msgId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    const idx = session.pendingUserInput.findIndex(m => m.id === msgId);
+    if (idx === -1) return false;
+    const [entry] = session.pendingUserInput.splice(idx, 1);
+    this.sendToCLI(session, entry.ndjson);
+    this.broadcastToBrowsers(session, { type: "user_message_dequeued", msgId });
+    return true;
+  }
+
   // ── Transport helpers ───────────────────────────────────────────────────
 
   private sendToCLI(session: Session, ndjson: string) {

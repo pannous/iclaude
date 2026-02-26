@@ -51,20 +51,38 @@ function UserMessage({ message }: { message: ChatMessage }) {
     await api.cancelQueuedMessage(sessionId, message.id).catch(() => {});
   }, [sessionId, message.id, unmarkMessageQueued, setMessages]);
 
+  const handleSendNow = useCallback(async () => {
+    if (!sessionId || !message.id) return;
+    unmarkMessageQueued(sessionId, message.id);
+    await api.flushQueuedMessage(sessionId, message.id).catch(() => {});
+  }, [sessionId, message.id, unmarkMessageQueued]);
+
   const cleanUserContent = stripScannedHtml(message.content, message.scannedHtml);
   return (
     <div className="flex flex-col items-end gap-2 animate-[fadeSlideIn_0.2s_ease-out]">
       <div className="flex justify-end gap-1.5 items-start">
         {isQueued && (
-          <button
-            onClick={handleCancel}
-            title="Cancel queued message"
-            className="mt-2 p-1 rounded-full text-cc-muted hover:text-cc-fg hover:bg-cc-surface-raised transition-colors"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="2" y1="2" x2="12" y2="12" /><line x1="12" y1="2" x2="2" y2="12" />
-            </svg>
-          </button>
+          <>
+            <button
+              onClick={handleSendNow}
+              title="Send now (bypass queue)"
+              className="mt-2 p-1 rounded-full text-cc-muted hover:text-cc-fg hover:bg-cc-surface-raised transition-colors"
+            >
+              {/* right-pointing triangle / play icon */}
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                <polygon points="3,2 12,7 3,12" />
+              </svg>
+            </button>
+            <button
+              onClick={handleCancel}
+              title="Cancel queued message"
+              className="mt-2 p-1 rounded-full text-cc-muted hover:text-cc-fg hover:bg-cc-surface-raised transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="2" y1="2" x2="12" y2="12" /><line x1="12" y1="2" x2="2" y2="12" />
+              </svg>
+            </button>
+          </>
         )}
         <div className="max-w-[85%] sm:max-w-[80%] px-3 sm:px-4 py-2.5 rounded-[14px] rounded-br-[4px] bg-cc-user-bubble text-cc-fg">
           {message.images && message.images.length > 0 && (

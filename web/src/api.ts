@@ -659,6 +659,9 @@ export const api = {
   cancelQueuedMessage: (sessionId: string, msgId: string) =>
     del<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/pending-input/${encodeURIComponent(msgId)}`),
 
+  flushQueuedMessage: (sessionId: string, msgId: string) =>
+    post<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/pending-input/${encodeURIComponent(msgId)}/flush`),
+
   relaunchSession: (sessionId: string) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/relaunch`),
 
