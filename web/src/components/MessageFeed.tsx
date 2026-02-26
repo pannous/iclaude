@@ -543,6 +543,7 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isNearBottom = useRef(true);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
   const [resumeHistoryMessages, setResumeHistoryMessages] = useState<ChatMessage[]>([]);
@@ -685,6 +686,7 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
     if (!el) return;
     isNearBottom.current =
       el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    setShowScrollToBottom(!isNearBottom.current);
     const distanceFromBottom = Math.max(0, el.scrollHeight - el.clientHeight - el.scrollTop);
     savedDistanceFromBottomBySession.set(sessionId, distanceFromBottom);
 
@@ -743,6 +745,16 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
     requestAnimationFrame(() => scrollToBottomInstant());
   }, [chatTabReentryTick, scrollToBottomInstant]);
 
+  // Scroll to top when the Session tab title is clicked in TopBar.
+  useEffect(() => {
+    const handler = (e: CustomEvent<{ sessionId: string }>) => {
+      if (e.detail.sessionId !== sessionId) return;
+      containerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    };
+    window.addEventListener("companion:scroll-to-top", handler as EventListener);
+    return () => window.removeEventListener("companion:scroll-to-top", handler as EventListener);
+  }, [sessionId]);
+
   useEffect(() => {
     if (isNearBottom.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -793,6 +805,19 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
     <div className="flex-1 min-h-0 relative overflow-hidden">
       {/* Top fade — softens the scroll edge under the top bar */}
       <div className="pointer-events-none absolute top-0 inset-x-0 h-6 bg-gradient-to-b from-cc-bg to-transparent z-10" />
+      {/* Scroll to bottom button */}
+      {showScrollToBottom && (
+        <button
+          onClick={() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }}
+          className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-cc-fg bg-cc-card border border-cc-border rounded-full shadow-md hover:bg-cc-hover transition-colors cursor-pointer"
+          title="Scroll to bottom"
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+            <path d="M8 11.5L2.5 6h11L8 11.5z" />
+          </svg>
+          Scroll to bottom
+        </button>
+      )}
       <div
         ref={containerRef}
         onScroll={handleScroll}

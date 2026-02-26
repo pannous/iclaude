@@ -165,7 +165,13 @@ export function TopBar() {
         {showWorkspaceControls && (
           <div className="flex-1 flex items-center justify-center gap-0.5 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <button
-                onClick={() => activateWorkspaceTab("chat")}
+                onClick={() => {
+                  if (activeTab === "chat" && currentSessionId) {
+                    window.dispatchEvent(new CustomEvent("companion:scroll-to-top", { detail: { sessionId: currentSessionId } }));
+                  } else {
+                    activateWorkspaceTab("chat");
+                  }
+                }}
                 className={`h-full px-3 text-[12px] font-medium transition-colors cursor-pointer flex items-center gap-1.5 border-b-[1.5px] shrink-0 ${
                   activeTab === "chat"
                     ? "text-cc-fg border-cc-primary"
