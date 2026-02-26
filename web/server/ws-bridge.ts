@@ -1383,14 +1383,15 @@ export class WsBridge {
 
     // For Codex sessions, delegate entirely to the adapter
     if (session.backendType === "codex") {
-      // Store user messages in history for replay with stable ID for dedup on reconnect
+      // Store user messages in history for replay with stable ID for dedup on reconnect.
+      // Prefer the client-provided id so history replay deduplicates against the optimistic message.
       if (msg.type === "user_message") {
         const ts = Date.now();
         session.messageHistory.push({
           type: "user_message",
           content: msg.content,
           timestamp: ts,
-          id: `user-${ts}-${this.userMsgCounter++}`,
+          id: msg.id || `user-${ts}-${this.userMsgCounter++}`,
         });
         this.persistSession(session);
       }
@@ -1502,19 +1503,21 @@ export class WsBridge {
 
   private handleUserMessage(
     session: Session,
-    msg: { type: "user_message"; content: string; session_id?: string; images?: { media_type: string; data: string }[] }
+    msg: { type: "user_message"; content: string; session_id?: string; images?: { media_type: string; data: string }[]; id?: string }
   ) {
     // Count user messages in history to detect first message
     const userMessageCount = session.messageHistory.filter(m => m.type === "user_message").length;
     const isFirstMessage = userMessageCount === 0;
 
-    // Store user message in history for replay with stable ID for dedup on reconnect
+    // Store user message in history for replay with stable ID for dedup on reconnect.
+    // Prefer the client-provided id (from Composer) so history replay deduplicates
+    // correctly against the optimistic message already in the browser store.
     const ts = Date.now();
     session.messageHistory.push({
       type: "user_message",
       content: msg.content,
       timestamp: ts,
-      id: `user-${ts}-${this.userMsgCounter++}`,
+      id: msg.id || `user-${ts}-${this.userMsgCounter++}`,
     });
 
     // Use the user's first message directly as the initial title

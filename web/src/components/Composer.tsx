@@ -350,15 +350,16 @@ export function Composer({ sessionId }: { sessionId: string }) {
     const actualMsg = isAmend ? msg.slice(1).trimStart() : msg;
     if (!actualMsg) return;
 
+    const store = useStore.getState();
+    const msgId = `user-${Date.now()}-${++idCounter}`;
+
     sendToSession(sessionId, {
       type: "user_message",
       content: actualMsg,
       session_id: sessionId,
       images: images.length > 0 ? formatImagesForAPI(images) : undefined,
+      id: msgId,
     });
-
-    const store = useStore.getState();
-    const msgId = `user-${Date.now()}-${++idCounter}`;
     const scanned = scanContent(actualMsg);
     const scannedHtml = scanned.html.length > 0
       ? scanned.html.map((h, i) => ({ ...h, fragmentId: `${msgId}:${i}` }))
