@@ -82,27 +82,51 @@ export function ProjectGroup({
     <div className={`group/project ${!isFirst ? "my-2 pt-2 border-t border-cc-separator" : ""}`}>
       {/* Group header */}
       <div className="flex items-center">
+        {/* Toggle: arrow + folder icon — narrow, just the icons */}
         <button
           onClick={() => onToggleCollapse(group.key)}
-          className="flex-1 min-w-0 px-2 py-1.5 flex items-center gap-1.5 hover:bg-cc-hover rounded-md transition-colors cursor-pointer"
+          aria-label={isCollapsed ? `Expand ${group.label}` : `Collapse ${group.label}`}
+          className="shrink-0 pl-2 pr-1 py-1.5 flex items-center gap-1.5 hover:bg-cc-hover rounded-md transition-colors cursor-pointer"
         >
-        <svg
-          viewBox="0 0 16 16"
-          fill="currentColor"
-          className={`w-2.5 h-2.5 text-cc-muted transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+          <svg
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            className={`w-2.5 h-2.5 text-cc-muted transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+          >
+            <path d="M6 4l4 4-4 4" />
+          </svg>
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-muted/60 shrink-0">
+            <path d="M1 3.5A1.5 1.5 0 012.5 2h3.879a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.354.146H13.5A1.5 1.5 0 0115 4.707V12.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z" />
+          </svg>
+        </button>
+
+        {/* Folder label — also toggles collapse */}
+        <button
+          onClick={() => onToggleCollapse(group.key)}
+          className="min-w-0 py-1.5 pr-1 text-[12px] font-semibold text-cc-fg/80 truncate hover:bg-cc-hover rounded-md transition-colors cursor-pointer"
         >
-          <path d="M6 4l4 4-4 4" />
-        </svg>
-        {/* Folder icon */}
-        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-cc-muted/60 shrink-0">
-          <path d="M1 3.5A1.5 1.5 0 012.5 2h3.879a1.5 1.5 0 011.06.44l.622.621a.5.5 0 00.354.146H13.5A1.5 1.5 0 0115 4.707V12.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z" />
-        </svg>
-        <span className="text-[12px] font-semibold text-cc-fg/80 truncate">
           {group.label}
-        </span>
+        </button>
+
+        {/* Resume button — right after the folder name */}
+        {groupResumableSessions.length > 0 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowResumeDrop((v) => !v); }}
+            title={`Resume a previous ${group.label} session (${groupResumableSessions.length})`}
+            className={`shrink-0 p-1 rounded transition-all cursor-pointer ${showResumeDrop ? "text-cc-primary bg-cc-active" : "text-cc-muted/60 hover:text-cc-primary hover:bg-cc-hover"}`}
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+              <path d="M8 3.5a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM2 8a6 6 0 1110.586 3.879l2.267 2.268a.75.75 0 11-1.06 1.06l-2.268-2.267A6 6 0 012 8z" />
+              <path d="M8 5a.75.75 0 01.75.75v2.69l1.28 1.28a.75.75 0 11-1.06 1.06l-1.5-1.5A.75.75 0 017.25 8.75v-3A.75.75 0 018 5z" />
+            </svg>
+          </button>
+        )}
+
+        {/* Spacer */}
+        <div className="flex-1" />
 
         {/* Status dots */}
-        <span className="flex items-center gap-1 ml-auto shrink-0">
+        <span className="flex items-center gap-1 shrink-0">
           {group.runningCount > 0 && (
             <span className="w-1 h-1 rounded-full bg-cc-success" title={`${group.runningCount} running`} />
           )}
@@ -115,7 +139,7 @@ export function ProjectGroup({
         <span className="text-[10px] bg-cc-hover rounded-full px-1.5 py-0.5 text-cc-muted shrink-0">
           {group.sessions.length}
         </span>
-        </button>
+
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -128,17 +152,6 @@ export function ProjectGroup({
             <path d="M8 3v10M3 8h10" />
           </svg>
         </button>
-        {groupResumableSessions.length > 0 && (
-          <button
-            onClick={(e) => { e.stopPropagation(); setShowResumeDrop((v) => !v); }}
-            title={`Resume a previous ${group.label} session`}
-            className={`shrink-0 p-1 rounded can-hover:opacity-0 can-hover:group-hover/project:opacity-100 transition-all cursor-pointer ${showResumeDrop ? "opacity-100 text-cc-primary bg-cc-active" : "text-cc-muted hover:text-cc-primary hover:bg-cc-hover"}`}
-          >
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
-              <path d="M3.75 2A1.75 1.75 0 002 3.75v8.5c0 .966.784 1.75 1.75 1.75h4.5a.75.75 0 000-1.5h-4.5a.25.25 0 01-.25-.25v-8.5a.25.25 0 01.25-.25h8.5a.25.25 0 01.25.25v4.5a.75.75 0 001.5 0v-4.5A1.75 1.75 0 0012.25 2h-8.5zM14.78 11.47a.75.75 0 00-1.06 0l-2.5 2.5a.75.75 0 001.06 1.06l1.22-1.22V16a.75.75 0 001.5 0v-2.19l1.22 1.22a.75.75 0 101.06-1.06l-2.5-2.5z" />
-            </svg>
-          </button>
-        )}
         <button
           onClick={(e) => onArchiveGroup(e, group.key)}
           title={`Archive all ${group.sessions.length} sessions in ${group.label}`}
