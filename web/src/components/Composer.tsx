@@ -136,11 +136,17 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const isCodex = sessionData?.backend_type === "codex";
   const modes: ModeOption[] = isCodex ? CODEX_MODES : CLAUDE_MODES;
   const modeLabel = modes.find((m) => m.value === currentMode)?.label?.toLowerCase() || currentMode;
+  // LOCAL: On iOS/iPadOS the first tap focuses; require double-tap to accept ghost completion.
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
   // LOCAL: Accept the current completion suggestion into the text
   const acceptCompletion = useCallback(() => {
     if (!completionSuggestion) return;
-    setText((prev) => prev + completionSuggestion);
+    setText((prev) => {
+      const needsLeading = prev.length > 0 && !prev.endsWith(" ") && !completionSuggestion.startsWith(" ");
+      const needsTrailing = !completionSuggestion.endsWith(" ");
+      return (needsLeading ? prev + " " : prev) + completionSuggestion + (needsTrailing ? " " : "");
+    });
     setCompletionSuggestion(null);
     textareaRef.current?.focus();
   }, [completionSuggestion]);
@@ -283,6 +289,13 @@ export function Composer({ sessionId }: { sessionId: string }) {
     };
     window.addEventListener("speech-input", handler);
     return () => window.removeEventListener("speech-input", handler);
+  }, []);
+
+  // Clear composer input when native app fires `clear-input` event.
+  useEffect(() => {
+    const handler = () => setText("");
+    window.addEventListener("clear-input", handler);
+    return () => window.removeEventListener("clear-input", handler);
   }, []);
 
   useEffect(() => {
@@ -1006,8 +1019,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
             {completionSuggestion && !slashMenuOpen && !mentionMenuOpen && (
               <div
                 aria-hidden="true"
-                onClick={acceptCompletion}
-                title="Accept completion (Tab)"
+                onClick={isIOS ? undefined : acceptCompletion}
+                onDoubleClick={isIOS ? acceptCompletion : undefined}
+                title={`Accept completion (${isIOS ? "double-tap" : "Tab or click"})`}
                 className="absolute inset-0 px-4 pt-1 pb-2 text-base sm:text-sm font-sans-ui pointer-events-auto cursor-text overflow-hidden"
                 style={{
                   whiteSpace: "pre-wrap",
@@ -1032,11 +1046,15 @@ export function Composer({ sessionId }: { sessionId: string }) {
               value={text}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
-              // LOCAL: clicking at/after end-of-text accepts the ghost completion.
+              // LOCAL: clicking (or double-tapping on iOS) at/after end-of-text accepts ghost completion.
               onClick={(e) => {
                 syncCaret();
-                const ta = e.currentTarget;
-                if (completionSuggestion && ta.selectionStart >= text.length) {
+                if (!isIOS && completionSuggestion && e.currentTarget.selectionStart >= text.length) {
+                  acceptCompletion();
+                }
+              }}
+              onDoubleClick={(e) => {
+                if (isIOS && completionSuggestion && e.currentTarget.selectionStart >= text.length) {
                   acceptCompletion();
                 }
               }}
