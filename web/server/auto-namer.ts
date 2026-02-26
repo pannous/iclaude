@@ -1,6 +1,8 @@
 import { DEFAULT_OPENROUTER_MODEL, getSettings } from "./settings-manager.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 
 function sanitizeTitle(raw: string): string | null {
   const title = raw
@@ -43,13 +45,25 @@ export async function generateSessionTitle(
 ): Promise<string | null> {
   const timeout = options?.timeoutMs || 15_000;
   const settings = getSettings();
-  const apiKey = settings.openrouterApiKey.trim();
+  const openrouterKey = settings.openrouterApiKey.trim();
+  const openaiKey = (process.env.OPENAI_API_KEY ?? "").trim();
 
-  if (!apiKey) {
+  // Resolve provider: prefer OpenRouter if configured, fall back to OpenAI env var
+  let endpoint: string;
+  let apiKey: string;
+  let model: string;
+  if (openrouterKey) {
+    endpoint = OPENROUTER_URL;
+    apiKey = openrouterKey;
+    model = settings.openrouterModel?.trim() || DEFAULT_OPENROUTER_MODEL;
+  } else if (openaiKey) {
+    endpoint = OPENAI_URL;
+    apiKey = openaiKey;
+    model = DEFAULT_OPENAI_MODEL;
+  } else {
     return null;
   }
 
-  const model = settings.openrouterModel?.trim() || DEFAULT_OPENROUTER_MODEL;
   // Strip system-injected XML tags before sending to the naming model so they
   // don't pollute the generated title (e.g. <local-command-caveat>).
   const cleaned = firstUserMessage.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
@@ -61,7 +75,7 @@ export async function generateSessionTitle(
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const res = await fetch(OPENROUTER_URL, {
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -81,7 +95,7 @@ export async function generateSessionTitle(
     });
 
     if (!res.ok) {
-      console.warn(`[auto-namer] OpenRouter request failed: ${res.status} ${res.statusText}`);
+      console.warn(`[auto-namer] ${endpoint === OPENAI_URL ? "OpenAI" : "OpenRouter"} request failed: ${res.status} ${res.statusText}`);
       return null;
     }
 
@@ -96,7 +110,7 @@ export async function generateSessionTitle(
     const raw = extractTextContent(data.choices?.[0]?.message?.content);
     return sanitizeTitle(raw);
   } catch (err) {
-    console.warn("[auto-namer] Failed to generate session title via OpenRouter:", err);
+    console.warn("[auto-namer] Failed to generate session title:", err);
     return null;
   } finally {
     clearTimeout(timer);

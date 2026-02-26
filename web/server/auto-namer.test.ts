@@ -13,6 +13,9 @@ vi.stubGlobal("fetch", mockFetch);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Stub OPENAI_API_KEY to empty so tests are immune to the developer's env.
+  // Individual tests that need the OpenAI fallback override this via vi.stubEnv.
+  vi.stubEnv("OPENAI_API_KEY", "");
   vi.mocked(settingsManager.getSettings).mockReturnValue({
     openrouterApiKey: "or-key",
     openrouterModel: "openrouter/free",
@@ -55,6 +58,35 @@ describe("generateSessionTitle", () => {
 
     expect(title).toBeNull();
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("falls back to OpenAI when OpenRouter key is empty and OPENAI_API_KEY env var is set", async () => {
+    // Simulates having no OpenRouter key but OPENAI_API_KEY available in the environment.
+    // The auto-namer should use the OpenAI endpoint and gpt-4o-mini as a fallback.
+    vi.stubEnv("OPENAI_API_KEY", "sk-openai-key");
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      openrouterApiKey: "",
+      openrouterModel: "openrouter/free",
+      linearApiKey: "",
+      linearAutoTransition: false,
+      linearAutoTransitionStateId: "",
+      linearAutoTransitionStateName: "",
+      editorTabEnabled: false,
+      updatedAt: 0,
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "Fix Auth Flow" } }] }),
+    });
+
+    const title = await generateSessionTitle("Fix login", "claude-sonnet-4-6");
+
+    expect(title).toBe("Fix Auth Flow");
+    const [url, req] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.openai.com/v1/chat/completions");
+    expect((req.headers as Record<string, string>).Authorization).toBe("Bearer sk-openai-key");
+    const body = JSON.parse(String(req.body)) as { model: string };
+    expect(body.model).toBe("gpt-4o-mini");
   });
 
   it("truncates message to 500 chars", async () => {
