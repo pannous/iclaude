@@ -51,6 +51,11 @@ export default defineConfig({
     port: 2345,
     strictPort: true,
     allowedHosts: [".trycloudflare.com","mac.fritz.box"],
+    watch: {
+      // Vitest writes coverage files here during test runs; exclude them
+      // so Vite doesn't trigger spurious HMR reloads.
+      ignored: ["**/coverage/**"],
+    },
     proxy: {
       "/api": "http://localhost:3456",
       "/ws": {
