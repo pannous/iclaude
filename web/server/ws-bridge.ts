@@ -1177,12 +1177,27 @@ export class WsBridge {
       parent_tool_use_id: msg.parent_tool_use_id,
       timestamp: Date.now(),
     };
-    // Deduplicate: skip if this message ID is already in history (e.g. from resume replay)
+    // When the same message ID arrives again (extended thinking sends thinking and text
+    // blocks as separate assistant events with identical IDs), merge content blocks into
+    // the existing history entry instead of skipping — prevents hist-result-{i} fallbacks
+    // that cause duplicate messages on reconnect.
     const msgId = msg.message?.id;
-    if (msgId && session.messageHistory.some(
-      m => m.type === "assistant" && (m as Extract<BrowserIncomingMessage, { type: "assistant" }>).message?.id === msgId
-    )) {
-      return;
+    if (msgId) {
+      const existingIdx = session.messageHistory.findIndex(
+        m => m.type === "assistant" && (m as Extract<BrowserIncomingMessage, { type: "assistant" }>).message?.id === msgId
+      );
+      if (existingIdx !== -1) {
+        const existing = session.messageHistory[existingIdx] as Extract<BrowserIncomingMessage, { type: "assistant" }>;
+        const prevBlocks = (existing.message?.content as ContentBlock[]) || [];
+        const newBlocks = (msg.message?.content as ContentBlock[]) || [];
+        const seen = new Set(prevBlocks.map(b => JSON.stringify(b)));
+        const merged = [...prevBlocks, ...newBlocks.filter(b => !seen.has(JSON.stringify(b)))];
+        (existing.message as { content: ContentBlock[] }).content = merged;
+        this.persistSession(session);
+        // Broadcast so live browsers can merge the new content blocks.
+        this.broadcastToBrowsers(session, browserMsg);
+        return;
+      }
     }
     session.messageHistory.push(browserMsg);
 

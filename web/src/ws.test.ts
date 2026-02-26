@@ -348,6 +348,55 @@ describe("handleMessage: assistant", () => {
     expect(msgs[0].isStreaming).toBeUndefined();
   });
 
+  it("merges extended-thinking streaming drafts when both blocks share the same message id", () => {
+    // Regression: extended thinking sends a thinking-only assistant event, then a
+    // text-only event with the same message ID. Without the fix, the second event
+    // would land in a new slot (via finalizeStreamingDraftMessage replacing the text
+    // draft), producing two visible "Hello!" messages.
+    wsModule.connectSession("s1");
+    fireMessage({ type: "session_init", session: makeSession("s1") });
+
+    // Thinking phase: streaming deltas + assistant event (thinking block only)
+    fireMessage({ type: "stream_event", event: { type: "message_start" }, parent_tool_use_id: null });
+    fireMessage({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "thinking_delta", thinking: "Reasoning..." } }, parent_tool_use_id: null });
+    fireMessage({
+      type: "assistant",
+      message: {
+        id: "msg-shared-ext",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-4-20250514",
+        content: [{ type: "thinking", thinking: "Reasoning..." }],
+        stop_reason: null,
+        usage: { input_tokens: 10, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      },
+      parent_tool_use_id: null,
+    });
+
+    // Text phase: streaming deltas + assistant event (text block only, same message ID)
+    fireMessage({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "Hello!" } }, parent_tool_use_id: null });
+    fireMessage({
+      type: "assistant",
+      message: {
+        id: "msg-shared-ext",
+        type: "message",
+        role: "assistant",
+        model: "claude-opus-4-20250514",
+        content: [{ type: "text", text: "Hello!" }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      },
+      parent_tool_use_id: null,
+    });
+
+    const msgs = useStore.getState().messages.get("s1")!;
+    // Must produce exactly ONE message — not a separate thinking bubble + duplicate text
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].id).toBe("msg-shared-ext");
+    expect(msgs[0].contentBlocks?.map((b) => b.type)).toEqual(["thinking", "text"]);
+    expect(msgs[0].content).toContain("Hello!");
+  });
+
   it("upserts assistant updates when Claude reuses the same message id", () => {
     wsModule.connectSession("s1");
     fireMessage({ type: "session_init", session: makeSession("s1") });

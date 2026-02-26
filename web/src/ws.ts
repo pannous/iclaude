@@ -335,7 +335,21 @@ function finalizeStreamingDraftMessage(sessionId: string, finalMessage: ChatMess
   }
 
   const messages = [...existing];
-  messages[draftIndex] = finalMessage;
+
+  // Extended thinking sends thinking and text blocks as separate assistant events with
+  // the same message ID. When the finalized message's ID already exists at a non-draft
+  // position, merge into that entry and remove the draft slot rather than duplicating.
+  const existingMsgIndex = finalMessage.id
+    ? messages.findIndex((m, i) => i !== draftIndex && m.id === finalMessage.id && m.role === "assistant")
+    : -1;
+
+  if (existingMsgIndex !== -1) {
+    messages[existingMsgIndex] = mergeAssistantMessage(messages[existingMsgIndex], finalMessage);
+    messages.splice(draftIndex, 1);
+  } else {
+    messages[draftIndex] = finalMessage;
+  }
+
   store.setMessages(sessionId, messages);
   streamingDraftMessageIdBySession.delete(sessionId);
   return true;
