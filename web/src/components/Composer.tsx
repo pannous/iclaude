@@ -1019,9 +1019,8 @@ export function Composer({ sessionId }: { sessionId: string }) {
             {completionSuggestion && !slashMenuOpen && !mentionMenuOpen && (
               <div
                 aria-hidden="true"
-                onClick={isIOS ? undefined : acceptCompletion}
-                onDoubleClick={isIOS ? acceptCompletion : undefined}
-                title={`Accept completion (${isIOS ? "double-tap" : "Tab or click"})`}
+                onDoubleClick={acceptCompletion}
+                title="Accept completion (double-click / Tab)"
                 className="absolute inset-0 px-4 pt-1 pb-2 text-base sm:text-sm font-sans-ui pointer-events-auto cursor-text overflow-hidden"
                 style={{
                   whiteSpace: "pre-wrap",
@@ -1046,15 +1045,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
               value={text}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
-              // LOCAL: clicking (or double-tapping on iOS) at/after end-of-text accepts ghost completion.
-              onClick={(e) => {
-                syncCaret();
-                if (!isIOS && completionSuggestion && e.currentTarget.selectionStart >= text.length) {
-                  acceptCompletion();
-                }
-              }}
+              onClick={syncCaret}
+              // LOCAL: double-click (desktop) or double-tap (iOS) at/after end-of-text accepts ghost completion.
               onDoubleClick={(e) => {
-                if (isIOS && completionSuggestion && e.currentTarget.selectionStart >= text.length) {
+                if (completionSuggestion && e.currentTarget.selectionStart >= text.length) {
                   acceptCompletion();
                 }
               }}
