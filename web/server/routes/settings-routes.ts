@@ -23,6 +23,9 @@ export function registerSettingsRoutes(api: Hono): void {
     if (body.openrouterModel !== undefined && typeof body.openrouterModel !== "string") {
       return c.json({ error: "openrouterModel must be a string" }, 400);
     }
+    if (body.openaiApiKey !== undefined && typeof body.openaiApiKey !== "string") {
+      return c.json({ error: "openaiApiKey must be a string" }, 400);
+    }
     if (body.linearApiKey !== undefined && typeof body.linearApiKey !== "string") {
       return c.json({ error: "linearApiKey must be a string" }, 400);
     }
@@ -39,6 +42,7 @@ export function registerSettingsRoutes(api: Hono): void {
       return c.json({ error: "editorTabEnabled must be a boolean" }, 400);
     }
     const hasAnyField = body.openrouterApiKey !== undefined || body.openrouterModel !== undefined
+      || body.openaiApiKey !== undefined
       || body.linearApiKey !== undefined || body.linearAutoTransition !== undefined
       || body.linearAutoTransitionStateId !== undefined || body.linearAutoTransitionStateName !== undefined
       || body.editorTabEnabled !== undefined;
@@ -58,6 +62,10 @@ export function registerSettingsRoutes(api: Hono): void {
       openrouterModel:
         typeof body.openrouterModel === "string"
           ? (body.openrouterModel.trim() || DEFAULT_OPENROUTER_MODEL)
+          : undefined,
+      openaiApiKey:
+        typeof body.openaiApiKey === "string"
+          ? body.openaiApiKey.trim()
           : undefined,
       linearApiKey:
         typeof body.linearApiKey === "string"

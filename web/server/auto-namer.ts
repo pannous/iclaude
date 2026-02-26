@@ -33,8 +33,8 @@ function extractTextContent(content: unknown): string {
 }
 
 /**
- * Generates a short session title using OpenRouter.
- * Returns null if OpenRouter isn't configured or if generation fails.
+ * Generates a short session title via OpenRouter (primary) or OpenAI (fallback).
+ * Returns null if neither provider is configured or if generation fails.
  */
 export async function generateSessionTitle(
   firstUserMessage: string,
@@ -46,9 +46,10 @@ export async function generateSessionTitle(
   const timeout = options?.timeoutMs || 15_000;
   const settings = getSettings();
   const openrouterKey = settings.openrouterApiKey.trim();
-  const openaiKey = (process.env.OPENAI_API_KEY ?? "").trim();
+  // Prefer explicitly configured key (stored in settings.json) over env var fallback
+  const openaiKey = (settings.openaiApiKey?.trim() || process.env.OPENAI_API_KEY || "").trim();
 
-  // Resolve provider: prefer OpenRouter if configured, fall back to OpenAI env var
+  // Resolve provider: prefer OpenRouter if configured, fall back to OpenAI (settings or env var)
   let endpoint: string;
   let apiKey: string;
   let model: string;

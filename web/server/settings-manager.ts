@@ -12,6 +12,8 @@ export const DEFAULT_OPENROUTER_MODEL = "openrouter/free";
 export interface CompanionSettings {
   openrouterApiKey: string;
   openrouterModel: string;
+  /** OpenAI API key for session title generation fallback. Stored in settings.json. */
+  openaiApiKey?: string;
   linearApiKey: string;
   linearAutoTransition: boolean;
   linearAutoTransitionStateId: string;
@@ -36,12 +38,16 @@ let settings: CompanionSettings = {
 };
 
 function normalize(raw: Partial<CompanionSettings> | null | undefined): CompanionSettings {
+  const openaiApiKey = typeof raw?.openaiApiKey === "string" && raw.openaiApiKey.trim()
+    ? raw.openaiApiKey.trim()
+    : undefined;
   return {
     openrouterApiKey: typeof raw?.openrouterApiKey === "string" ? raw.openrouterApiKey : "",
     openrouterModel:
       typeof raw?.openrouterModel === "string" && raw.openrouterModel.trim()
         ? raw.openrouterModel
         : DEFAULT_OPENROUTER_MODEL,
+    ...(openaiApiKey !== undefined ? { openaiApiKey } : {}),
     linearApiKey: typeof raw?.linearApiKey === "string" ? raw.linearApiKey : "",
     linearAutoTransition: typeof raw?.linearAutoTransition === "boolean" ? raw.linearAutoTransition : false,
     linearAutoTransitionStateId: typeof raw?.linearAutoTransitionStateId === "string" ? raw.linearAutoTransitionStateId : "",
@@ -75,12 +81,13 @@ export function getSettings(): CompanionSettings {
 }
 
 export function updateSettings(
-  patch: Partial<Pick<CompanionSettings, "openrouterApiKey" | "openrouterModel" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "editorTabEnabled">>,
+  patch: Partial<Pick<CompanionSettings, "openrouterApiKey" | "openrouterModel" | "openaiApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "editorTabEnabled">>,
 ): CompanionSettings {
   ensureLoaded();
   settings = normalize({
     openrouterApiKey: patch.openrouterApiKey ?? settings.openrouterApiKey,
     openrouterModel: patch.openrouterModel ?? settings.openrouterModel,
+    openaiApiKey: patch.openaiApiKey ?? settings.openaiApiKey,
     linearApiKey: patch.linearApiKey ?? settings.linearApiKey,
     linearAutoTransition: patch.linearAutoTransition ?? settings.linearAutoTransition,
     linearAutoTransitionStateId: patch.linearAutoTransitionStateId ?? settings.linearAutoTransitionStateId,
