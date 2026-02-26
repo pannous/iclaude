@@ -318,8 +318,10 @@ describe("MessageFeed - generation stats bar", () => {
 });
 
 describe("MessageFeed - lazy resume transcript", () => {
-  it("loads previous transcript pages for resumed Claude sessions", async () => {
-    const sid = "test-resume";
+  it("auto-loads prior history for fork sessions without requiring a button click", async () => {
+    // Fork sessions automatically trigger history load after a short delay
+    // so the user sees the prior conversation immediately without needing to click a button.
+    const sid = "test-fork-auto";
     setStoreMessages(sid, []);
     setSdkSessions([
       {
@@ -355,16 +357,75 @@ describe("MessageFeed - lazy resume transcript", () => {
 
     render(<MessageFeed sessionId={sid} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /load previous history/i }));
+    // Fork sessions must not show a manual "Load previous history" button — auto-load handles it
+    expect(screen.queryByRole("button", { name: /load previous history/i })).toBeNull();
 
+    // The auto-load fires after 400ms; waitFor polls until the mock was called
     await waitFor(() => {
       expect(getClaudeSessionHistoryMock).toHaveBeenCalledWith("prior-session-123", {
         cursor: 0,
         limit: 40,
       });
-    });
+    }, { timeout: 2000 });
+
     expect(await screen.findByText("Earlier question")).toBeTruthy();
     expect(await screen.findByText("Earlier answer")).toBeTruthy();
+  }, 5000);
+
+  it("shows Load previous history button for non-fork resume sessions", () => {
+    // Non-fork resume sessions (e.g. branching from HomePage) still require
+    // a manual click to load history, to avoid cluttering new sessions.
+    const sid = "test-resume-nonfork";
+    setStoreMessages(sid, []);
+    setSdkSessions([
+      {
+        sessionId: sid,
+        state: "connected",
+        cwd: "/Users/test/repo",
+        createdAt: Date.now(),
+        backendType: "claude",
+        resumeSessionAt: "prior-session-456",
+        forkSession: false,
+      },
+    ]);
+
+    render(<MessageFeed sessionId={sid} />);
+
+    // Non-fork resume sessions must show the manual load button
+    expect(screen.getByRole("button", { name: /load previous history/i })).toBeTruthy();
+  });
+
+  it("hides Load previous history button when messages are pre-loaded via message_history", async () => {
+    // When the server pre-loads history via message_history WS event, messages
+    // already appear in the chat. The button should not show to avoid duplicate loading.
+    const sid = "test-fork-preloaded";
+    setSdkSessions([
+      {
+        sessionId: sid,
+        state: "connected",
+        cwd: "/Users/test/repo",
+        createdAt: Date.now(),
+        backendType: "claude",
+        resumeSessionAt: "prior-session-789",
+        forkSession: true,
+      },
+    ]);
+    // Simulate messages pre-loaded by message_history WS event
+    setStoreMessages(sid, [
+      {
+        id: "pre-msg-1",
+        role: "user",
+        content: "Pre-loaded user message",
+        timestamp: 1,
+      },
+    ]);
+
+    render(<MessageFeed sessionId={sid} />);
+
+    // Banner with button must not show when messages are already present
+    expect(screen.queryByRole("button", { name: /load previous history/i })).toBeNull();
+    // Pre-loaded message should be visible
+    expect(screen.getByText("Pre-loaded user message")).toBeTruthy();
   });
 });
 

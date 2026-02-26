@@ -553,6 +553,8 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
   const [resumeHistoryLoading, setResumeHistoryLoading] = useState(false);
   const [resumeHistoryError, setResumeHistoryError] = useState("");
   const resumeHistoryMessageIdsRef = useRef<Set<string>>(new Set());
+  // LOCAL: Tracks whether a fork session's auto-load has been attempted for the current session.
+  const forkAutoLoadAttemptedRef = useRef<string>("");
   const chatTabReentryTick = useStore((s) => s.chatTabReentryTickBySession.get(sessionId) ?? 0);
   const hasStreamingAssistant = useMemo(
     () => messages.some((m) => m.role === "assistant" && m.isStreaming),
@@ -563,7 +565,8 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
     return (sdkSession?.resumeSessionAt || "").trim();
   }, [sdkSession?.backendType, sdkSession?.resumeSessionAt]);
   const canLoadResumeHistory = resumeSourceSessionId.length > 0;
-  const resumeModeLabel = sdkSession?.forkSession ? "Forked from" : "Continuing from";
+  const isForkSession = sdkSession?.forkSession === true;
+  const resumeModeLabel = isForkSession ? "Forked from" : "Continuing from";
   const mergedMessages = useMemo(() => {
     if (resumeHistoryMessages.length === 0) return dedupeMessagesById(messages);
     return dedupeMessagesById([...resumeHistoryMessages, ...messages]);
@@ -581,6 +584,7 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
     setResumeHistoryLoading(false);
     setResumeHistoryError("");
     resumeHistoryMessageIdsRef.current = new Set();
+    forkAutoLoadAttemptedRef.current = "";
   }, [sessionId, resumeSourceSessionId]);
 
   const totalEntries = grouped.length;
@@ -668,6 +672,22 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
     resumeHistoryLoaded,
     resumeHistoryCursor,
   ]);
+
+  // LOCAL: For fork sessions, auto-load prior history when messages haven't been pre-populated
+  // via message_history. Waits briefly for message_history to arrive before falling back to REST.
+  // This ensures the user always sees the prior conversation without needing to click a button.
+  useEffect(() => {
+    if (!isForkSession || !canLoadResumeHistory || resumeHistoryLoaded || resumeHistoryLoading) return;
+    if (forkAutoLoadAttemptedRef.current === sessionId) return;
+
+    const timer = setTimeout(() => {
+      if (messages.length === 0 && !resumeHistoryLoaded && !resumeHistoryLoading) {
+        forkAutoLoadAttemptedRef.current = sessionId;
+        void loadResumeHistoryPage({ preserveScroll: false });
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [sessionId, isForkSession, canLoadResumeHistory, resumeHistoryLoaded, resumeHistoryLoading, messages.length, loadResumeHistoryPage]);
 
   // Tick elapsed time every second while generating
   useEffect(() => {
@@ -775,15 +795,21 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
             <>
               <p className="text-sm text-cc-fg font-medium mb-1">This session has prior Claude context</p>
               <p className="text-xs text-cc-muted leading-relaxed mb-3">
-                {resumeModeLabel} {resumeSourceSessionId.slice(0, 8)}. Load earlier messages into this chat when needed.
+                {resumeModeLabel} {resumeSourceSessionId.slice(0, 8)}.{" "}
+                {isForkSession ? "Loading prior conversation..." : "Load earlier messages into this chat when needed."}
               </p>
-              <button
-                onClick={() => void loadResumeHistoryPage({ preserveScroll: false })}
-                disabled={resumeHistoryLoading}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-cc-fg bg-cc-card border border-cc-border rounded-lg hover:bg-cc-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
-              >
-                {resumeHistoryLoading ? "Loading..." : "Load previous history"}
-              </button>
+              {!isForkSession && (
+                <button
+                  onClick={() => void loadResumeHistoryPage({ preserveScroll: false })}
+                  disabled={resumeHistoryLoading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-cc-fg bg-cc-card border border-cc-border rounded-lg hover:bg-cc-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {resumeHistoryLoading ? "Loading..." : "Load previous history"}
+                </button>
+              )}
+              {resumeHistoryLoading && (
+                <p className="text-xs text-cc-muted mt-2">Loading...</p>
+              )}
               {resumeHistoryError && (
                 <p className="text-xs text-cc-error mt-2">{resumeHistoryError}</p>
               )}
@@ -824,7 +850,10 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
         className="h-full overflow-y-auto overscroll-y-contain px-4 sm:px-6 py-5 sm:py-8"
       >
         <div className="max-w-3xl mx-auto space-y-5 sm:space-y-7">
-          {canLoadResumeHistory && !resumeHistoryLoaded && (
+          {/* LOCAL: Only show the load-history banner when no messages have been pre-loaded.
+               If message_history already populated the chat, the banner is redundant (and
+               clicking it would add duplicates with different IDs). */}
+          {canLoadResumeHistory && !resumeHistoryLoaded && messages.length === 0 && (
             <div className="rounded-xl border border-cc-border bg-cc-card p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
