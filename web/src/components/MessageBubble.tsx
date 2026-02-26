@@ -352,8 +352,9 @@ function MarkdownContent({ text, showCursor = false }: { text: string; showCurso
               );
             }
 
-            // Detect file paths in inline code and make them clickable
-            // HTML files open in a new tab via the proxy; others open in the editor
+            // Detect file paths in inline code and make them clickable.
+            // HTML files open in a new tab via the proxy; others open in the editor.
+            // Bare filenames with a known extension trigger a project-wide search.
             const text = typeof children === "string" ? children : "";
             const filePathMatch = text.match(/^(\/[^\s:]+|[a-zA-Z][\w.-]*(?:\/[\w.-]+)+)(?::(\d+))?$/);
             if (filePathMatch) {
@@ -382,6 +383,10 @@ function MarkdownContent({ text, showCursor = false }: { text: string; showCurso
                   {children}
                 </button>
               );
+            }
+            const bareMatch = text.match(BARE_FILENAME_RE);
+            if (bareMatch) {
+              return <BareFilenameLink filename={bareMatch[1]} line={bareMatch[2]} />;
             }
 
             return (
@@ -724,6 +729,53 @@ export function injectBridgeIntoHtml(html: string, fragmentId: string, yoloMode:
   // Insert before </head> if present, otherwise prepend
   if (html.includes("</head>")) return html.replace("</head>", `${scripts}</head>`);
   return scripts + html;
+}
+
+/** Common source-code extensions to recognise as bare filenames (e.g. "SessionRouter.swift"). */
+const BARE_FILENAME_RE =
+  /^([a-zA-Z][\w.-]+\.(ts|tsx|js|jsx|mjs|cjs|py|swift|kt|java|go|rs|c|cc|cpp|h|hpp|rb|php|cs|fs|ex|exs|elm|hs|lua|r|sh|bash|zsh|fish|ps1|css|scss|sass|less|html|htm|json|jsonc|yaml|yml|toml|ini|env|md|mdx|sql|graphql|proto|dart|vue|svelte|astro))(?::(\d+))?$/i;
+
+/**
+ * Renders a bare filename (e.g. `SessionRouter.swift`) as a button that searches the
+ * session's working directory for the file and opens the first match in the editor.
+ */
+function BareFilenameLink({ filename, line }: { filename: string; line?: string }) {
+  const sessionId = useContext(FeedSessionIdContext);
+  const cwd = useStore((s) => s.sdkSessions.find((sess) => sess.sessionId === sessionId)?.cwd ?? "");
+  const [searching, setSearching] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+
+  const handleClick = useCallback(async () => {
+    if (!cwd) return;
+    setSearching(true);
+    setNotFound(false);
+    try {
+      const { matches } = await api.findFiles(filename, cwd);
+      if (matches.length === 0) {
+        setNotFound(true);
+        setTimeout(() => setNotFound(false), 2000);
+        return;
+      }
+      // Prefer exact basename match; fall back to first result
+      const target = matches.find((m) => m.endsWith(`/${filename}`)) ?? matches[0];
+      const path = line ? `${target}:${line}` : target;
+      useStore.getState().openFileInEditor(path);
+    } finally {
+      setSearching(false);
+    }
+  }, [cwd, filename, line]);
+
+  return (
+    <button
+      type="button"
+      className="px-1 py-0.5 rounded bg-cc-code-bg/30 text-[13px] font-mono-code text-cc-primary hover:bg-cc-primary/20 cursor-pointer transition-colors underline decoration-cc-primary/30 inline disabled:opacity-50"
+      onClick={handleClick}
+      disabled={searching || !cwd}
+      title={cwd ? `Search for ${filename} in ${cwd}` : "Session working directory unknown"}
+    >
+      {notFound ? `${filename} (not found)` : filename}{line ? `:${line}` : ""}
+    </button>
+  );
 }
 
 function HtmlFileLink({ filename, url, path }: { filename: string; url: string; path: string }) {

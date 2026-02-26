@@ -696,6 +696,11 @@ export const api = {
 
   getHome: () => get<{ home: string; cwd: string }>("/fs/home"),
 
+  findFiles: (name: string, cwd: string) =>
+    get<{ matches: string[] }>(
+      `/fs/find?name=${encodeURIComponent(name)}&cwd=${encodeURIComponent(cwd)}`,
+    ),
+
   getRecentProjects: () =>
     get<{ projects: string[] }>("/fs/recent-projects"),
 

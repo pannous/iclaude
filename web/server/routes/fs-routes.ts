@@ -64,6 +64,27 @@ export function registerFsRoutes(api: Hono, opts?: { allowedBases?: string[] }):
   // Tests can pass a restricted allowedBases to scope access.
   const allowedBases = () => opts?.allowedBases ?? ["/"];
 
+  /** Find files by name within a directory tree. Fast: uses `find` with depth limit and skips common large dirs. */
+  api.get("/fs/find", (c) => {
+    const name = c.req.query("name");
+    const rawCwd = c.req.query("cwd");
+    if (!name || !rawCwd) return c.json({ error: "name and cwd required" }, 400);
+    // Reject filenames with path separators or shell metacharacters
+    if (/[/\\\0*?[\]{}|<>;&`$!]/.test(name)) return c.json({ error: "Invalid filename" }, 400);
+    const basePath = guardPath(rawCwd, allowedBases());
+    if (!basePath) return c.json({ error: "Path outside allowed directories" }, 403);
+    try {
+      const result = execCaptureStdout(
+        `find ${shellEscapeArg(basePath)} -maxdepth 10 -name ${shellEscapeArg(name)} -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/dist/*' -not -path '*/.build/*'`,
+        { cwd: basePath, encoding: "utf-8", timeout: 5000 },
+      );
+      const matches = result.split("\n").map((l) => l.trim()).filter(Boolean);
+      return c.json({ matches });
+    } catch {
+      return c.json({ matches: [] });
+    }
+  });
+
   api.get("/fs/list", async (c) => {
     const rawPath = c.req.query("path") || homedir();
     const basePath = guardPath(rawPath, allowedBases());
