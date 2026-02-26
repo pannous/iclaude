@@ -9,6 +9,7 @@ export const PANEL_ICON_PATHS: Record<string, string> = {
   globe: "M12 2a10 10 0 100 20 10 10 0 000-20zM2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10A15.3 15.3 0 0112 2z",
   zap: "M13 2L3 14h9l-1 8 10-12h-9l1-8",
   "file-text": "M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8",
+  git: "M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h4M8 12h8M12 8v8",
 };
 
 /** Puzzle piece SVG path (16x16 viewBox) for plugin section headers. */
