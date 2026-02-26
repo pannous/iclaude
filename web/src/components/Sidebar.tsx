@@ -110,6 +110,7 @@ export function Sidebar() {
   const [resumableSessions, setResumableSessions] = useState<ResumableSession[]>([]);
   const [resumeLoading, setResumeLoading] = useState(false);
   const [resumingId, setResumingId] = useState<string | null>(null);
+  const [allResumable, setAllResumable] = useState<ResumableSession[]>([]);
   const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
   const [hash, setHash] = useState(() => (typeof window !== "undefined" ? window.location.hash : ""));
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -233,6 +234,14 @@ export function Sidebar() {
     }
     setResumingId(null);
   }
+
+  // Eagerly load all resumable sessions for per-group resume buttons
+  useEffect(() => {
+    const cleanTag = (t: string) => t.replace(/<[^>]*>/g, "").trim();
+    api.listResumableSessions()
+      .then((list) => setAllResumable(list.map((rs) => ({ ...rs, title: cleanTag(rs.title || "") || rs.title }))))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (editingSessionId && editInputRef.current) {
@@ -429,6 +438,16 @@ export function Sidebar() {
     () => groupSessionsByProject(activeSessions),
     [activeSessions],
   );
+
+  // Per-group resumable sessions: filter by project key, exclude active CLI sessions
+  const resumableByGroup = useMemo(() => {
+    const activeCliIds = new Set<string>(sdkSessions.map((s) => s.cliSessionId).filter((id): id is string => !!id));
+    const filtered = allResumable.filter((rs) => !activeCliIds.has(rs.sessionId));
+    return new Map(projectGroups.map((g) => [
+      g.key,
+      filtered.filter((rs) => rs.project.startsWith(g.key)).slice(0, 10),
+    ]));
+  }, [allResumable, sdkSessions, projectGroups]);
 
   const handleArchiveGroup = useCallback(async (e: React.MouseEvent, projectKey: string) => {
     e.stopPropagation();
@@ -638,6 +657,9 @@ export function Sidebar() {
                 recentlyRenamed={recentlyRenamed}
                 onArchiveGroup={handleArchiveGroup}
                 onNewSessionInFolder={handleNewSessionInFolder}
+                groupResumableSessions={resumableByGroup.get(group.key) ?? []}
+                onResumeSession={handleResumeSession}
+                resumingId={resumingId}
                 isFirst={i === 0}
                 {...sessionItemProps}
               />

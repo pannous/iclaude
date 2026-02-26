@@ -1,6 +1,17 @@
-import type { RefObject } from "react";
+import { useState, type RefObject } from "react";
 import type { ProjectGroup as ProjectGroupType } from "../utils/project-grouping.js";
+import type { ResumableSession } from "../api.js";
 import { SessionItem } from "./SessionItem.js";
+
+function formatTimeAgo(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
 
 interface ProjectGroupProps {
   group: ProjectGroupType;
@@ -18,6 +29,9 @@ interface ProjectGroupProps {
   onArchiveGroup: (e: React.MouseEvent, projectKey: string) => void;
   onNewSessionInFolder: (cwd: string) => void;
   onClearRecentlyRenamed: (id: string) => void;
+  groupResumableSessions: ResumableSession[];
+  onResumeSession: (rs: ResumableSession) => void;
+  resumingId: string | null;
   editingSessionId: string | null;
   editingName: string;
   setEditingName: (name: string) => void;
@@ -43,6 +57,9 @@ export function ProjectGroup({
   onArchiveGroup,
   onNewSessionInFolder,
   onClearRecentlyRenamed,
+  groupResumableSessions,
+  onResumeSession,
+  resumingId,
   editingSessionId,
   editingName,
   setEditingName,
@@ -51,6 +68,8 @@ export function ProjectGroup({
   editInputRef,
   isFirst,
 }: ProjectGroupProps) {
+  const [showResumeDrop, setShowResumeDrop] = useState(false);
+
   // Build collapsed preview: first 2 session names
   const collapsedPreview = isCollapsed
     ? group.sessions
@@ -109,6 +128,17 @@ export function ProjectGroup({
             <path d="M8 3v10M3 8h10" />
           </svg>
         </button>
+        {groupResumableSessions.length > 0 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowResumeDrop((v) => !v); }}
+            title={`Resume a previous ${group.label} session`}
+            className={`shrink-0 p-1 rounded can-hover:opacity-0 can-hover:group-hover/project:opacity-100 transition-all cursor-pointer ${showResumeDrop ? "opacity-100 text-cc-primary bg-cc-active" : "text-cc-muted hover:text-cc-primary hover:bg-cc-hover"}`}
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+              <path d="M3.75 2A1.75 1.75 0 002 3.75v8.5c0 .966.784 1.75 1.75 1.75h4.5a.75.75 0 000-1.5h-4.5a.25.25 0 01-.25-.25v-8.5a.25.25 0 01.25-.25h8.5a.25.25 0 01.25.25v4.5a.75.75 0 001.5 0v-4.5A1.75 1.75 0 0012.25 2h-8.5zM14.78 11.47a.75.75 0 00-1.06 0l-2.5 2.5a.75.75 0 001.06 1.06l1.22-1.22V16a.75.75 0 001.5 0v-2.19l1.22 1.22a.75.75 0 101.06-1.06l-2.5-2.5z" />
+            </svg>
+          </button>
+        )}
         <button
           onClick={(e) => onArchiveGroup(e, group.key)}
           title={`Archive all ${group.sessions.length} sessions in ${group.label}`}
@@ -119,6 +149,32 @@ export function ProjectGroup({
           </svg>
         </button>
       </div>
+
+      {/* Resume dropdown */}
+      {showResumeDrop && (
+        <div className="mx-1 mb-1 rounded-[8px] border border-cc-border bg-cc-sidebar overflow-hidden">
+          {groupResumableSessions.map((rs) => {
+            const isResuming = resumingId === rs.sessionId;
+            const displayTitle = rs.title?.replace(/^\[agent:[^\]]+\]\s*/, "").trim() || rs.sessionId.slice(0, 12);
+            return (
+              <button
+                key={rs.sessionId}
+                onClick={() => { onResumeSession(rs); setShowResumeDrop(false); }}
+                disabled={!!resumingId}
+                className="w-full px-2.5 py-1.5 text-left hover:bg-cc-hover transition-colors border-b border-cc-border last:border-b-0 cursor-pointer disabled:opacity-50"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="shrink-0 w-1 h-1 rounded-full bg-cc-muted opacity-40" />
+                  <span className="flex-1 min-w-0 text-[11px] text-cc-fg truncate">
+                    {isResuming ? "Resuming…" : displayTitle}
+                  </span>
+                  <span className="shrink-0 text-[10px] text-cc-muted opacity-60">{formatTimeAgo(rs.lastModified)}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Collapsed preview */}
       {isCollapsed && collapsedPreview && (
