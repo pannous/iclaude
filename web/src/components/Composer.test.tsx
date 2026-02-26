@@ -8,6 +8,9 @@ import type { SessionState } from "../../server/session-types.js";
 Element.prototype.scrollIntoView = vi.fn();
 
 const mockSendToSession = vi.fn();
+const mockConnectSession = vi.fn();
+const mockCreateSessionStream = vi.fn();
+const mockNavigateToSession = vi.fn();
 const mockListPrompts = vi.fn();
 const mockCreatePrompt = vi.fn();
 
@@ -16,6 +19,7 @@ let mockStoreState: Record<string, unknown> = {};
 
 vi.mock("../ws.js", () => ({
   sendToSession: (...args: unknown[]) => mockSendToSession(...args),
+  connectSession: (...args: unknown[]) => mockConnectSession(...args),
 }));
 
 vi.mock("../api.js", () => ({
@@ -25,6 +29,11 @@ vi.mock("../api.js", () => ({
     createPrompt: (...args: unknown[]) => mockCreatePrompt(...args),
     completeInput: vi.fn().mockResolvedValue({ suggestion: null }),
   },
+  createSessionStream: (...args: unknown[]) => mockCreateSessionStream(...args),
+}));
+
+vi.mock("../utils/routing.js", () => ({
+  navigateToSession: (...args: unknown[]) => mockNavigateToSession(...args),
 }));
 
 // Mock useStore as a function that takes a selector
@@ -628,5 +637,56 @@ describe("Composer speech recognition", () => {
     setupMockStore({ isConnected: false });
     render(<Composer sessionId="s1" />);
     expect(screen.queryByTitle("Start dictation")).toBeNull();
+  });
+});
+
+// ─── Fork button ─────────────────────────────────────────────────────────────
+
+describe("Composer fork button", () => {
+  it("shows fork button when session has a cliSessionId and is not running", () => {
+    // The default mock store already sets sdkSessions with no cliSessionId,
+    // so we need to add one to trigger the fork button.
+    (mockStoreState.sdkSessions as Array<Record<string, unknown>>)[0].cliSessionId = "cli-abc";
+    render(<Composer sessionId="s1" />);
+    expect(screen.queryByTitle("Fork conversation into a new session")).toBeTruthy();
+  });
+
+  it("hides fork button when session has no cliSessionId", () => {
+    // Default mock store: sdkSession has no cliSessionId
+    render(<Composer sessionId="s1" />);
+    expect(screen.queryByTitle("Fork conversation into a new session")).toBeNull();
+  });
+
+  it("hides fork button when session is running", () => {
+    // Even with cliSessionId, the fork button should not appear while the agent is running.
+    // Set up a running session with cliSessionId before rendering.
+    setupMockStore({ sessionStatus: "running" });
+    (mockStoreState.sdkSessions as Array<Record<string, unknown>>)[0].cliSessionId = "cli-abc";
+    render(<Composer sessionId="s1" />);
+    expect(screen.queryByTitle("Fork conversation into a new session")).toBeNull();
+  });
+
+  it("calls createSessionStream with forkSession=true and navigates on click", async () => {
+    // Set up cliSessionId so fork button renders
+    (mockStoreState.sdkSessions as Array<Record<string, unknown>>)[0].cliSessionId = "cli-abc";
+    mockCreateSessionStream.mockResolvedValue({
+      sessionId: "new-session-123",
+      state: "starting",
+      cwd: "/test",
+      backendType: "claude",
+    });
+
+    render(<Composer sessionId="s1" />);
+    const forkBtn = screen.getByTitle("Fork conversation into a new session");
+    fireEvent.click(forkBtn);
+
+    await waitFor(() => {
+      expect(mockCreateSessionStream).toHaveBeenCalledWith(
+        expect.objectContaining({ resumeSessionAt: "cli-abc", forkSession: true }),
+        expect.any(Function),
+      );
+    });
+    expect(mockNavigateToSession).toHaveBeenCalledWith("new-session-123", true);
+    expect(mockConnectSession).toHaveBeenCalledWith("new-session-123");
   });
 });

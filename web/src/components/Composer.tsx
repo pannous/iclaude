@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useStore } from "../store.js";
-import { sendToSession } from "../ws.js";
+import { sendToSession, connectSession } from "../ws.js";
 import { CLAUDE_MODES, CODEX_MODES } from "../utils/backends.js";
-import { api, type SavedPrompt } from "../api.js";
+import { api, createSessionStream, type SavedPrompt } from "../api.js";
 import type { ModeOption } from "../utils/backends.js";
 import { ModelSwitcher } from "./ModelSwitcher.js";
+import { navigateToSession } from "../utils/routing.js";
 
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
 import { scanContent } from "../utils/result-scanner.js";
@@ -136,6 +137,50 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const isCodex = sessionData?.backend_type === "codex";
   const modes: ModeOption[] = isCodex ? CODEX_MODES : CLAUDE_MODES;
   const modeLabel = modes.find((m) => m.value === currentMode)?.label?.toLowerCase() || currentMode;
+  // LOCAL: SDK session info needed for fork (cliSessionId) — only claude has fork support
+  const sdkSession = useStore((s) => s.sdkSessions.find((sdk) => sdk.sessionId === sessionId));
+  const [isForking, setIsForking] = useState(false);
+  const canFork = !isCodex && !!sdkSession?.cliSessionId && !isRunning && !isForking;
+
+  // LOCAL: Fork current session — creates a new independent session seeded with this conversation's history
+  const handleFork = useCallback(async () => {
+    if (!canFork || !sdkSession?.cliSessionId) return;
+    setIsForking(true);
+    try {
+      const result = await createSessionStream(
+        {
+          resumeSessionAt: sdkSession.cliSessionId,
+          forkSession: true,
+          cwd: sdkSession.cwd,
+          model: sdkSession.model,
+          permissionMode: sdkSession.permissionMode,
+        },
+        (progress) => useStore.getState().addCreationProgress(progress),
+      );
+      const store = useStore.getState();
+      store.setSdkSessions([
+        ...store.sdkSessions.filter((s) => s.sessionId !== result.sessionId),
+        {
+          sessionId: result.sessionId,
+          state: result.state as "starting" | "connected" | "running" | "exited",
+          cwd: result.cwd,
+          createdAt: Date.now(),
+          backendType: (result.backendType as "claude" | "codex" | undefined) || "claude",
+          model: sdkSession.model,
+          permissionMode: sdkSession.permissionMode,
+          resumeSessionAt: sdkSession.cliSessionId,
+          forkSession: true,
+        },
+      ]);
+      navigateToSession(result.sessionId, true);
+      connectSession(result.sessionId);
+    } catch (err) {
+      console.error("Fork failed", err);
+    } finally {
+      setIsForking(false);
+    }
+  }, [canFork, sdkSession]);
+
   // LOCAL: On iOS/iPadOS the first tap focuses; require double-tap to accept ghost completion.
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
@@ -358,22 +403,17 @@ export function Composer({ sessionId }: { sessionId: string }) {
     const msg = text.trim();
     if (!msg || !isConnected) return;
 
-    // Speech-correction: messages starting with * amend the previous user message
-    const isAmend = msg.startsWith("*");
-    const actualMsg = isAmend ? msg.slice(1).trimStart() : msg;
-    if (!actualMsg) return;
-
     const store = useStore.getState();
     const msgId = `user-${Date.now()}-${++idCounter}`;
 
     sendToSession(sessionId, {
       type: "user_message",
-      content: actualMsg,
+      content: msg,
       session_id: sessionId,
       images: images.length > 0 ? formatImagesForAPI(images) : undefined,
       id: msgId,
     });
-    const scanned = scanContent(actualMsg);
+    const scanned = scanContent(msg);
     const scannedHtml = scanned.html.length > 0
       ? scanned.html.map((h, i) => ({ ...h, fragmentId: `${msgId}:${i}` }))
       : undefined;
@@ -382,33 +422,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
       : undefined;
     const imageData = images.length > 0 ? formatImagesForAPI(images) : undefined;
 
-    if (isAmend) {
-      const existing = store.messages.get(sessionId) || [];
-      let lastUserIndex = -1;
-      for (let i = existing.length - 1; i >= 0; i--) {
-        if (existing[i].role === "user") { lastUserIndex = i; break; }
-      }
-      if (lastUserIndex >= 0) {
-        const updated = [...existing];
-        updated[lastUserIndex] = {
-          ...updated[lastUserIndex],
-          content: actualMsg,
-          images: imageData,
-          scannedHtml,
-          scannedHtmlFiles,
-          timestamp: Date.now(),
-        };
-        store.setMessages(sessionId, updated);
-      } else {
-        store.appendMessage(sessionId, {
-          id: msgId, role: "user", content: actualMsg, images: imageData, scannedHtml, scannedHtmlFiles, timestamp: Date.now(),
-        });
-      }
-    } else {
-      store.appendMessage(sessionId, {
-        id: msgId, role: "user", content: actualMsg, images: imageData, scannedHtml, scannedHtmlFiles, timestamp: Date.now(),
-      });
-    }
+    store.appendMessage(sessionId, {
+      id: msgId, role: "user", content: msg, images: imageData, scannedHtml, scannedHtmlFiles, timestamp: Date.now(),
+    });
 
     store.setSessionStatus(sessionId, "running");
     store.setStreamingStats(sessionId, { startedAt: Date.now() });
@@ -981,6 +997,24 @@ export function Composer({ sessionId }: { sessionId: string }) {
               <span className="hidden sm:inline-flex">
                 <ModelSwitcher sessionId={sessionId} />
               </span>
+
+              {/* LOCAL: Fork session button — only for claude sessions with a cliSessionId */}
+              {canFork && (
+                <button
+                  onClick={handleFork}
+                  className="flex items-center justify-center w-10 h-10 sm:w-8 sm:h-8 rounded-full text-cc-muted hover:text-cc-text hover:bg-cc-hover transition-colors cursor-pointer"
+                  title="Fork conversation into a new session"
+                >
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                    {/* git fork icon */}
+                    <circle cx="5" cy="3" r="1.5" />
+                    <circle cx="11" cy="3" r="1.5" />
+                    <circle cx="5" cy="13" r="1.5" />
+                    <path d="M5 4.5v3C5 9.5 7 11 9 11h2" />
+                    <path d="M11 4.5v6.5" />
+                  </svg>
+                </button>
+              )}
 
               {/* Send/stop */}
               {isRunning ? (
