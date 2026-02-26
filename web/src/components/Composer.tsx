@@ -469,7 +469,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
       toggleMode();
       return;
     }
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !e.altKey) {
       e.preventDefault();
       handleSend();
     }
