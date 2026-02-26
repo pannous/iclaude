@@ -384,6 +384,21 @@ function MarkdownContent({ text, showCursor = false }: { text: string; showCurso
                 </button>
               );
             }
+            const urlMatch = text.match(INLINE_URL_RE);
+            if (urlMatch) {
+              const href = urlMatch[1].startsWith("http") ? urlMatch[1] : `https://${urlMatch[1]}`;
+              return (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-1 py-0.5 rounded bg-cc-code-bg/30 text-[13px] font-mono-code text-cc-primary hover:bg-cc-primary/20 cursor-pointer transition-colors underline decoration-cc-primary/30 inline"
+                  title={`Open ${href}`}
+                >
+                  {children}
+                </a>
+              );
+            }
             const bareMatch = text.match(BARE_FILENAME_RE);
             if (bareMatch) {
               return <BareFilenameLink filename={bareMatch[1]} line={bareMatch[2]} />;
@@ -730,6 +745,14 @@ export function injectBridgeIntoHtml(html: string, fragmentId: string, yoloMode:
   if (html.includes("</head>")) return html.replace("</head>", `${scripts}</head>`);
   return scripts + html;
 }
+
+/**
+ * Matches URLs in inline code: full http(s):// URLs, or bare domain-like strings
+ * ending with a well-known TLD (e.g. "console.anthropic.com", "api.example.io/v1").
+ * Deliberately narrow TLD list to avoid false-positives on version strings like "2.0.0".
+ */
+const INLINE_URL_RE =
+  /^(https?:\/\/[^\s<>"'`]+|(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+(?:com|org|net|io|dev|ai|app|co|edu|gov|me|info|biz|tv|tech|cloud|xyz|software|tools|services|platform|site|online|store|shop|blog|media|digital|labs|works|studio)(?:\/[^\s<>"'`]*)?)$/i;
 
 /** Common source-code extensions to recognise as bare filenames (e.g. "SessionRouter.swift"). */
 const BARE_FILENAME_RE =
