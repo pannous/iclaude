@@ -21,15 +21,19 @@ export function Panel({ slug }: { slug: string }) {
     sendPath(focusedFolder);
   }, [focusedFolder, activeTab, slug, sendPath]);
 
+  const src = focusedFolder
+    ? `${api.getPanelUrl(slug)}?path=${encodeURIComponent(focusedFolder)}`
+    : api.getPanelUrl(slug);
+
   return (
     <div className="h-full flex flex-col bg-cc-bg">
       <iframe
         ref={iframeRef}
-        src={api.getPanelUrl(slug)}
+        src={src}
         className="flex-1 w-full border-0"
         title={`Panel: ${slug}`}
         sandbox="allow-scripts allow-same-origin allow-forms"
-        // Send the current focusedFolder once the iframe document is ready
+        // Also send via postMessage for live folder-switch updates
         onLoad={() => sendPath(focusedFolder)}
       />
     </div>
