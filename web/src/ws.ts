@@ -658,10 +658,11 @@ function handleParsedMessage(
     case "stream_event": {
       const evt = data.event as Record<string, unknown>;
       if (evt && typeof evt === "object") {
-        // message_start → mark generation start time
+        // message_start → mark generation start time and activate stop button
         if (evt.type === "message_start") {
           streamingPhaseBySession.delete(sessionId);
           clearStreamingDraftMessage(sessionId);
+          store.setSessionStatus(sessionId, "running");
           if (!store.streamingStartedAt.has(sessionId)) {
             store.setStreamingStats(sessionId, { startedAt: Date.now(), outputTokens: 0 });
           }
