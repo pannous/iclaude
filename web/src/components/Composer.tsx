@@ -173,9 +173,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
           forkSession: true,
         },
       ]);
-      // Assign a unique name so it passes the sidebar's validSessions filter
-      const existingNames = new Set(useStore.getState().sessionNames.values());
-      useStore.getState().setSessionName(result.sessionId, generateUniqueSessionName(existingNames));
+      // Copy original session name/title with a fork suffix so it passes the sidebar's validSessions filter
+      const originalName = store.sessionNames.get(sessionId) || sdkSession.title || generateUniqueSessionName(new Set(store.sessionNames.values()));
+      store.setSessionName(result.sessionId, `${originalName} (fork)`);
       navigateToSession(result.sessionId, true);
       connectSession(result.sessionId);
     } catch (err) {
