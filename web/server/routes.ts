@@ -1553,6 +1553,30 @@ export function createRoutes(
     return c.json(images);
   });
 
+  // ─── Simple ask endpoint (for Siri Shortcuts / Apple Watch) ────────
+  // POST /api/ask  { "text": "...", "cwd": "..." }  → { "response": "..." }
+  // Runs claude -p <text> synchronously and returns the response as plain text.
+
+  api.post("/ask", async (c) => {
+    const body = await c.req.json<{ text: string; cwd?: string }>();
+    const text = body?.text?.trim();
+    if (!text) return c.json({ error: "text is required" }, 400);
+
+    const binary = resolveBinary("claude");
+    if (!binary) return c.json({ error: "Claude binary not found" }, 503);
+
+    const cwd = body.cwd ?? homedir();
+    try {
+      const output = execSync(
+        `${binary} -p ${shellEscapeArg(text)} --dangerously-skip-permissions`,
+        { cwd, encoding: "utf-8", timeout: 120_000 }
+      );
+      return c.json({ response: output.trim() });
+    } catch (err) {
+      return c.json({ error: getErrorMessage(err) }, 500);
+    }
+  });
+
   registerFsRoutes(api);
   registerEnvRoutes(api, { webDir: WEB_DIR });
 
