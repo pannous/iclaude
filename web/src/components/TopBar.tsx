@@ -304,7 +304,7 @@ export function TopBar() {
             <AiValidationToggle sessionId={currentSessionId} />
           )}
 
-          <ThemeToggle />
+          {/* LOCAL: ThemeToggle removed from top bar — we diverge from upstream intentionally */}
           {showContextToggle && (
             <button
               onClick={() => setTaskPanelOpen(!taskPanelOpen)}

@@ -77,10 +77,14 @@ const keyBindings: KeyBinding[] = [
     action: archiveCurrentSession,
   },
   {
-    // Ctrl/Cmd+S or Ctrl/Cmd+T → new session
-    match: (e) =>
-      (e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "t"),
+    // Ctrl/Cmd+T → new session
+    match: (e) => (e.ctrlKey || e.metaKey) && e.key === "t",
     action: newSession,
+  },
+  {
+    // Cmd+S → prevent browser "Save Page As"; editor components handle actual saving
+    match: (e) => e.metaKey && !e.ctrlKey && e.key === "s",
+    action: () => {},
   },
   {
     // BrowserBack/Back key
