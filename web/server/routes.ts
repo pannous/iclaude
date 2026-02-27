@@ -1687,42 +1687,57 @@ export function createRoutes(
     ).trim();
   };
 
-  type Turn = { role: "user" | "assistant"; content: string };
-  const shortcutSessions = new Map<string, Turn[]>();
+  // shortcut session key → Claude CLI session ID (for --resume)
+  const shortcutSessions = new Map<string, string>();
 
-  const claudeAskWithSession = async (text: string, sessionId: string, cwd?: string): Promise<string> => {
-    const history = shortcutSessions.get(sessionId) ?? [];
-    const context = [...history, { role: "user" as const, content: text }]
-      .map(t => `${t.role === "user" ? "Human" : "Assistant"}: ${t.content}`)
-      .join("\n\n");
-    const response = await claudeAsk(context, cwd);
-    history.push({ role: "user", content: text }, { role: "assistant", content: response });
-    shortcutSessions.set(sessionId, history.slice(-20));
-    return response;
+  const claudeAskWithSession = async (text: string, sessionKey: string, cwd?: string): Promise<string> => {
+    const binary = resolveBinary("claude");
+    if (!binary) throw new Error("Claude binary not found");
+    const env = { ...process.env, CLAUDECODE: undefined };
+    const cliSessionId = shortcutSessions.get(sessionKey);
+    const resumeFlag = cliSessionId ? `--resume ${shellEscapeArg(cliSessionId)}` : "";
+    const raw = execSync(
+      `${binary} -p ${shellEscapeArg(text)} ${resumeFlag} --output-format stream-json --dangerously-skip-permissions`,
+      { cwd: cwd ?? homedir(), encoding: "utf-8", timeout: 120_000, env }
+    ).trim();
+    // Parse NDJSON: capture session ID from system.init and text from result
+    let response = "";
+    let newCliSessionId = cliSessionId;
+    for (const line of raw.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const msg = JSON.parse(line);
+        if (msg.type === "system" && msg.subtype === "init" && msg.session_id)
+          newCliSessionId = msg.session_id;
+        else if (msg.type === "result" && msg.result)
+          response = msg.result;
+      } catch { /* skip malformed lines */ }
+    }
+    if (newCliSessionId) shortcutSessions.set(sessionKey, newCliSessionId);
+    return response || raw;
   };
+
+  const extractSessionParam = (form: FormData | null, body: Record<string, string | undefined> | null, key: string) =>
+    ((form ? (form.get(key) as string ?? "") : (body?.[key] ?? "")) || "default").trim();
 
   // Plain-text variant — used by Siri Shortcuts (avoids JSON parsing on Watch)
   api.get("/ask/text", async (c) => {
     const text = (c.req.query("text") ?? c.req.query("q") ?? "").trim();
     if (!text) return c.text("Missing text parameter", 400);
-    const session = c.req.query("session") ?? "";
-    try {
-      const reply = session ? await claudeAskWithSession(text, session, c.req.query("cwd")) : await claudeAsk(text, c.req.query("cwd"));
-      return c.text(reply);
-    } catch (err) { return c.text(getErrorMessage(err), 500); }
+    const sessionKey = (c.req.query("session") || "default").trim();
+    try { return c.text(await claudeAskWithSession(text, sessionKey, c.req.query("cwd"))); }
+    catch (err) { return c.text(getErrorMessage(err), 500); }
   });
 
   api.post("/ask/text", async (c) => {
     const ct = c.req.header("content-type") ?? "";
     const form = ct.includes("form") ? await c.req.formData() : null;
-    const body = form ? null : await c.req.json<{ text?: string; session?: string }>().catch(() => ({} as { text?: string; session?: string }));
-    const text = (form ? (form.get("text") as string ?? "") : (body?.text ?? "")).trim();
-    const session = (form ? (form.get("session") as string ?? "") : (body?.session ?? "")).trim();
+    const body = form ? null : await c.req.json<Record<string, string>>().catch(() => ({} as Record<string, string>));
+    const text = ((form ? (form.get("text") as string ?? "") : (body?.text ?? ""))).trim();
     if (!text) return c.text("Missing text parameter", 400);
-    try {
-      const reply = session ? await claudeAskWithSession(text, session) : await claudeAsk(text);
-      return c.text(reply);
-    } catch (err) { return c.text(getErrorMessage(err), 500); }
+    const sessionKey = extractSessionParam(form, body, "session");
+    try { return c.text(await claudeAskWithSession(text, sessionKey)); }
+    catch (err) { return c.text(getErrorMessage(err), 500); }
   });
 
   api.get("/ask", async (c) => {
