@@ -324,9 +324,8 @@ export function Sidebar() {
       )
     );
     // Remove from WsBridge sessions map so bridge-only sessions (no sdkInfo) disappear
-    const bridgeSessions = new Map(store.sessions);
-    if (bridgeSessions.delete(sessionId)) {
-      useStore.setState({ sessions: bridgeSessions });
+    if (store.sessions.has(sessionId)) {
+      store.removeSession(sessionId);
     }
     disconnectSession(sessionId);
     if (store.currentSessionId === sessionId) {
@@ -429,7 +428,7 @@ export function Sidebar() {
   const logoSrc = currentSession?.backendType === "codex" ? "/logo-codex.svg" : "/logo.svg";
   const [showCronSessions, setShowCronSessions] = useState(true);
   const [showAgentSessions, setShowAgentSessions] = useState(false);
-  const prevAgentCountRef = useRef(0);
+  const prevAgentCountRef = useRef(agentSessions.length);
   useEffect(() => {
     if (agentSessions.length > prevAgentCountRef.current) setShowAgentSessions(true);
     prevAgentCountRef.current = agentSessions.length;
@@ -461,13 +460,10 @@ export function Sidebar() {
       )
     );
     // Remove from bridge sessions
-    const bridgeSessions = new Map(store.sessions);
-    let changed = false;
     for (const id of ids) {
-      if (bridgeSessions.delete(id)) changed = true;
+      if (store.sessions.has(id)) store.removeSession(id);
       disconnectSession(id);
     }
-    if (changed) useStore.setState({ sessions: bridgeSessions });
     // Navigate away if current session is in this group
     if (store.currentSessionId && ids.includes(store.currentSessionId)) {
       store.newSession();

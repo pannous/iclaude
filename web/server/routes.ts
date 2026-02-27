@@ -282,17 +282,22 @@ export function createRoutes(
 
       const envVars = prepareEnvVars(body, envManager);
 
-      const wtResult = setupWorktree(body, body.cwd);
+      const companionEnv = body.envSlug ? envManager.getEnv(body.envSlug) : null;
+      let effectiveImage = companionEnv
+        ? (body.envSlug ? envManager.getEffectiveImage(body.envSlug) : null)
+        : (body.container?.image || null);
+      const isDockerSession = !!effectiveImage;
+
+      // For Docker sessions, skip host git ops — they'll run inside the container after workspace copy.
+      const wtResult = isDockerSession
+        ? { cwd: body.cwd, worktreeInfo: undefined, error: undefined }
+        : setupWorktree(body, body.cwd);
       if (wtResult.error) {
         return c.json({ error: wtResult.error }, 400);
       }
       let cwd: string = (wtResult.cwd ?? body.cwd) as string;
       const worktreeInfo = wtResult.worktreeInfo;
 
-      const companionEnv = body.envSlug ? envManager.getEnv(body.envSlug) : null;
-      let effectiveImage = companionEnv
-        ? (body.envSlug ? envManager.getEffectiveImage(body.envSlug) : null)
-        : (body.container?.image || null);
 
       let containerInfo: ContainerInfo | undefined;
       let containerId: string | undefined;
@@ -378,6 +383,27 @@ export function createRoutes(
             error: `Failed to copy workspace to container: ${reason}`,
           }, 503);
         }
+
+        // Run git fetch/checkout/pull inside the container (instead of on host)
+        if (body.branch) {
+          const repoInfo = cwd ? gitUtils.getRepoInfo(cwd) : null;
+          const gitResult = containerManager.gitOpsInContainer(containerInfo.containerId, {
+            branch: body.branch,
+            currentBranch: repoInfo?.currentBranch || "HEAD",
+            createBranch: body.createBranch,
+            defaultBranch: repoInfo?.defaultBranch,
+          });
+          if (gitResult.errors.length > 0) {
+            console.warn(`[routes] In-container git ops warnings: ${gitResult.errors.join("; ")}`);
+          }
+          if (!gitResult.checkoutOk) {
+            containerManager.removeContainer(tempId);
+            return c.json({
+              error: `Failed to checkout branch "${body.branch}" inside container: ${gitResult.errors.join("; ")}`,
+            }, 400);
+          }
+        }
+
 
         if (companionEnv?.initScript?.trim()) {
           try {
@@ -506,6 +532,12 @@ export function createRoutes(
           envVars = { ...companionEnv.variables, ...body.env };
         }
 
+        // Resolve Docker image early so we know whether git ops should run on host or in container
+        let effectiveImage = companionEnv
+          ? (body.envSlug ? envManager.getEffectiveImage(body.envSlug) : null)
+          : (body.container?.image || null);
+        const isDockerSession = !!effectiveImage;
+
         await emitProgress(stream, "resolving_env", "Environment resolved", "done");
 
         let cwd = body.cwd;
@@ -519,8 +551,8 @@ export function createRoutes(
           return;
         }
 
-        // --- Step: Git operations ---
-        if (body.useWorktree && body.branch && cwd) {
+        // --- Step: Git operations (host only — Docker sessions do this inside the container) ---
+        if (!isDockerSession && body.useWorktree && body.branch && cwd) {
           await emitProgress(stream, "creating_worktree", "Creating worktree...", "in_progress");
           const repoInfo = gitUtils.getRepoInfo(cwd);
           if (repoInfo) {
@@ -539,7 +571,7 @@ export function createRoutes(
             };
           }
           await emitProgress(stream, "creating_worktree", "Worktree ready", "done");
-        } else if (body.branch && cwd) {
+        } else if (!isDockerSession && body.branch && cwd) {
           const repoInfo = gitUtils.getRepoInfo(cwd);
           if (repoInfo) {
             await emitProgress(stream, "fetching_git", "Fetching from remote...", "in_progress");
@@ -566,11 +598,6 @@ export function createRoutes(
             await emitProgress(stream, "pulling_git", "Up to date", "done");
           }
         }
-
-        // --- Step: Docker image resolution ---
-        let effectiveImage = companionEnv
-          ? (body.envSlug ? envManager.getEffectiveImage(body.envSlug) : null)
-          : (body.container?.image || null);
 
         let containerInfo: ContainerInfo | undefined;
         let containerId: string | undefined;
@@ -689,6 +716,44 @@ export function createRoutes(
               }),
             });
             return;
+          }
+
+          // --- Step: Git operations inside container ---
+          if (body.branch) {
+            const repoInfo = cwd ? gitUtils.getRepoInfo(cwd) : null;
+
+            await emitProgress(stream, "fetching_git", "Fetching from remote (in container)...", "in_progress");
+            const gitResult = containerManager.gitOpsInContainer(containerInfo.containerId, {
+              branch: body.branch,
+              currentBranch: repoInfo?.currentBranch || "HEAD",
+              createBranch: body.createBranch,
+              defaultBranch: repoInfo?.defaultBranch,
+            });
+            await emitProgress(stream, "fetching_git", gitResult.fetchOk ? "Fetch complete" : "Fetch skipped", "done");
+
+            if (repoInfo?.currentBranch !== body.branch) {
+              await emitProgress(stream, "checkout_branch",
+                gitResult.checkoutOk ? `On branch ${body.branch}` : `Checkout failed`,
+                gitResult.checkoutOk ? "done" : "error",
+              );
+            }
+
+            await emitProgress(stream, "pulling_git", gitResult.pullOk ? "Up to date" : "Pull skipped", "done");
+
+            if (gitResult.errors.length > 0) {
+              console.warn(`[routes] In-container git ops warnings: ${gitResult.errors.join("; ")}`);
+            }
+            if (!gitResult.checkoutOk) {
+              containerManager.removeContainer(tempId);
+              await stream.writeSSE({
+                event: "error",
+                data: JSON.stringify({
+                  error: `Failed to checkout branch "${body.branch}" inside container: ${gitResult.errors.join("; ")}`,
+                  step: "checkout_branch",
+                }),
+              });
+              return;
+            }
           }
 
           // --- Step: Init script ---
@@ -1064,6 +1129,7 @@ export function createRoutes(
     const session = launcher.getSession(id);
     if (!session) return c.json({ error: "Session not found" }, 404);
     sessionNames.setName(id, body.name.trim());
+    wsBridge.broadcastNameUpdate(id, body.name.trim());
     return c.json({ ok: true, name: body.name.trim() });
   });
 
@@ -1568,27 +1634,50 @@ export function createRoutes(
   });
 
   // ─── Simple ask endpoint (for Siri Shortcuts / Apple Watch) ────────
-  // POST /api/ask  { "text": "...", "cwd": "..." }  → { "response": "..." }
-  // Runs claude -p <text> synchronously and returns the response as plain text.
+  // POST /api/ask        JSON { "text": "..." }  → JSON { "response": "..." }
+  // GET  /api/ask?text=  or  POST form text=     → JSON { "response": "..." }
+  // GET/POST /api/ask/text                       → plain text (for Shortcuts)
+
+  const claudeAsk = async (text: string, cwd?: string): Promise<string> => {
+    const binary = resolveBinary("claude");
+    if (!binary) throw new Error("Claude binary not found");
+    return execSync(
+      `${binary} -p ${shellEscapeArg(text)} --dangerously-skip-permissions`,
+      { cwd: cwd ?? homedir(), encoding: "utf-8", timeout: 120_000 }
+    ).trim();
+  };
+
+  // Plain-text variant — used by Siri Shortcuts (avoids JSON parsing on Watch)
+  api.get("/ask/text", async (c) => {
+    const text = (c.req.query("text") ?? c.req.query("q") ?? "").trim();
+    if (!text) return c.text("Missing text parameter", 400);
+    try { return c.text(await claudeAsk(text, c.req.query("cwd"))); }
+    catch (err) { return c.text(getErrorMessage(err), 500); }
+  });
+
+  api.post("/ask/text", async (c) => {
+    const ct = c.req.header("content-type") ?? "";
+    const text = ct.includes("form")
+      ? ((await c.req.formData()).get("text") as string ?? "").trim()
+      : ((await c.req.json<{ text?: string }>().catch(() => ({} as { text?: string }))).text ?? "").trim();
+    if (!text) return c.text("Missing text parameter", 400);
+    try { return c.text(await claudeAsk(text)); }
+    catch (err) { return c.text(getErrorMessage(err), 500); }
+  });
+
+  api.get("/ask", async (c) => {
+    const text = (c.req.query("text") ?? "").trim();
+    if (!text) return c.json({ error: "text is required" }, 400);
+    try { return c.json({ response: await claudeAsk(text, c.req.query("cwd")) }); }
+    catch (err) { return c.json({ error: getErrorMessage(err) }, 500); }
+  });
 
   api.post("/ask", async (c) => {
     const body = await c.req.json<{ text: string; cwd?: string }>();
-    const text = body?.text?.trim();
+    const text = body?.text?.trim() ?? "";
     if (!text) return c.json({ error: "text is required" }, 400);
-
-    const binary = resolveBinary("claude");
-    if (!binary) return c.json({ error: "Claude binary not found" }, 503);
-
-    const cwd = body.cwd ?? homedir();
-    try {
-      const output = execSync(
-        `${binary} -p ${shellEscapeArg(text)} --dangerously-skip-permissions`,
-        { cwd, encoding: "utf-8", timeout: 120_000 }
-      );
-      return c.json({ response: output.trim() });
-    } catch (err) {
-      return c.json({ error: getErrorMessage(err) }, 500);
-    }
+    try { return c.json({ response: await claudeAsk(text, body?.cwd) }); }
+    catch (err) { return c.json({ error: getErrorMessage(err) }, 500); }
   });
 
   registerFsRoutes(api);

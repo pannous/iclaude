@@ -22,6 +22,11 @@ function getAudioContext(): AudioContext | null {
   return audioContext;
 }
 
+/** Test-only: simulate a user gesture to bypass the hasUserGesture guard. */
+export function _simulateUserGestureForTest(): void {
+  initOnGesture();
+}
+
 /**
  * Plays a pleasant two-tone notification chime using the Web Audio API.
  * Two short sine-wave tones in sequence (E5 → G5).

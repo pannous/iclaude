@@ -56,8 +56,8 @@ export function registerSystemRoutes(
   });
 
   api.get("/update-check", async (c) => {
-    // LOCAL: suppress update banner in dev mode
-    if (process.env.NODE_ENV !== "production") {
+    // LOCAL: suppress update banner in dev mode (not in test or production)
+    if (process.env.NODE_ENV === "development") {
       const state = getUpdateState();
       return c.json({
         currentVersion: state.currentVersion,
