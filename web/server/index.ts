@@ -189,7 +189,8 @@ app.use("/*", async (c, next) => {
 
   if (verifyToken(candidate)) return next();
 
-  // Unauthenticated tunnel request — show minimal login page
+  // Unauthenticated tunnel request — show minimal login page (no-store so reload after login works)
+  c.header("Cache-Control", "no-store");
   return c.html(`<!DOCTYPE html>
 <html lang="en">
 <head>
