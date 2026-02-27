@@ -210,6 +210,9 @@ app.use("/*", async (c, next) => {
            cursor:pointer;font-size:1rem;font-weight:600;padding:.7rem}
     button:hover{background:#c4663e}
     #err{color:#e05c5c;font-size:.85rem;display:none}
+    .hint{font-size:.8rem;color:#666;text-align:center}
+    .hint a{color:#d97757;text-decoration:none}
+    .hint a:hover{text-decoration:underline}
   </style>
 </head>
 <body>
@@ -218,6 +221,7 @@ app.use("/*", async (c, next) => {
     <input id="t" type="password" placeholder="Auth token" autocomplete="current-password" autofocus>
     <button type="submit">Sign in</button>
     <div id="err">Invalid token</div>
+    <p class="hint"><a href="http://localhost:3456/api/auth/token-page" target="_blank">Get token →</a></p>
   </form>
   <script>
     document.getElementById('f').onsubmit = async e => {
