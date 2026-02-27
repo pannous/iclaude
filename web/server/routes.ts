@@ -1680,9 +1680,10 @@ export function createRoutes(
   const claudeAsk = async (text: string, cwd?: string): Promise<string> => {
     const binary = resolveBinary("claude");
     if (!binary) throw new Error("Claude binary not found");
+    const env = { ...process.env, CLAUDECODE: undefined };
     return execSync(
       `${binary} -p ${shellEscapeArg(text)} --dangerously-skip-permissions`,
-      { cwd: cwd ?? homedir(), encoding: "utf-8", timeout: 120_000 }
+      { cwd: cwd ?? homedir(), encoding: "utf-8", timeout: 120_000, env }
     ).trim();
   };
 
