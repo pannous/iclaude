@@ -165,6 +165,7 @@ export function HomePage() {
 
   const [caretPos, setCaretPos] = useState(0);
   const pendingSelectionRef = useRef<number | null>(null);
+  const [pendingAutoSend, setPendingAutoSend] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
@@ -194,6 +195,28 @@ export function HomePage() {
     if (isDesktop) {
       textareaRef.current?.focus();
     }
+  }, []);
+
+  // Auto-send after speech input populates the textarea
+  useEffect(() => {
+    if (pendingAutoSend && text.trim() && !sending) {
+      setPendingAutoSend(false);
+      handleSend();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAutoSend, text, sending]);
+
+  // Receive speech input injected from native app via WKWebView (fallback when no session is active)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ text: string; autoSend?: boolean }>).detail;
+      (window as unknown as Record<string, unknown>).__speechInputReceived = true;
+      setText((prev) => (prev ? `${prev} ${detail.text}` : detail.text));
+      textareaRef.current?.focus();
+      if (detail.autoSend) setPendingAutoSend(true);
+    };
+    window.addEventListener("speech-input", handler);
+    return () => window.removeEventListener("speech-input", handler);
   }, []);
 
   // Load server home/cwd and available backends on mount
