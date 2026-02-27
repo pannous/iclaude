@@ -1,10 +1,6 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { homedir } from "node:os";
 import { networkInterfaces } from "node:os";
 
-const AUTH_FILE = join(homedir(), ".companion", "auth.json");
 const TOKEN_BYTES = 32; // 64 hex characters
 
 /**
@@ -17,55 +13,18 @@ export function isAuthEnabled(): boolean {
   return val === "1" || val === "true";
 }
 
-interface AuthData {
-  token: string;
-  createdAt: number;
-}
-
-let cachedToken: string | null = null;
+// Token is generated fresh on each server start and held only in memory.
+// The only way to obtain it remotely is via the QR code shown on localhost.
+const envToken = process.env.COMPANION_AUTH_TOKEN?.trim();
+let cachedToken: string = envToken || randomBytes(TOKEN_BYTES).toString("hex");
 
 /**
- * Get the auth token. Priority:
- * 1. COMPANION_AUTH_TOKEN env var
- * 2. Persisted token from ~/.companion/auth.json
- * 3. Auto-generate and persist a new token
+ * Get the auth token.
+ * Uses COMPANION_AUTH_TOKEN env var if set, otherwise the in-memory token
+ * generated at startup. Never written to disk.
  */
 export function getToken(): string {
-  // Env var override (always takes priority)
-  const envToken = process.env.COMPANION_AUTH_TOKEN;
-  if (envToken && envToken.trim()) {
-    cachedToken = envToken.trim();
-    return cachedToken;
-  }
-
-  // Return cached token if available
-  if (cachedToken) return cachedToken;
-
-  // Try reading from file
-  try {
-    if (existsSync(AUTH_FILE)) {
-      const raw = readFileSync(AUTH_FILE, "utf-8");
-      const data = JSON.parse(raw) as Partial<AuthData>;
-      if (typeof data.token === "string" && data.token.length >= 32) {
-        cachedToken = data.token;
-        return cachedToken;
-      }
-    }
-  } catch {
-    // File corrupt or unreadable — generate new
-  }
-
-  // Generate new token
-  const token = randomBytes(TOKEN_BYTES).toString("hex");
-  const data: AuthData = { token, createdAt: Date.now() };
-  try {
-    mkdirSync(dirname(AUTH_FILE), { recursive: true });
-    writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2), { mode: 0o600 });
-  } catch (err) {
-    console.error("[auth] Failed to persist auth token:", err);
-  }
-  cachedToken = token;
-  return token;
+  return cachedToken;
 }
 
 /**
@@ -137,24 +96,15 @@ export function getAllAddresses(): { label: string; ip: string }[] {
 }
 
 /**
- * Regenerate the auth token — creates a new random token, persists it,
- * and returns the new value.  Existing sessions using the old token will
- * be invalidated on their next request.
+ * Regenerate the auth token in-memory.
+ * Existing sessions using the old token will be invalidated on their next request.
  */
 export function regenerateToken(): string {
-  const token = randomBytes(TOKEN_BYTES).toString("hex");
-  const data: AuthData = { token, createdAt: Date.now() };
-  try {
-    mkdirSync(dirname(AUTH_FILE), { recursive: true });
-    writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2), { mode: 0o600 });
-  } catch (err) {
-    console.error("[auth] Failed to persist regenerated token:", err);
-  }
-  cachedToken = token;
-  return token;
+  cachedToken = randomBytes(TOKEN_BYTES).toString("hex");
+  return cachedToken;
 }
 
 /** Reset cached state — for testing only */
 export function _resetForTest(): void {
-  cachedToken = null;
+  cachedToken = randomBytes(TOKEN_BYTES).toString("hex");
 }
