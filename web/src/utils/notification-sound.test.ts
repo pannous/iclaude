@@ -1,3 +1,4 @@
+
 // @vitest-environment jsdom
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
@@ -165,3 +166,4 @@ describe("playNotificationSound", () => {
     expect(() => playNotificationSound()).not.toThrow();
   });
 });
+

@@ -9,9 +9,11 @@ import { UpdateBanner } from "./UpdateBanner.js";
 import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
 import { ChatView } from "./ChatView.js";
 import { api } from "../api.js";
-import type { McpServerDetail } from "../types.js";
+
+import type { PermissionRequest, ChatMessage, ContentBlock, SessionState, McpServerDetail } from "../types.js";
 import { AiValidationBadge } from "./AiValidationBadge.js";
 import { AiValidationToggle } from "./AiValidationToggle.js";
+
 import type { TaskItem } from "../types.js";
 import type { UpdateInfo } from "../api.js";
 import { GitHubPRDisplay, CodexRateLimitsSection, CodexTokenDetailsSection } from "./TaskPanel.js";
@@ -1703,7 +1705,7 @@ function PlaygroundAiValidationToggle({ enabled }: { enabled: boolean }) {
       model: "claude-sonnet-4-20250514",
       cwd: "/workspace",
       tools: [],
-      permissionMode: "default",
+      permissionMode: "bypassPermissions",
       claude_code_version: "1.0.0",
       mcp_servers: [],
       agents: [],

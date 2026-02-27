@@ -5,10 +5,12 @@ import { CLAUDE_MODES, CODEX_MODES } from "../utils/backends.js";
 import { api, createSessionStream, type SavedPrompt } from "../api.js";
 import type { ModeOption } from "../utils/backends.js";
 import { ModelSwitcher } from "./ModelSwitcher.js";
+
 import { navigateToSession } from "../utils/routing.js";
 import { generateUniqueSessionName } from "../utils/names.js";
 import { MentionMenu } from "./MentionMenu.js";
 import { useMentionMenu } from "../utils/use-mention-menu.js";
+
 
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
 import { scanContent } from "../utils/result-scanner.js";
@@ -60,6 +62,7 @@ interface CommandItem {
   type: "command" | "skill";
 }
 
+
 function formatImagesForAPI(imgs: ImageAttachment[]) {
   return imgs.map((img) => ({ media_type: img.mediaType, data: img.base64 }));
 }
@@ -98,6 +101,7 @@ function handleMenuKeyDown<T>(
 }
 
 
+
 export function Composer({ sessionId }: { sessionId: string }) {
   const [text, setText] = useState("");
   const [images, setImages] = useState<ImageAttachment[]>([]);
@@ -134,6 +138,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const sdkSession = useStore((s) => s.sdkSessions.find((sdk) => sdk.sessionId === sessionId));
   const [isForking, setIsForking] = useState(false);
   const canFork = !isCodex && !!sdkSession?.cliSessionId && !isRunning && !isForking;
+
 
   // LOCAL: Fork current session — creates a new independent session seeded with this conversation's history
   const handleFork = useCallback(async () => {
@@ -234,6 +239,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
     scheduleCompletion(text, slashMenuOpen || mention.mentionMenuOpen, false);
   }, [text, slashMenuOpen, mention.mentionMenuOpen, isRunning, scheduleCompletion]);
 
+
   const allCommands = useMemo<CommandItem[]>(() => {
     const cmds: CommandItem[] = [];
     if (sessionData?.slash_commands) {
@@ -269,6 +275,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
     }
   }, [text, allCommands.length, slashMenuOpen]);
 
+
   const [pendingAutoSend, setPendingAutoSend] = useState(false);
   useEffect(() => {
     if (pendingAutoSend && text.trim() && isConnected) {
@@ -299,6 +306,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   }, []);
 
   // Keep slash menu selected index in bounds
+
   useEffect(() => {
     if (slashMenuIndex >= filteredCommands.length) {
       setSlashMenuIndex(Math.max(0, filteredCommands.length - 1));
@@ -376,8 +384,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
     setText("");
     setImages([]);
     setSlashMenuOpen(false);
+
     mention.setMentionMenuOpen(false);
     setCompletionSuggestion(null);
+
 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -402,7 +412,9 @@ export function Composer({ sessionId }: { sessionId: string }) {
       }
     }
 
+
     if (mention.mentionMenuOpen && mention.filteredPrompts.length > 0) {
+
       if (e.key === "ArrowDown") {
         e.preventDefault();
         mention.setMentionMenuIndex((i) => (i + 1) % mention.filteredPrompts.length);
@@ -596,8 +608,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
       return;
     }
     try {
+
       await api.createPrompt({ name, content, scope: "project", cwd: sessionData.cwd });
       await mention.refreshPrompts();
+
       setSavePromptOpen(false);
       setSavePromptName("");
       setSavePromptError(null);

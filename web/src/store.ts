@@ -654,6 +654,25 @@ export const useStore = create<AppState>((set) => ({
       return { sessions };
     }),
 
+  addAiResolvedPermission: (sessionId, entry) =>
+    set((s) => {
+      const aiResolvedPermissions = new Map(s.aiResolvedPermissions);
+      const sessionEntries = [...(aiResolvedPermissions.get(sessionId) || []), entry];
+      // Keep only the last 50 entries per session to avoid unbounded growth
+      if (sessionEntries.length > 50) sessionEntries.splice(0, sessionEntries.length - 50);
+      aiResolvedPermissions.set(sessionId, sessionEntries);
+      return { aiResolvedPermissions };
+    }),
+
+  setSessionAiValidation: (sessionId, settings) =>
+    set((s) => {
+      const sessions = new Map(s.sessions);
+      const existing = sessions.get(sessionId);
+      if (!existing) return {};
+      sessions.set(sessionId, { ...existing, ...settings });
+      return { sessions };
+    }),
+
   addTask: (sessionId, task) =>
     set((s) => ({ sessionTasks: setInMap(s.sessionTasks, sessionId, [...(s.sessionTasks.get(sessionId) || []), task]) })),
 

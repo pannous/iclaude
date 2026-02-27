@@ -249,6 +249,7 @@ export function TopBar() {
         )}
 
         <div className="flex items-center gap-0.5 shrink-0">
+
         {/* LOCAL: Folder + Branch info */}
         {currentSessionId && isSessionView && cwd && (
           <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-cc-muted mr-1">
@@ -302,6 +303,7 @@ export function TopBar() {
           {showWorkspaceControls && currentSessionId && (
             <AiValidationToggle sessionId={currentSessionId} />
           )}
+
           <ThemeToggle />
           {showContextToggle && (
             <button

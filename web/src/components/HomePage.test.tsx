@@ -337,6 +337,7 @@ describe("HomePage", () => {
     expect(screen.queryByRole("button", { name: /fork and open alpha/i })).not.toBeInTheDocument();
   });
 
+
   // ─── Basic rendering tests ──────────────────────────────────────────────────
 
   it("renders the title, logo, textarea, and send button", async () => {
@@ -1308,4 +1309,5 @@ describe("HomePage", () => {
       expect(textarea.value).toBe("Please Please review this code ");
     });
   });
+
 });

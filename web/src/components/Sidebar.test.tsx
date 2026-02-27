@@ -864,6 +864,7 @@ describe("Sidebar", () => {
     expect(results).toHaveNoViolations();
   });
 
+
   // ─── Polling & session name hydration ──────────────────────────────────────
 
   it("polls for SDK sessions on mount and hydrates session names", async () => {
@@ -1613,4 +1614,5 @@ describe("Sidebar", () => {
       expect(mockApi.deleteSession).toHaveBeenCalledWith("s3");
     });
   });
+
 });

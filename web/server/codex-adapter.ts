@@ -703,10 +703,14 @@ export class CodexAdapter {
 
       this.connected = true;
 
+
       this.threadId = await this.startOrResumeThreadWithFallback();
 
       this.initialized = true;
       console.log(`[codex-adapter] Session ${this.sessionId} initialized (threadId=${this.threadId})`);
+
+
+
 
       this.sessionMetaCb?.({
         cliSessionId: this.threadId ?? undefined,
@@ -747,12 +751,11 @@ export class CodexAdapter {
         this.updateRateLimits(result as Record<string, unknown>);
       }).catch(() => { /* best-effort */ });
 
-      if (this.pendingOutgoing.length > 0) {
-        const queued = this.pendingOutgoing.splice(0);
-        for (const msg of queued) {
-          this.dispatchOutgoing(msg);
-        }
-      }
+
+      // Flush any messages that were queued during initialization, but only
+      // if the transport is still connected (avoids immediate "Transport closed").
+      this.flushPendingOutgoing();
+
     } catch (err) {
       const errorMsg = `Codex initialization failed: ${err}`;
       console.error(`[codex-adapter] ${errorMsg}`);

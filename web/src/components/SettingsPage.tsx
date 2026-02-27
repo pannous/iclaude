@@ -627,6 +627,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
               </form>
             </section>
 
+
             {/* AI Validation */}
             <section id="ai-validation" ref={setSectionRef("ai-validation")}>
               <h2 className="text-sm font-semibold text-cc-fg mb-4">AI Validation</h2>
@@ -699,6 +700,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 )}
               </div>
             </section>
+
 
             {/* Updates */}
             <section id="updates" ref={setSectionRef("updates")}>

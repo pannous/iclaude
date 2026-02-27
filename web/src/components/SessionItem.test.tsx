@@ -1,3 +1,4 @@
+
 // @vitest-environment jsdom
 /**
  * Tests for SessionItem — focusing on title rendering safety and core functionality.
@@ -135,3 +136,4 @@ describe("SessionItem", () => {
     expect(results).toHaveNoViolations();
   });
 });
+

@@ -62,6 +62,7 @@ interface MockStoreState {
     backend_type?: string;
     cwd?: string;
     git_branch?: string;
+
     total_cost_usd?: number;
     context_used_percent?: number;
     num_turns?: number;
@@ -71,6 +72,7 @@ interface MockStoreState {
     total_lines_removed?: number;
     repo_root?: string;
     is_containerized?: boolean;
+
     codex_token_details?: CodexTokenDetails;
     codex_rate_limits?: CodexRateLimits;
   }>;
@@ -422,6 +424,7 @@ describe("CodexTokenDetailsSection", () => {
     expect(screen.queryByText("Context")).not.toBeInTheDocument();
   });
 });
+
 
 describe("TaskPanel — close button behavior", () => {
   it("calls setTaskPanelOpen(false) when close button is clicked in normal mode", () => {
@@ -1319,6 +1322,7 @@ describe("GitBranchSection — pull button behavior", () => {
     expect(mockApi.gitPull).toHaveBeenCalledWith("/home/user/project");
   });
 });
+
 
 describe("TaskPanel accessibility", () => {
   it("passes axe accessibility checks in normal mode", async () => {

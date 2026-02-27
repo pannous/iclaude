@@ -404,7 +404,7 @@ export function createRoutes(
           }
         }
 
-
+        // Run per-environment init script if configured
         if (companionEnv?.initScript?.trim()) {
           try {
             const initTimeout = Number(process.env.COMPANION_INIT_SCRIPT_TIMEOUT) || 120_000;

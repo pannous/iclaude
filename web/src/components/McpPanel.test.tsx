@@ -1,3 +1,4 @@
+
 // @vitest-environment jsdom
 /**
  * Tests for the McpSection component (McpPanel.tsx).
@@ -531,3 +532,4 @@ describe("McpSection accessibility", () => {
     expect(results).toHaveNoViolations();
   });
 });
+

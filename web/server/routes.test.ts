@@ -257,6 +257,7 @@ function createMockBridge() {
     getSessionTitle: vi.fn(() => undefined),
     getCodexRateLimits: vi.fn(() => null),
     markContainerized: vi.fn(),
+
     broadcastToSession: vi.fn(),
     broadcastGlobal: vi.fn(),
     broadcastNameUpdate: vi.fn(),
@@ -265,6 +266,7 @@ function createMockBridge() {
     getAllFragmentStates: vi.fn(() => ({})),
     getFragmentConsole: vi.fn(() => []),
     getAllFragmentConsole: vi.fn(() => ({})),
+
   } as any;
 }
 
@@ -899,6 +901,7 @@ describe("POST /api/sessions/create", () => {
     expect(launcher.launch).not.toHaveBeenCalled();
   });
 
+
   it("skips host git ops for Docker sessions and runs them in container instead", async () => {
     // THE-189: git fetch/checkout/pull should happen inside the container, not on the host.
     vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
@@ -1104,6 +1107,7 @@ describe("POST /api/sessions/create-stream — resume", () => {
       "session-1", CLI_SESSION_ID, TEST_CWD,
     );
   });
+
 });
 
 describe("GET /api/sessions", () => {
@@ -4098,6 +4102,7 @@ describe("POST /api/sessions/create-stream", () => {
     expect(launcher.launch).not.toHaveBeenCalled();
   });
 
+
   it("skips host git ops and emits in-container git progress for Docker sessions with branch", async () => {
     // THE-189: git ops should run inside the container, not on the host.
     vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
@@ -4658,4 +4663,5 @@ describe("GET /api/sessions/:id/fragments/:fid/console", () => {
     const res = await app.request("/api/sessions/unknown/fragments/frag-1/console");
     expect(res.status).toBe(404);
   });
+
 });

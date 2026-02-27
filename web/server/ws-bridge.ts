@@ -91,7 +91,6 @@ export function truncateTitle(message: string): string {
   return title + "...";
 }
 
-
 // ─── Bridge ───────────────────────────────────────────────────────────────────
 
 export class WsBridge {

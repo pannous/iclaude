@@ -537,10 +537,12 @@ describe("setSdkSessions title preservation", () => {
 // ─── UI state ───────────────────────────────────────────────────────────────
 
 describe("UI state", () => {
+
   it("setDarkMode: sets the value explicitly and persists to localStorage", () => {
     useStore.getState().setDarkMode(true);
     expect(useStore.getState().darkMode).toBe(true);
     expect(localStorage.getItem("cc-dark-mode")).toBe("true");
+
 
     useStore.getState().setDarkMode(false);
     expect(useStore.getState().darkMode).toBe(false);
