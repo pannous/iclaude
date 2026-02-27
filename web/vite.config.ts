@@ -57,12 +57,27 @@ export default defineConfig({
       ignored: ["**/coverage/**"],
     },
     proxy: {
-      "/api": "http://localhost:3456",
+      "/api": {
+        target: "http://localhost:3456",
+        configure: (proxy) => {
+          proxy.on("error", (err) => {
+            if ((err as NodeJS.ErrnoException).code === "ECONNRESET" || err.message === "socket hang up") return;
+            console.error("[api proxy]", err.message);
+          });
+        },
+      },
       "/ws": {
         target: "ws://localhost:3456",
         ws: true,
         rewriteWsOrigin: true,
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on("error", (err) => {
+            // Suppress noisy connection-reset errors from normal browser disconnects
+            if ((err as NodeJS.ErrnoException).code === "ECONNRESET" || err.message === "socket hang up") return;
+            console.error("[ws proxy]", err.message);
+          });
+        },
       },
     },
   },
