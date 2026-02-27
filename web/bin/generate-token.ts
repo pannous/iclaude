@@ -1,13 +1,28 @@
 #!/usr/bin/env bun
 /**
- * Show the current in-memory auth token (requires the server to be running).
- * The token is generated fresh on each server start and never written to disk.
- * Use the QR code in the UI to authenticate remote devices.
+ * Generate (or regenerate) the Companion auth token.
+ *
+ * Usage:
+ *   bun run generate-token          # show current or auto-generated token
+ *   bun run generate-token --force  # force-regenerate a new token
  */
-import { getToken, regenerateToken } from "../server/auth-manager.ts";
+import { existsSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 
+const AUTH_FILE = join(homedir(), ".companion", "auth.json");
 const force = process.argv.includes("--force");
-const token = force ? regenerateToken() : getToken();
 
-console.log(`\n  ${force ? "New" : "Current"} auth token: ${token}\n`);
-console.log(`  Note: token is in-memory only — scan the QR code in the UI to authenticate remotely.\n`);
+if (force && existsSync(AUTH_FILE)) {
+  rmSync(AUTH_FILE);
+}
+
+// Import after potential delete so getToken() generates fresh
+const { getToken } = await import("../server/auth-manager.ts");
+
+const token = getToken();
+const isNew = force ? "New" : existsSync(AUTH_FILE) ? "Current" : "Generated";
+
+console.log(`\n  ${isNew} auth token: ${token}\n`);
+console.log(`  Stored at: ${AUTH_FILE}`);
+console.log(`  Tip: pass --force to regenerate\n`);

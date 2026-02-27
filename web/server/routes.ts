@@ -204,7 +204,9 @@ export function createRoutes(
   // Check if the request comes from localhost (same machine as the server).
   // Uses Bun's requestIP which returns the actual TCP source address.
   // Returns false in test environments where c.env is not a Bun server.
-  function isLocalhostRequest(c: { env: unknown; req: { raw: Request } }): boolean {
+  function isLocalhostRequest(c: { env: unknown; req: { raw: Request; header: (name: string) => string | undefined } }): boolean {
+    // Requests via the external tunnel proxy have this header set by Apache — not local
+    if (c.req.header("X-Companion-Tunnel")) return false;
     const bunServer = c.env as { requestIP?: (req: Request) => { address: string } | null };
     const ip = bunServer?.requestIP?.(c.req.raw);
     const addr = ip?.address ?? "";
