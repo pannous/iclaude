@@ -44,6 +44,7 @@ import {
   handleInterrupt,
   handleSetModel,
   handleSetPermissionMode,
+  handleSetAiValidation,
   handleControlResponse,
   sendControlRequest,
   handleMcpGetStatus,
@@ -56,6 +57,9 @@ import {
   handleSessionAck,
   handlePermissionResponse,
 } from "./ws-bridge-browser.js";
+import { validatePermission } from "./ai-validator.js";
+import { getSettings } from "./settings-manager.js";
+import { getEffectiveAiValidation } from "./ai-validation-settings.js";
 
 // LOCAL: System-injected XML tags whose ENTIRE block (tags + content) should be stripped.
 // These tags and their enclosed text are purely system-generated and never represent user intent.
@@ -103,6 +107,7 @@ export class WsBridge {
     "mcp_toggle",
     "mcp_reconnect",
     "mcp_set_servers",
+    "set_ai_validation",
   ]);
   /** Grace period (ms) before requesting a relaunch when browser connects and CLI is dead.
    *  Gives CLIs time to reconnect their WS after a server restart. */
@@ -1296,7 +1301,7 @@ export class WsBridge {
     });
   }
 
-  private handleControlRequest(session: Session, msg: CLIControlRequestMessage) {
+  private async handleControlRequest(session: Session, msg: CLIControlRequestMessage) {
     if (msg.request.subtype === "can_use_tool") {
       // Auto-approve in bypassPermissions (agent) mode — the CLI handles most
       // permissions internally but some tool calls still reach the server.
@@ -1328,6 +1333,43 @@ export class WsBridge {
         agent_id: msg.request.agent_id,
         timestamp: Date.now(),
       };
+
+      // AI Validation Mode: evaluate the tool call before showing to user
+      const aiSettings = getEffectiveAiValidation(session.state);
+      if (
+        aiSettings.enabled
+        && aiSettings.openrouterApiKey
+        && msg.request.tool_name !== "AskUserQuestion"
+        && msg.request.tool_name !== "ExitPlanMode"
+      ) {
+        try {
+          const result = await validatePermission(
+            msg.request.tool_name,
+            msg.request.input,
+            msg.request.description,
+          );
+          perm.ai_validation = {
+            verdict: result.verdict,
+            reason: result.reason,
+            ruleBasedOnly: result.ruleBasedOnly,
+          };
+
+          // Auto-approve safe tools
+          if (result.verdict === "safe" && aiSettings.autoApprove) {
+            this.autoRespondPermission(session, msg.request_id, perm, "allow", result.reason);
+            return;
+          }
+
+          // Auto-deny dangerous tools
+          if (result.verdict === "dangerous" && aiSettings.autoDeny) {
+            this.autoRespondPermission(session, msg.request_id, perm, "deny", result.reason);
+            return;
+          }
+        } catch (err) {
+          console.warn("[ws-bridge] AI validation error, falling through to manual:", err);
+        }
+      }
+
       session.pendingPermissions.set(msg.request_id, perm);
 
       this.broadcastToBrowsers(session, {
@@ -1336,6 +1378,34 @@ export class WsBridge {
       });
       this.persistSession(session);
     }
+  }
+
+  private autoRespondPermission(
+    session: Session,
+    requestId: string,
+    perm: PermissionRequest,
+    behavior: "allow" | "deny",
+    reason: string,
+  ): void {
+    // Notify browsers that AI auto-handled this permission
+    this.broadcastToBrowsers(session, {
+      type: "permission_auto_resolved",
+      request: perm,
+      behavior,
+      reason,
+    });
+
+    // Send the control_response to CLI
+    handlePermissionResponse(
+      session,
+      {
+        type: "permission_response",
+        request_id: requestId,
+        behavior,
+        message: behavior === "deny" ? `AI validation: ${reason}` : undefined,
+      },
+      this.sendToCLI.bind(this),
+    );
   }
 
   private handleToolProgress(session: Session, msg: CLIToolProgressMessage) {
@@ -1456,6 +1526,19 @@ export class WsBridge {
         handleSetPermissionMode(session, msg.mode, this.sendToCLI.bind(this));
         break;
 
+      case "set_ai_validation":
+        handleSetAiValidation(session, msg);
+        this.persistSession(session);
+        this.broadcastToBrowsers(session, {
+          type: "session_update",
+          session: {
+            aiValidationEnabled: session.state.aiValidationEnabled,
+            aiValidationAutoApprove: session.state.aiValidationAutoApprove,
+            aiValidationAutoDeny: session.state.aiValidationAutoDeny,
+          },
+        });
+        break;
+
       case "mcp_get_status":
         handleMcpGetStatus(
           session,
@@ -1573,6 +1656,7 @@ export class WsBridge {
     });
 
     // Queue the message if the CLI is busy; flush immediately otherwise.
+    session.pendingUserInput ??= [];
     if (session.cliIsRunning) {
       session.pendingUserInput.push({ ndjson, id: msgId });
       this.broadcastToBrowsers(session, { type: "user_message_queued", msgId });
@@ -1585,7 +1669,7 @@ export class WsBridge {
 
   /** Flush the next queued user message to the CLI (called after a result). */
   private flushPendingUserInput(session: Session) {
-    const next = session.pendingUserInput.shift();
+    const next = (session.pendingUserInput ??= []).shift();
     if (!next) return;
     this.sendToCLI(session, next.ndjson);
     session.cliIsRunning = true;
@@ -1598,9 +1682,10 @@ export class WsBridge {
   cancelPendingUserInput(sessionId: string, msgId: string): boolean {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
-    const idx = session.pendingUserInput.findIndex(m => m.id === msgId);
+    const pendingInput = (session.pendingUserInput ??= []);
+    const idx = pendingInput.findIndex(m => m.id === msgId);
     if (idx === -1) return false;
-    session.pendingUserInput.splice(idx, 1);
+    pendingInput.splice(idx, 1);
     // Remove from messageHistory so it won't be replayed on reconnect.
     // Scan from the end to find the most-recent match (findLastIndex not available in target lib).
     let histIdx = -1;
@@ -1622,9 +1707,10 @@ export class WsBridge {
   flushPendingUserInputNow(sessionId: string, msgId: string): boolean {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
-    const idx = session.pendingUserInput.findIndex(m => m.id === msgId);
+    const pendingInput2 = (session.pendingUserInput ??= []);
+    const idx = pendingInput2.findIndex(m => m.id === msgId);
     if (idx === -1) return false;
-    const [entry] = session.pendingUserInput.splice(idx, 1);
+    const [entry] = pendingInput2.splice(idx, 1);
     this.sendToCLI(session, entry.ndjson);
     this.broadcastToBrowsers(session, { type: "user_message_dequeued", msgId });
     return true;

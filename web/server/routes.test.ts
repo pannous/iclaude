@@ -40,6 +40,7 @@ vi.mock("./prompt-manager.js", () => ({
 
 vi.mock("node:child_process", () => ({
   execSync: vi.fn(() => ""),
+  execFileSync: vi.fn(() => ""),
 }));
 
 const mockResolveBinary = vi.hoisted(() => vi.fn((_name: string) => null as string | null));
@@ -87,6 +88,9 @@ vi.mock("./settings-manager.js", () => ({
     linearAutoTransitionStateId: "",
     linearAutoTransitionStateName: "",
     editorTabEnabled: false,
+    aiValidationEnabled: false,
+    aiValidationAutoApprove: true,
+    aiValidationAutoDeny: true,
     updatedAt: 0,
   })),
   updateSettings: vi.fn((patch) => ({
@@ -97,6 +101,9 @@ vi.mock("./settings-manager.js", () => ({
     linearAutoTransitionStateId: patch.linearAutoTransitionStateId ?? "",
     linearAutoTransitionStateName: patch.linearAutoTransitionStateName ?? "",
     editorTabEnabled: patch.editorTabEnabled ?? false,
+    aiValidationEnabled: patch.aiValidationEnabled ?? false,
+    aiValidationAutoApprove: patch.aiValidationAutoApprove ?? true,
+    aiValidationAutoDeny: patch.aiValidationAutoDeny ?? true,
     updatedAt: Date.now(),
   })),
 }));
@@ -252,6 +259,7 @@ function createMockBridge() {
     markContainerized: vi.fn(),
     broadcastToSession: vi.fn(),
     broadcastGlobal: vi.fn(),
+    broadcastNameUpdate: vi.fn(),
     initializeResumedSession: vi.fn(),
     getFragmentState: vi.fn(() => null),
     getAllFragmentStates: vi.fn(() => ({})),
@@ -888,6 +896,140 @@ describe("POST /api/sessions/create", () => {
     // Container should be cleaned up
     expect(removeSpy).toHaveBeenCalled();
     // CLI should NOT have been launched
+    expect(launcher.launch).not.toHaveBeenCalled();
+  });
+
+  it("skips host git ops for Docker sessions and runs them in container instead", async () => {
+    // THE-189: git fetch/checkout/pull should happen inside the container, not on the host.
+    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
+      repoRoot: "/repo",
+      repoName: "my-repo",
+      currentBranch: "main",
+      defaultBranch: "main",
+      isWorktree: false,
+    } as any);
+    vi.mocked(envManager.getEnv).mockReturnValue({
+      name: "Docker",
+      slug: "docker",
+      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
+      baseImage: "the-companion:latest",
+      createdAt: 1000,
+      updatedAt: 1000,
+    } as any);
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
+      containerId: "cid-git",
+      name: "companion-git",
+      image: "the-companion:latest",
+      portMappings: [],
+      hostCwd: "/repo",
+      containerCwd: "/workspace",
+      state: "running",
+    });
+    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
+    const gitOpsSpy = vi.spyOn(containerManager, "gitOpsInContainer").mockReturnValueOnce({
+      fetchOk: true,
+      checkoutOk: true,
+      pullOk: true,
+      errors: [],
+    });
+
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: "/repo", branch: "feat/new", envSlug: "docker" }),
+    });
+
+    expect(res.status).toBe(200);
+    // Host git ops should NOT have been called
+    expect(gitUtils.gitFetch).not.toHaveBeenCalled();
+    expect(gitUtils.checkoutOrCreateBranch).not.toHaveBeenCalled();
+    expect(gitUtils.gitPull).not.toHaveBeenCalled();
+    // In-container git ops SHOULD have been called
+    expect(gitOpsSpy).toHaveBeenCalledWith("cid-git", expect.objectContaining({
+      branch: "feat/new",
+      currentBranch: "main",
+    }));
+  });
+
+  it("does not call gitOpsInContainer for Docker sessions without a branch", async () => {
+    // When no branch is specified, no git ops at all (host or container).
+    vi.mocked(envManager.getEnv).mockReturnValue({
+      name: "Docker",
+      slug: "docker",
+      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
+      baseImage: "the-companion:latest",
+      createdAt: 1000,
+      updatedAt: 1000,
+    } as any);
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
+      containerId: "cid-nobranch",
+      name: "companion-nobranch",
+      image: "the-companion:latest",
+      portMappings: [],
+      hostCwd: "/test",
+      containerCwd: "/workspace",
+      state: "running",
+    });
+    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
+    const gitOpsSpy = vi.spyOn(containerManager, "gitOpsInContainer");
+
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: "/test", envSlug: "docker" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(gitOpsSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 and cleans up container when in-container checkout fails", async () => {
+    // THE-189: checkout failure inside container should clean up and return error.
+    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
+      repoRoot: "/repo",
+      repoName: "my-repo",
+      currentBranch: "main",
+      defaultBranch: "main",
+      isWorktree: false,
+    } as any);
+    vi.mocked(envManager.getEnv).mockReturnValue({
+      name: "Docker",
+      slug: "docker",
+      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
+      baseImage: "the-companion:latest",
+      createdAt: 1000,
+      updatedAt: 1000,
+    } as any);
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
+      containerId: "cid-failcheckout",
+      name: "companion-failcheckout",
+      image: "the-companion:latest",
+      portMappings: [],
+      hostCwd: "/repo",
+      containerCwd: "/workspace",
+      state: "running",
+    });
+    const removeSpy = vi.spyOn(containerManager, "removeContainer").mockImplementation(() => {});
+    vi.spyOn(containerManager, "gitOpsInContainer").mockReturnValueOnce({
+      fetchOk: true,
+      checkoutOk: false,
+      pullOk: false,
+      errors: ['checkout: branch "nonexistent" does not exist'],
+    });
+
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: "/repo", branch: "nonexistent", envSlug: "docker" }),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain("Failed to checkout branch");
+    expect(removeSpy).toHaveBeenCalled();
     expect(launcher.launch).not.toHaveBeenCalled();
   });
 });
@@ -1785,6 +1927,9 @@ describe("GET /api/settings", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 123,
     });
 
@@ -1795,10 +1940,14 @@ describe("GET /api/settings", () => {
     expect(json).toEqual({
       openrouterApiKeyConfigured: true,
       openrouterModel: "openrouter/free",
+      aiProvider: "openrouter",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
     });
   });
 
@@ -1811,6 +1960,9 @@ describe("GET /api/settings", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 123,
     });
 
@@ -1821,10 +1973,14 @@ describe("GET /api/settings", () => {
     expect(json).toEqual({
       openrouterApiKeyConfigured: false,
       openrouterModel: "openai/gpt-4o-mini",
+      aiProvider: "openrouter",
       linearApiKeyConfigured: true,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
     });
   });
 });
@@ -1839,6 +1995,9 @@ describe("PUT /api/settings", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 456,
     });
 
@@ -1852,20 +2011,29 @@ describe("PUT /api/settings", () => {
     expect(settingsManager.updateSettings).toHaveBeenCalledWith({
       openrouterApiKey: "new-key",
       openrouterModel: undefined,
+      openaiApiKey: undefined,
+      aiProvider: undefined,
       linearApiKey: undefined,
       linearAutoTransition: undefined,
       linearAutoTransitionStateId: undefined,
       linearAutoTransitionStateName: undefined,
       editorTabEnabled: undefined,
+      aiValidationEnabled: undefined,
+      aiValidationAutoApprove: undefined,
+      aiValidationAutoDeny: undefined,
     });
     const json = await res.json();
     expect(json).toEqual({
       openrouterApiKeyConfigured: true,
       openrouterModel: "openrouter/free",
+      aiProvider: "openrouter",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
     });
   });
 
@@ -1878,6 +2046,9 @@ describe("PUT /api/settings", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 789,
     });
 
@@ -1908,6 +2079,9 @@ describe("PUT /api/settings", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 999,
     });
 
@@ -2007,6 +2181,9 @@ describe("GET /api/linear/issues", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2025,6 +2202,9 @@ describe("GET /api/linear/issues", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2097,6 +2277,9 @@ describe("GET /api/linear/issues", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2176,6 +2359,9 @@ describe("GET /api/linear/issues", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2220,6 +2406,9 @@ describe("GET /api/linear/connection", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2238,6 +2427,9 @@ describe("GET /api/linear/connection", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2258,6 +2450,7 @@ describe("GET /api/linear/connection", () => {
     const json = await res.json();
     expect(json).toEqual({
       connected: true,
+      viewerId: "u1",
       viewerName: "Ada",
       viewerEmail: "ada@example.com",
       teamName: "Engineering",
@@ -2278,6 +2471,9 @@ describe("POST /api/linear/issues/:id/transition", () => {
       linearAutoTransitionStateId: "state-123",
       linearAutoTransitionStateName: "In Progress",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2301,6 +2497,9 @@ describe("POST /api/linear/issues/:id/transition", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2323,6 +2522,9 @@ describe("POST /api/linear/issues/:id/transition", () => {
       linearAutoTransitionStateId: "state-123",
       linearAutoTransitionStateName: "In Progress",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2346,6 +2548,9 @@ describe("POST /api/linear/issues/:id/transition", () => {
       linearAutoTransitionStateId: "state-doing",
       linearAutoTransitionStateName: "Doing",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2404,6 +2609,9 @@ describe("POST /api/linear/issues/:id/transition", () => {
       linearAutoTransitionStateId: "state-doing",
       linearAutoTransitionStateName: "Doing",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2441,6 +2649,9 @@ describe("GET /api/linear/projects", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2459,6 +2670,9 @@ describe("GET /api/linear/projects", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2508,6 +2722,9 @@ describe("GET /api/linear/project-issues", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2526,6 +2743,9 @@ describe("GET /api/linear/project-issues", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2590,6 +2810,9 @@ describe("GET /api/linear/project-issues", () => {
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
       editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
       updatedAt: 0,
     });
 
@@ -2863,6 +3086,8 @@ describe("PATCH /api/sessions/:id/name", () => {
     const json = await res.json();
     expect(json).toEqual({ ok: true, name: "Fix auth bug" });
     expect(sessionNames.setName).toHaveBeenCalledWith("s1", "Fix auth bug");
+    // Verify the name update is broadcast to connected browsers via WebSocket
+    expect(bridge.broadcastNameUpdate).toHaveBeenCalledWith("s1", "Fix auth bug");
   });
 
   it("trims whitespace from name", async () => {
@@ -3871,6 +4096,432 @@ describe("POST /api/sessions/create-stream", () => {
 
     // CLI should NOT be launched
     expect(launcher.launch).not.toHaveBeenCalled();
+  });
+
+  it("skips host git ops and emits in-container git progress for Docker sessions with branch", async () => {
+    // THE-189: git ops should run inside the container, not on the host.
+    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
+      repoRoot: "/repo",
+      repoName: "my-repo",
+      currentBranch: "main",
+      defaultBranch: "main",
+      isWorktree: false,
+    } as any);
+    vi.mocked(envManager.getEnv).mockReturnValue({
+      name: "Docker",
+      slug: "docker",
+      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
+      baseImage: "the-companion:latest",
+      createdAt: 1000,
+      updatedAt: 1000,
+    } as any);
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
+      containerId: "cid-git-stream",
+      name: "companion-git-stream",
+      image: "the-companion:latest",
+      portMappings: [],
+      hostCwd: "/repo",
+      containerCwd: "/workspace",
+      state: "running",
+    });
+    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
+    const gitOpsSpy = vi.spyOn(containerManager, "gitOpsInContainer").mockReturnValueOnce({
+      fetchOk: true,
+      checkoutOk: true,
+      pullOk: true,
+      errors: [],
+    });
+
+    const res = await app.request("/api/sessions/create-stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: "/repo", branch: "feat/new", envSlug: "docker" }),
+    });
+
+    expect(res.status).toBe(200);
+    const events = await parseSSE(res);
+    const steps = events
+      .filter((e) => e.event === "progress")
+      .map((e) => JSON.parse(e.data).step);
+
+    // Host git ops should NOT have been called
+    expect(gitUtils.gitFetch).not.toHaveBeenCalled();
+    expect(gitUtils.checkoutOrCreateBranch).not.toHaveBeenCalled();
+    expect(gitUtils.gitPull).not.toHaveBeenCalled();
+
+    // In-container git ops SHOULD have been called
+    expect(gitOpsSpy).toHaveBeenCalledWith("cid-git-stream", expect.objectContaining({
+      branch: "feat/new",
+      currentBranch: "main",
+    }));
+
+    // Git progress events should appear AFTER container creation steps
+    expect(steps).toContain("creating_container");
+    expect(steps).toContain("copying_workspace");
+    expect(steps).toContain("fetching_git");
+    expect(steps).toContain("pulling_git");
+    const containerIdx = steps.indexOf("creating_container");
+    const fetchIdx = steps.indexOf("fetching_git");
+    expect(fetchIdx).toBeGreaterThan(containerIdx);
+
+    // Session should be launched
+    expect(launcher.launch).toHaveBeenCalled();
+  });
+
+  it("emits checkout error and cleans up when in-container checkout fails (stream)", async () => {
+    // THE-189: checkout failure inside container should emit error and clean up.
+    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
+      repoRoot: "/repo",
+      repoName: "my-repo",
+      currentBranch: "main",
+      defaultBranch: "main",
+      isWorktree: false,
+    } as any);
+    vi.mocked(envManager.getEnv).mockReturnValue({
+      name: "Docker",
+      slug: "docker",
+      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
+      baseImage: "the-companion:latest",
+      createdAt: 1000,
+      updatedAt: 1000,
+    } as any);
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
+      containerId: "cid-fail-git",
+      name: "companion-fail-git",
+      image: "the-companion:latest",
+      portMappings: [],
+      hostCwd: "/repo",
+      containerCwd: "/workspace",
+      state: "running",
+    });
+    const removeSpy = vi.spyOn(containerManager, "removeContainer").mockImplementation(() => {});
+    vi.spyOn(containerManager, "gitOpsInContainer").mockReturnValueOnce({
+      fetchOk: true,
+      checkoutOk: false,
+      pullOk: false,
+      errors: ['checkout: branch "nonexistent" does not exist'],
+    });
+
+    const res = await app.request("/api/sessions/create-stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: "/repo", branch: "nonexistent", envSlug: "docker" }),
+    });
+
+    expect(res.status).toBe(200);
+    const events = await parseSSE(res);
+
+    // Should have error event for checkout failure
+    const errorEvent = events.find((e) => e.event === "error");
+    expect(errorEvent).toBeDefined();
+    const errorData = JSON.parse(errorEvent!.data);
+    expect(errorData.error).toContain("Failed to checkout branch");
+    expect(errorData.step).toBe("checkout_branch");
+
+    // Container should be cleaned up
+    expect(removeSpy).toHaveBeenCalled();
+    // No done event
+    expect(events.find((e) => e.event === "done")).toBeUndefined();
+    // CLI should NOT be launched
+    expect(launcher.launch).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Auth endpoints
+// ---------------------------------------------------------------------------
+
+describe("POST /api/auth/verify", () => {
+  it("returns ok:true for valid token", async () => {
+    // verifyToken is mocked to return true, so any token should succeed
+    const res = await app.request("/api/auth/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: "test-token-for-routes" }),
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.ok).toBe(true);
+  });
+
+  it("returns 401 for invalid token", async () => {
+    // Temporarily override verifyToken to reject
+    const { verifyToken } = await import("./auth-manager.js");
+    (verifyToken as ReturnType<typeof vi.fn>).mockReturnValueOnce(false);
+
+    const res = await app.request("/api/auth/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: "wrong" }),
+    });
+    expect(res.status).toBe(401);
+    const data = await res.json();
+    expect(data.error).toContain("Invalid token");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Container status / images endpoints
+// ---------------------------------------------------------------------------
+
+describe("GET /api/containers/status", () => {
+  it("returns docker availability and version", async () => {
+    // containerManager is already imported and its methods can be spied on
+    const checkSpy = vi.spyOn(containerManager, "checkDocker").mockReturnValue(true);
+    const versionSpy = vi.spyOn(containerManager, "getDockerVersion").mockReturnValue("24.0.7");
+
+    const res = await app.request("/api/containers/status");
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.available).toBe(true);
+    expect(data.version).toBe("24.0.7");
+
+    checkSpy.mockRestore();
+    versionSpy.mockRestore();
+  });
+
+  it("returns null version when docker is unavailable", async () => {
+    const checkSpy = vi.spyOn(containerManager, "checkDocker").mockReturnValue(false);
+
+    const res = await app.request("/api/containers/status");
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.available).toBe(false);
+    expect(data.version).toBeNull();
+
+    checkSpy.mockRestore();
+  });
+});
+
+describe("GET /api/containers/images", () => {
+  it("returns list of available images", async () => {
+    const spy = vi.spyOn(containerManager, "listImages").mockReturnValue(["node:22", "ubuntu:latest"]);
+
+    const res = await app.request("/api/containers/images");
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data).toEqual(["node:22", "ubuntu:latest"]);
+
+    spy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Recording management endpoints (recorder=undefined by default)
+// ---------------------------------------------------------------------------
+
+describe("Recording endpoints (no recorder)", () => {
+  it("POST /api/sessions/:id/recording/start returns 501 when recorder is not available", async () => {
+    // Default test setup doesn't pass a recorder to createRoutes
+    const res = await app.request("/api/sessions/sess-1/recording/start", { method: "POST" });
+    expect(res.status).toBe(501);
+    const data = await res.json();
+    expect(data.error).toContain("Recording not available");
+  });
+
+  it("POST /api/sessions/:id/recording/stop returns 501 when recorder is not available", async () => {
+    const res = await app.request("/api/sessions/sess-1/recording/stop", { method: "POST" });
+    expect(res.status).toBe(501);
+    const data = await res.json();
+    expect(data.error).toContain("Recording not available");
+  });
+
+  it("GET /api/sessions/:id/recording/status returns unavailable when no recorder", async () => {
+    const res = await app.request("/api/sessions/sess-1/recording/status");
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.recording).toBe(false);
+    expect(data.available).toBe(false);
+  });
+
+  it("GET /api/recordings returns empty list when no recorder", async () => {
+    const res = await app.request("/api/recordings");
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.recordings).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Process kill endpoints
+// ---------------------------------------------------------------------------
+
+describe("POST /api/sessions/:id/processes/:taskId/kill", () => {
+  it("returns 400 for invalid task ID format", async () => {
+    // Task IDs must be hex strings
+    launcher.getSession.mockReturnValue({ pid: 1234 });
+    const res = await app.request("/api/sessions/sess-1/processes/not-hex!/kill", {
+      method: "POST",
+    });
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toContain("Invalid task ID");
+  });
+
+  it("returns 404 when session does not exist", async () => {
+    launcher.getSession.mockReturnValue(undefined);
+    const res = await app.request("/api/sessions/nonexistent/processes/abcdef/kill", {
+      method: "POST",
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 503 when session PID is unknown", async () => {
+    launcher.getSession.mockReturnValue({ pid: null });
+    const res = await app.request("/api/sessions/sess-1/processes/abcdef/kill", {
+      method: "POST",
+    });
+    expect(res.status).toBe(503);
+  });
+
+  it("kills process in container when session has containerId", async () => {
+    launcher.getSession.mockReturnValue({ pid: 1234, containerId: "cid123" });
+    const execSpy = vi.spyOn(containerManager, "execInContainer").mockReturnValue("");
+
+    const res = await app.request("/api/sessions/sess-1/processes/abcdef/kill", {
+      method: "POST",
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.ok).toBe(true);
+    expect(execSpy).toHaveBeenCalled();
+
+    execSpy.mockRestore();
+  });
+
+  it("kills process on host when session has no container", async () => {
+    launcher.getSession.mockReturnValue({ pid: 1234 });
+    // execFileSync is mocked at module level — the endpoint uses dynamic import
+    const res = await app.request("/api/sessions/sess-1/processes/abcdef/kill", {
+      method: "POST",
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.ok).toBe(true);
+  });
+});
+
+describe("POST /api/sessions/:id/processes/kill-all", () => {
+  it("returns 404 when session does not exist", async () => {
+    launcher.getSession.mockReturnValue(undefined);
+    const res = await app.request("/api/sessions/nonexistent/processes/kill-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskIds: ["abc123"] }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects invalid task IDs and processes valid ones", async () => {
+    launcher.getSession.mockReturnValue({ pid: 1234 });
+    const res = await app.request("/api/sessions/sess-1/processes/kill-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskIds: ["abc123", "not-valid!"] }),
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.ok).toBe(true);
+    expect(data.results).toHaveLength(2);
+    // First one should succeed, second should fail validation
+    expect(data.results[0].ok).toBe(true);
+    expect(data.results[1].ok).toBe(false);
+    expect(data.results[1].error).toContain("Invalid task ID");
+  });
+
+  it("kills processes in container when session has containerId", async () => {
+    launcher.getSession.mockReturnValue({ pid: 1234, containerId: "cid123" });
+    const execSpy = vi.spyOn(containerManager, "execInContainer").mockReturnValue("");
+
+    const res = await app.request("/api/sessions/sess-1/processes/kill-all", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskIds: ["abc123"] }),
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.results[0].ok).toBe(true);
+    expect(execSpy).toHaveBeenCalled();
+
+    execSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// System process kill endpoint
+// ---------------------------------------------------------------------------
+
+describe("POST /api/sessions/:id/processes/system/:pid/kill", () => {
+  it("returns 400 for invalid PID", async () => {
+    const res = await app.request("/api/sessions/sess-1/processes/system/notanumber/kill", {
+      method: "POST",
+    });
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toContain("Invalid PID");
+  });
+
+  it("returns 404 when session does not exist", async () => {
+    launcher.getSession.mockReturnValue(undefined);
+    const res = await app.request("/api/sessions/sess-1/processes/system/9999/kill", {
+      method: "POST",
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("refuses to kill the companion server process", async () => {
+    launcher.getSession.mockReturnValue({ pid: 1234 });
+    const res = await app.request(`/api/sessions/sess-1/processes/system/${process.pid}/kill`, {
+      method: "POST",
+    });
+    expect(res.status).toBe(403);
+    const data = await res.json();
+    expect(data.error).toContain("Cannot kill the Companion server");
+  });
+
+  it("refuses to kill the session's own CLI process", async () => {
+    launcher.getSession.mockReturnValue({ pid: 5678 });
+    const res = await app.request("/api/sessions/sess-1/processes/system/5678/kill", {
+      method: "POST",
+    });
+    expect(res.status).toBe(403);
+    const data = await res.json();
+    expect(data.error).toContain("Use the session kill endpoint");
+  });
+
+  it("kills process in container when session has containerId", async () => {
+    launcher.getSession.mockReturnValue({ pid: 1234, containerId: "cid123" });
+    const execSpy = vi.spyOn(containerManager, "execInContainer").mockReturnValue("");
+
+    const res = await app.request("/api/sessions/sess-1/processes/system/9999/kill", {
+      method: "POST",
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.ok).toBe(true);
+    expect(execSpy).toHaveBeenCalledWith(
+      "cid123",
+      ["kill", "-TERM", "9999"],
+      5_000,
+    );
+
+    execSpy.mockRestore();
+  });
+
+  it("kills process on host when session has no container", async () => {
+    launcher.getSession.mockReturnValue({ pid: 1234 });
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+
+    const res = await app.request("/api/sessions/sess-1/processes/system/9999/kill", {
+      method: "POST",
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.ok).toBe(true);
+
+    killSpy.mockRestore();
   });
 });
 

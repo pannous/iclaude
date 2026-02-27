@@ -7,6 +7,7 @@ import type {
   BufferedBrowserEvent,
 } from "./session-types.js";
 import type { CodexAdapter } from "./codex-adapter.js";
+import { getSettings } from "./settings-manager.js";
 
 export interface CLISocketData {
   kind: "cli";
@@ -45,9 +46,9 @@ export interface Session {
   messageHistory: BrowserIncomingMessage[];
   pendingMessages: string[];
   /** True while the CLI is processing a turn (between user message sent and result received). */
-  cliIsRunning: boolean;
+  cliIsRunning?: boolean;
   /** User messages held back while the CLI is running; flushed (or cancelled) before the next turn. */
-  pendingUserInput: Array<{ ndjson: string; id: string }>;
+  pendingUserInput?: Array<{ ndjson: string; id: string }>;
   /** CLI's internal session ID (for resuming) */
   cliSessionId?: string; // LOCAL: used for title extraction
   /** Auto-generated or user-set title */
@@ -98,5 +99,8 @@ export function makeDefaultState(
     git_behind: 0,
     total_lines_added: 0,
     total_lines_removed: 0,
+    aiValidationEnabled: getSettings().aiValidationEnabled,
+    aiValidationAutoApprove: getSettings().aiValidationAutoApprove,
+    aiValidationAutoDeny: getSettings().aiValidationAutoDeny,
   };
 }

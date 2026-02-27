@@ -7,6 +7,8 @@ import type { ModeOption } from "../utils/backends.js";
 import { ModelSwitcher } from "./ModelSwitcher.js";
 import { navigateToSession } from "../utils/routing.js";
 import { generateUniqueSessionName } from "../utils/names.js";
+import { MentionMenu } from "./MentionMenu.js";
+import { useMentionMenu } from "../utils/use-mention-menu.js";
 
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
 import { scanContent } from "../utils/result-scanner.js";
@@ -58,12 +60,6 @@ interface CommandItem {
   type: "command" | "skill";
 }
 
-interface MentionContext {
-  query: string;
-  start: number;
-  end: number;
-}
-
 function formatImagesForAPI(imgs: ImageAttachment[]) {
   return imgs.map((img) => ({ media_type: img.mediaType, data: img.base64 }));
 }
@@ -101,18 +97,15 @@ function handleMenuKeyDown<T>(
   return false;
 }
 
+
 export function Composer({ sessionId }: { sessionId: string }) {
   const [text, setText] = useState("");
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashMenuIndex, setSlashMenuIndex] = useState(0);
-  const [mentionMenuOpen, setMentionMenuOpen] = useState(false);
-  const [mentionMenuIndex, setMentionMenuIndex] = useState(0);
   const [savePromptOpen, setSavePromptOpen] = useState(false);
   const [savePromptName, setSavePromptName] = useState("");
   const [savePromptError, setSavePromptError] = useState<string | null>(null);
-  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
-  const [promptsLoading, setPromptsLoading] = useState(false);
   const [caretPos, setCaretPos] = useState(0);
   const [isListening, setIsListening] = useState(false);
   // LOCAL: AI-powered input completion suggestion
@@ -125,7 +118,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const finalTranscriptRef = useRef("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const mentionMenuRef = useRef<HTMLDivElement>(null);
   const pendingSelectionRef = useRef<number | null>(null);
   const cliConnected = useStore((s) => s.cliConnected);
   const sessionData = useStore((s) => s.sessions.get(sessionId));
@@ -223,21 +215,12 @@ export function Composer({ sessionId }: { sessionId: string }) {
     };
   }, []);
 
-  const refreshPrompts = useCallback(async () => {
-    setPromptsLoading(true);
-    try {
-      const prompts = await api.listPrompts(sessionData?.cwd);
-      setSavedPrompts(prompts.filter((p) => !!p.name.trim()));
-    } catch {
-      setSavedPrompts([]);
-    } finally {
-      setPromptsLoading(false);
-    }
-  }, [sessionData?.cwd]);
-
-  useEffect(() => {
-    void refreshPrompts();
-  }, [refreshPrompts]);
+  const mention = useMentionMenu({
+    text,
+    caretPos,
+    cwd: sessionData?.cwd,
+    enabled: !slashMenuOpen,
+  });
 
   // LOCAL: Trigger completion whenever text, menu state, or agent status changes.
   // Also immediately clears any stale suggestion when the agent starts running.
@@ -248,8 +231,8 @@ export function Composer({ sessionId }: { sessionId: string }) {
       if (completionTimeoutRef.current) clearTimeout(completionTimeoutRef.current);
       return;
     }
-    scheduleCompletion(text, slashMenuOpen || mentionMenuOpen, false);
-  }, [text, slashMenuOpen, mentionMenuOpen, isRunning, scheduleCompletion]);
+    scheduleCompletion(text, slashMenuOpen || mention.mentionMenuOpen, false);
+  }, [text, slashMenuOpen, mention.mentionMenuOpen, isRunning, scheduleCompletion]);
 
   const allCommands = useMemo<CommandItem[]>(() => {
     const cmds: CommandItem[] = [];
@@ -275,29 +258,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
     return allCommands.filter((cmd) => cmd.name.toLowerCase().includes(query));
   }, [text, slashMenuOpen, allCommands]);
 
-  const mentionContext = useMemo<MentionContext | null>(() => {
-    const prefix = text.slice(0, caretPos);
-    const match = prefix.match(/(^|\s)@([^\s@]*)$/);
-    if (!match || match.index === undefined) return null;
-    const start = prefix.length - match[0].length + match[1].length;
-    return {
-      query: match[2] || "",
-      start,
-      end: caretPos,
-    };
-  }, [text, caretPos]);
-
-  const filteredPrompts = useMemo(() => {
-    if (!mentionMenuOpen || !mentionContext) return [];
-    const query = mentionContext.query.toLowerCase();
-    if (!query) return savedPrompts;
-    const startsWith = savedPrompts.filter((p) => p.name.toLowerCase().startsWith(query));
-    const includes = savedPrompts.filter(
-      (p) => !p.name.toLowerCase().startsWith(query) && p.name.toLowerCase().includes(query),
-    );
-    return [...startsWith, ...includes];
-  }, [mentionMenuOpen, mentionContext, savedPrompts]);
-
+  // Open/close slash menu based on text
   useEffect(() => {
     const shouldOpen = text.startsWith("/") && /^\/\S*$/.test(text) && allCommands.length > 0;
     if (shouldOpen && !slashMenuOpen) {
@@ -307,16 +268,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
       setSlashMenuOpen(false);
     }
   }, [text, allCommands.length, slashMenuOpen]);
-
-  useEffect(() => {
-    const shouldOpen = !slashMenuOpen && !!mentionContext;
-    if (shouldOpen && !mentionMenuOpen) {
-      setMentionMenuOpen(true);
-      setMentionMenuIndex(0);
-    } else if (!shouldOpen && mentionMenuOpen) {
-      setMentionMenuOpen(false);
-    }
-  }, [slashMenuOpen, mentionContext, mentionMenuOpen]);
 
   const [pendingAutoSend, setPendingAutoSend] = useState(false);
   useEffect(() => {
@@ -347,18 +298,14 @@ export function Composer({ sessionId }: { sessionId: string }) {
     return () => window.removeEventListener("clear-input", handler);
   }, []);
 
+  // Keep slash menu selected index in bounds
   useEffect(() => {
     if (slashMenuIndex >= filteredCommands.length) {
       setSlashMenuIndex(Math.max(0, filteredCommands.length - 1));
     }
   }, [filteredCommands.length, slashMenuIndex]);
 
-  useEffect(() => {
-    if (mentionMenuIndex >= filteredPrompts.length) {
-      setMentionMenuIndex(Math.max(0, filteredPrompts.length - 1));
-    }
-  }, [filteredPrompts.length, mentionMenuIndex]);
-
+  // Scroll slash menu selected item into view
   useEffect(() => {
     if (!menuRef.current || !slashMenuOpen) return;
     const items = menuRef.current.querySelectorAll("[data-cmd-index]");
@@ -367,15 +314,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
       selected.scrollIntoView({ block: "nearest" });
     }
   }, [slashMenuIndex, slashMenuOpen]);
-
-  useEffect(() => {
-    if (!mentionMenuRef.current || !mentionMenuOpen) return;
-    const items = mentionMenuRef.current.querySelectorAll("[data-prompt-index]");
-    const selected = items[mentionMenuIndex];
-    if (selected) {
-      selected.scrollIntoView({ block: "nearest" });
-    }
-  }, [mentionMenuIndex, mentionMenuOpen]);
 
   useEffect(() => {
     if (pendingSelectionRef.current === null || !textareaRef.current) return;
@@ -391,16 +329,18 @@ export function Composer({ sessionId }: { sessionId: string }) {
   }, []);
 
   const selectPrompt = useCallback((prompt: SavedPrompt) => {
-    if (!mentionContext) return;
-    const insertion = `${prompt.content} `;
-    const nextText = `${text.slice(0, mentionContext.start)}${insertion}${text.slice(mentionContext.end)}`;
-    const nextCursor = mentionContext.start + insertion.length;
-    pendingSelectionRef.current = nextCursor;
-    setText(nextText);
-    setMentionMenuOpen(false);
-    setCaretPos(nextCursor);
+    const result = mention.selectPrompt(prompt);
+    pendingSelectionRef.current = result.nextCursor;
+    setText(result.nextText);
+    mention.setMentionMenuOpen(false);
+    setCaretPos(result.nextCursor);
     textareaRef.current?.focus();
-  }, [mentionContext, text]);
+    // Auto-resize textarea after prompt insertion
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + "px";
+    }
+  }, [mention]);
 
   function handleSend() {
     if (isListening) recognitionRef.current?.stop();
@@ -436,7 +376,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
     setText("");
     setImages([]);
     setSlashMenuOpen(false);
-    setMentionMenuOpen(false);
+    mention.setMentionMenuOpen(false);
     setCompletionSuggestion(null);
 
     if (textareaRef.current) {
@@ -454,21 +394,44 @@ export function Composer({ sessionId }: { sessionId: string }) {
       if (handled) return;
     }
 
-    if (mentionMenuOpen) {
-      const handled = handleMenuKeyDown(
-        e, filteredPrompts, mentionMenuIndex, setMentionMenuIndex,
-        selectPrompt, () => setMentionMenuOpen(false),
-      );
-      if (handled) return;
-      // Block Enter/Tab when mention menu is open but empty
-      if ((e.key === "Enter" && !e.shiftKey) || (e.key === "Tab" && !e.shiftKey)) {
+    if (mention.mentionMenuOpen) {
+      if (e.key === "Escape") {
         e.preventDefault();
+        mention.setMentionMenuOpen(false);
+        return;
+      }
+    }
+
+    if (mention.mentionMenuOpen && mention.filteredPrompts.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        mention.setMentionMenuIndex((i) => (i + 1) % mention.filteredPrompts.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        mention.setMentionMenuIndex((i) => (i - 1 + mention.filteredPrompts.length) % mention.filteredPrompts.length);
+        return;
+      }
+      if ((e.key === "Tab" && !e.shiftKey) || (e.key === "Enter" && !e.shiftKey)) {
+        e.preventDefault();
+        selectPrompt(mention.filteredPrompts[mention.mentionMenuIndex]);
         return;
       }
     }
 
     // LOCAL: Tab (no shift) accepts completion suggestion when no menu is open
-    if (e.key === "Tab" && !e.shiftKey && completionSuggestion) {
+    if (e.key === "Tab" && !e.shiftKey && completionSuggestion && !mention.mentionMenuOpen) {
+      e.preventDefault();
+      acceptCompletion();
+      return;
+    }
+
+    if (
+      mention.mentionMenuOpen
+      && mention.filteredPrompts.length === 0
+      && ((e.key === "Enter" && !e.shiftKey) || (e.key === "Tab" && !e.shiftKey))
+    ) {
       e.preventDefault();
       acceptCompletion();
       return;
@@ -633,8 +596,8 @@ export function Composer({ sessionId }: { sessionId: string }) {
       return;
     }
     try {
-      await api.createPrompt({ name, content, cwd: sessionData.cwd });
-      await refreshPrompts();
+      await api.createPrompt({ name, content, scope: "project", cwd: sessionData.cwd });
+      await mention.refreshPrompts();
       setSavePromptOpen(false);
       setSavePromptName("");
       setSavePromptError(null);
@@ -729,47 +692,15 @@ export function Composer({ sessionId }: { sessionId: string }) {
           )}
 
           {/* @ prompt menu */}
-          {mentionMenuOpen && (
-            <div
-              ref={mentionMenuRef}
-              className="absolute left-2 right-2 bottom-full mb-1 max-h-[240px] overflow-y-auto bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-20 py-1"
-            >
-              {promptsLoading ? (
-                <div className="px-3 py-2 text-[12px] text-cc-muted">
-                  Searching prompts...
-                </div>
-              ) : filteredPrompts.length > 0 ? (
-                filteredPrompts.map((prompt, i) => (
-                  <button
-                    key={prompt.name}
-                    data-prompt-index={i}
-                    onClick={() => selectPrompt(prompt)}
-                    className={`w-full px-3 py-2 text-left flex items-center gap-2.5 transition-colors cursor-pointer ${
-                      i === mentionMenuIndex
-                        ? "bg-cc-hover"
-                        : "hover:bg-cc-hover/50"
-                    }`}
-                  >
-                    <span className="flex items-center justify-center w-6 h-6 rounded-md bg-cc-hover text-cc-muted shrink-0">
-                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
-                        <path d="M2.5 8a5.5 5.5 0 1111 0v3a2.5 2.5 0 01-2.5 2.5h-1" strokeLinecap="round" />
-                        <circle cx="8" cy="8" r="1.75" fill="currentColor" stroke="none" />
-                      </svg>
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-medium text-cc-fg truncate">@{prompt.name}</div>
-                      <div className="text-[11px] text-cc-muted truncate">{prompt.content}</div>
-                    </div>
-                    <span className="text-[10px] text-cc-muted shrink-0">.md</span>
-                  </button>
-                ))
-              ) : (
-                <div className="px-3 py-2 text-[12px] text-cc-muted">
-                  No prompts found.
-                </div>
-              )}
-            </div>
-          )}
+          <MentionMenu
+            open={mention.mentionMenuOpen}
+            loading={mention.promptsLoading}
+            prompts={mention.filteredPrompts}
+            selectedIndex={mention.mentionMenuIndex}
+            onSelect={selectPrompt}
+            menuRef={mention.mentionMenuRef}
+            className="absolute left-2 right-2 bottom-full mb-1"
+          />
 
           {savePromptOpen && (
             <div className="absolute left-2 right-2 bottom-full mb-1 bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-20 p-3 space-y-2">
@@ -1054,7 +985,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
               The user's text is rendered transparent (invisible) so only the
               gray ghost suffix and [Tab] badge show through. */}
           <div className="relative">
-            {completionSuggestion && !slashMenuOpen && !mentionMenuOpen && (
+            {completionSuggestion && !slashMenuOpen && !mention.mentionMenuOpen && (
               <div
                 aria-hidden="true"
                 onDoubleClick={acceptCompletion}

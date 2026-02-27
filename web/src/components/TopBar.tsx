@@ -7,6 +7,7 @@ import { CopyButton } from "./CopyButton.js";
 import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
 import { conversationToText } from "../utils/message-text.js";
 import { parseHash } from "../utils/routing.js";
+import { AiValidationToggle } from "./AiValidationToggle.js";
 
 const EMPTY_MESSAGES: import("../types.js").ChatMessage[] = [];
 
@@ -298,6 +299,10 @@ export function TopBar() {
           </button>
         )}
 
+          {showWorkspaceControls && currentSessionId && (
+            <AiValidationToggle sessionId={currentSessionId} />
+          )}
+          <ThemeToggle />
           {showContextToggle && (
             <button
               onClick={() => setTaskPanelOpen(!taskPanelOpen)}

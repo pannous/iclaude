@@ -1,5 +1,62 @@
 # Changelog
 
+## [0.64.2](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.64.1...the-companion-v0.64.2) (2026-02-27)
+
+
+### Bug Fixes
+
+* **web:** flush pending messages when attaching Codex adapter ([#433](https://github.com/The-Vibe-Company/companion/issues/433)) ([86a25ff](https://github.com/The-Vibe-Company/companion/commit/86a25ffde7ce7c8672367607352508bcc222b08a))
+
+## [0.64.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.64.0...the-companion-v0.64.1) (2026-02-26)
+
+
+### Bug Fixes
+
+* **web:** fix Codex session reconnection Transport closed errors ([#431](https://github.com/The-Vibe-Company/companion/issues/431)) ([c559f79](https://github.com/The-Vibe-Company/companion/commit/c559f7910c4d18b83b343af99ef7c932e66cce66))
+
+## [0.64.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.63.0...the-companion-v0.64.0) (2026-02-26)
+
+
+### Features
+
+* **web:** increase recorder max lines from 100k to 1M ([#426](https://github.com/The-Vibe-Company/companion/issues/426)) ([cf7a70b](https://github.com/The-Vibe-Company/companion/commit/cf7a70bf107722c48c784d8ca829196171ef27e3))
+* **web:** make AI validation configurable per session ([#428](https://github.com/The-Vibe-Company/companion/issues/428)) ([bfec31a](https://github.com/The-Vibe-Company/companion/commit/bfec31a29e15441e1e3c251752d4570b6950692f))
+
+
+### Bug Fixes
+
+* **web:** broadcast session name update on manual rename ([#427](https://github.com/The-Vibe-Company/companion/issues/427)) ([e3479b8](https://github.com/The-Vibe-Company/companion/commit/e3479b8ca0018014f6bd3121246d047ee292125e))
+* **web:** handle Codex ExitPlanMode as dedicated permission request ([#430](https://github.com/The-Vibe-Company/companion/issues/430)) ([bde2d11](https://github.com/The-Vibe-Company/companion/commit/bde2d11b5234faa9f6889d78133ef3dc2ae182ad))
+
+## [0.63.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.62.0...the-companion-v0.63.0) (2026-02-26)
+
+
+### Features
+
+* **web:** add create Linear issue button in context section ([#421](https://github.com/The-Vibe-Company/companion/issues/421)) ([22e658c](https://github.com/The-Vibe-Company/companion/commit/22e658c1c0c533a058887d12ebefbbee68e10d3c))
+* **web:** move git fetch/checkout/pull inside Docker container ([#422](https://github.com/The-Vibe-Company/companion/issues/422)) ([02b22fa](https://github.com/The-Vibe-Company/companion/commit/02b22fa57dab59d95bf3a812c6800a1cdd121975))
+* **web:** move git fetch/checkout/pull inside Docker container ([#424](https://github.com/The-Vibe-Company/companion/issues/424)) ([8559dcf](https://github.com/The-Vibe-Company/companion/commit/8559dcf49a23d1969b17907f33c4ffcf91205f63))
+
+## [0.62.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.61.2...the-companion-v0.62.0) (2026-02-26)
+
+
+### Features
+
+* **web:** add @ mention prompt support to home page input ([#419](https://github.com/The-Vibe-Company/companion/issues/419)) ([94dbb4e](https://github.com/The-Vibe-Company/companion/commit/94dbb4e4d44317aa823125678b6210f5c6adee96))
+* **web:** implement AI validation mode for permission requests ([#420](https://github.com/The-Vibe-Company/companion/issues/420)) ([3436175](https://github.com/The-Vibe-Company/companion/commit/3436175dfb66810584ef168ad943f0e47086623d))
+
+
+### Bug Fixes
+
+* **web:** fix plan display colors broken in light mode ([#417](https://github.com/The-Vibe-Company/companion/issues/417)) ([90f6e81](https://github.com/The-Vibe-Company/companion/commit/90f6e8182af098027610bc89481bb7c87c0038f3))
+
+## [0.61.2](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.61.1...the-companion-v0.61.2) (2026-02-25)
+
+
+### Bug Fixes
+
+* **web:** add auth header to UpdateOverlay server poll ([#410](https://github.com/The-Vibe-Company/companion/issues/410)) ([86e26cb](https://github.com/The-Vibe-Company/companion/commit/86e26cb0a3983b5c5c39aa3a60276bdedf17629a))
+
 ## [0.61.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.61.0...the-companion-v0.61.1) (2026-02-24)
 
 

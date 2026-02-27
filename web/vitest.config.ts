@@ -9,6 +9,9 @@ export default defineConfig({
       // runs first and fails if the module can't be resolved.
       // This stub file lets the import resolve so vi.mock() can take over.
       "virtual:pwa-register": resolve(__dirname, "src/__mocks__/virtual-pwa-register.ts"),
+      // posthog-js accesses navigator.userAgent at module init time, which
+      // crashes in jsdom. Redirect to a no-op stub for all test runs.
+      "posthog-js": resolve(__dirname, "src/__mocks__/posthog-js.ts"),
     },
   },
   test: {

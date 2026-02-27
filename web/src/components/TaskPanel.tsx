@@ -767,7 +767,7 @@ function SessionContextSection({ sessionId }: { sessionId: string }) {
   const contextPct = Math.round(session.context_used_percent ?? 0);
   return (
     <div className="shrink-0 px-4 py-2.5 border-b border-cc-border">
-      <ProgressBar label="Context" pct={contextPct} />
+      <ProgressBar label="Context window" pct={contextPct} />
     </div>
   );
 }

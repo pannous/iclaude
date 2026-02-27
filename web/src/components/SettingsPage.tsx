@@ -13,6 +13,7 @@ const CATEGORIES = [
   { id: "authentication", label: "Authentication" },
   { id: "notifications", label: "Notifications" },
   { id: "openrouter", label: "OpenRouter" },
+  { id: "ai-validation", label: "AI Validation" },
   { id: "updates", label: "Updates" },
   { id: "telemetry", label: "Telemetry" },
   { id: "environments", label: "Environments" },
@@ -47,6 +48,10 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [updateStatus, setUpdateStatus] = useState("");
   const [updateError, setUpdateError] = useState("");
   const [telemetryEnabled, setTelemetryEnabled] = useState(getTelemetryPreferenceEnabled());
+  const [aiProvider, setAiProvider] = useState<"openrouter" | "claude">("openrouter");
+  const [aiValidationEnabled, setAiValidationEnabled] = useState(false);
+  const [aiValidationAutoApprove, setAiValidationAutoApprove] = useState(true);
+  const [aiValidationAutoDeny, setAiValidationAutoDeny] = useState(true);
   const [activeSection, setActiveSection] = useState<CategoryId>("general");
   const [apiKeyFocused, setApiKeyFocused] = useState(false);
 
@@ -113,6 +118,10 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
         setOpenrouterModel(s.openrouterModel || "openrouter/free");
         setEditorTabEnabled(s.editorTabEnabled);
         setStoreEditorTabEnabled(s.editorTabEnabled);
+        if (s.aiProvider) setAiProvider(s.aiProvider);
+        if (typeof s.aiValidationEnabled === "boolean") setAiValidationEnabled(s.aiValidationEnabled);
+        if (typeof s.aiValidationAutoApprove === "boolean") setAiValidationAutoApprove(s.aiValidationAutoApprove);
+        if (typeof s.aiValidationAutoDeny === "boolean") setAiValidationAutoDeny(s.aiValidationAutoDeny);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -147,6 +156,26 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function toggleAiValidation(field: "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny") {
+    const current = field === "aiValidationEnabled" ? aiValidationEnabled
+      : field === "aiValidationAutoApprove" ? aiValidationAutoApprove
+      : aiValidationAutoDeny;
+    const newValue = !current;
+    // Optimistic UI update
+    if (field === "aiValidationEnabled") setAiValidationEnabled(newValue);
+    else if (field === "aiValidationAutoApprove") setAiValidationAutoApprove(newValue);
+    else setAiValidationAutoDeny(newValue);
+
+    try {
+      await api.updateSettings({ [field]: newValue });
+    } catch {
+      // Revert on failure
+      if (field === "aiValidationEnabled") setAiValidationEnabled(current);
+      else if (field === "aiValidationAutoApprove") setAiValidationAutoApprove(current);
+      else setAiValidationAutoDeny(current);
     }
   }
 
@@ -494,8 +523,46 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
 
             {/* OpenRouter */}
             <section id="openrouter" ref={setSectionRef("openrouter")}>
-              <h2 className="text-sm font-semibold text-cc-fg mb-4">OpenRouter</h2>
-              <form onSubmit={onSave} className="space-y-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-cc-fg">AI Provider</h2>
+                <div className="flex items-center gap-1 rounded-lg bg-cc-hover p-0.5">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setAiProvider("openrouter");
+                      await api.updateSettings({ aiProvider: "openrouter" }).catch(() => {});
+                    }}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      aiProvider === "openrouter"
+                        ? "bg-cc-primary text-white"
+                        : "text-cc-muted hover:text-cc-fg"
+                    }`}
+                  >
+                    OpenRouter
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setAiProvider("claude");
+                      await api.updateSettings({ aiProvider: "claude" }).catch(() => {});
+                    }}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      aiProvider === "claude"
+                        ? "bg-cc-primary text-white"
+                        : "text-cc-muted hover:text-cc-fg"
+                    }`}
+                  >
+                    Claude
+                  </button>
+                </div>
+              </div>
+              {aiProvider === "claude" && (
+                <p className="text-xs text-cc-muted mb-4">
+                  Using Anthropic API directly via <code className="font-mono text-cc-fg">ANTHROPIC_API_KEY</code>.
+                  Auto-naming and AI validation use <code className="font-mono text-cc-fg">claude-haiku-4-5</code>.
+                </p>
+              )}
+              <form onSubmit={onSave} className={`space-y-4 ${aiProvider === "claude" ? "opacity-50 pointer-events-none" : ""}`}>
                 <div>
                   <label className="block text-sm font-medium mb-1.5" htmlFor="openrouter-key">
                     OpenRouter API Key
@@ -558,6 +625,79 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                   </button>
                 </div>
               </form>
+            </section>
+
+            {/* AI Validation */}
+            <section id="ai-validation" ref={setSectionRef("ai-validation")}>
+              <h2 className="text-sm font-semibold text-cc-fg mb-4">AI Validation</h2>
+              <div className="space-y-3">
+                <p className="text-xs text-cc-muted leading-relaxed">
+                  When enabled, an AI model evaluates tool calls before they execute.
+                  Safe operations are auto-approved, dangerous ones are blocked,
+                  and uncertain cases are shown to you with a recommendation.
+                  Requires an OpenRouter API key or Claude provider. These settings serve as defaults
+                  for new sessions. Each session can override AI validation
+                  independently via the shield icon in the session header.
+                </p>
+
+                {(() => {
+                  const aiReady = aiProvider === "claude" || configured;
+                  return (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => toggleAiValidation("aiValidationEnabled")}
+                        disabled={!aiReady}
+                        className={`w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg transition-colors ${
+                          !aiReady
+                            ? "bg-cc-hover text-cc-muted cursor-not-allowed opacity-60"
+                            : "bg-cc-hover hover:bg-cc-active text-cc-fg cursor-pointer"
+                        }`}
+                      >
+                        <span className="text-sm">AI Validation Mode</span>
+                        <span className={`text-xs font-medium ${aiValidationEnabled && aiReady ? "text-cc-success" : "text-cc-muted"}`}>
+                          {aiValidationEnabled && aiReady ? "On" : "Off"}
+                        </span>
+                      </button>
+                      {!aiReady && (
+                        <p className="text-[11px] text-cc-warning">Configure an OpenRouter API key above to enable AI validation.</p>
+                      )}
+                    </>
+                  );
+                })()}
+
+                {aiValidationEnabled && (aiProvider === "claude" || configured) && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => toggleAiValidation("aiValidationAutoApprove")}
+                      className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg bg-cc-hover hover:bg-cc-active text-cc-fg transition-colors cursor-pointer"
+                    >
+                      <div>
+                        <span className="text-sm">Auto-approve safe tools</span>
+                        <p className="text-[11px] text-cc-muted mt-0.5">Automatically allow read-only tools and benign commands</p>
+                      </div>
+                      <span className={`text-xs font-medium ${aiValidationAutoApprove ? "text-cc-success" : "text-cc-muted"}`}>
+                        {aiValidationAutoApprove ? "On" : "Off"}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleAiValidation("aiValidationAutoDeny")}
+                      className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg bg-cc-hover hover:bg-cc-active text-cc-fg transition-colors cursor-pointer"
+                    >
+                      <div>
+                        <span className="text-sm">Auto-deny dangerous tools</span>
+                        <p className="text-[11px] text-cc-muted mt-0.5">Automatically block destructive commands like rm -rf</p>
+                      </div>
+                      <span className={`text-xs font-medium ${aiValidationAutoDeny ? "text-cc-success" : "text-cc-muted"}`}>
+                        {aiValidationAutoDeny ? "On" : "Off"}
+                      </span>
+                    </button>
+                  </>
+                )}
+              </div>
             </section>
 
             {/* Updates */}

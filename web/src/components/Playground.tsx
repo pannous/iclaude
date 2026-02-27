@@ -10,6 +10,8 @@ import { ClaudeMdEditor } from "./ClaudeMdEditor.js";
 import { ChatView } from "./ChatView.js";
 import { api } from "../api.js";
 import type { McpServerDetail } from "../types.js";
+import { AiValidationBadge } from "./AiValidationBadge.js";
+import { AiValidationToggle } from "./AiValidationToggle.js";
 import type { TaskItem } from "../types.js";
 import type { UpdateInfo } from "../api.js";
 import { GitHubPRDisplay, CodexRateLimitsSection, CodexTokenDetailsSection } from "./TaskPanel.js";
@@ -25,6 +27,8 @@ import {
   MOCK_SESSION_ID,
   PERM_BASH, PERM_EDIT, PERM_WRITE, PERM_READ, PERM_GLOB, PERM_GREP,
   PERM_EXIT_PLAN, PERM_GENERIC, PERM_DYNAMIC, PERM_ASK_SINGLE, PERM_ASK_MULTI,
+  PERM_AI_UNCERTAIN, PERM_AI_SAFE, PERM_AI_DANGEROUS,
+  mockPermission,
   MSG_USER, MSG_USER_IMAGE, MSG_ASSISTANT, MSG_ASSISTANT_TOOLS,
   MSG_ASSISTANT_THINKING, MSG_ASSISTANT_STREAMING, MSG_SYSTEM, MSG_TOOL_ERROR,
   MOCK_TASKS, MOCK_TOOL_GROUP_ITEMS, MOCK_SUBAGENT_TOOL_ITEMS,
@@ -33,6 +37,7 @@ import {
   createMockSession,
   type ToolItem,
 } from "./playground-mock-data.js";
+
 
 // ─── Playground Component ───────────────────────────────────────────────────
 
@@ -184,6 +189,49 @@ export function Playground() {
             </Card>
             <Card label="Multi-question">
               <PermissionBanner permission={PERM_ASK_MULTI} sessionId={MOCK_SESSION_ID} />
+            </Card>
+          </div>
+        </Section>
+
+        {/* ─── AI Validation ──────────────────────────────── */}
+        <Section title="AI Validation" description="AI-powered permission validation badges and recommendations">
+          <div className="space-y-4">
+            <Card label="Permission with AI recommendation (uncertain)">
+              <PermissionBanner permission={PERM_AI_UNCERTAIN} sessionId={MOCK_SESSION_ID} />
+            </Card>
+            <Card label="Permission with AI recommendation (safe)">
+              <PermissionBanner permission={PERM_AI_SAFE} sessionId={MOCK_SESSION_ID} />
+            </Card>
+            <Card label="Permission with AI recommendation (dangerous)">
+              <PermissionBanner permission={PERM_AI_DANGEROUS} sessionId={MOCK_SESSION_ID} />
+            </Card>
+            <Card label="Per-session toggle (disabled)">
+              <PlaygroundAiValidationToggle enabled={false} />
+            </Card>
+            <Card label="Per-session toggle (enabled)">
+              <PlaygroundAiValidationToggle enabled={true} />
+            </Card>
+            <Card label="Auto-resolved badges">
+              <div className="border border-cc-border rounded-xl overflow-hidden bg-cc-card divide-y divide-cc-border">
+                <AiValidationBadge entry={{
+                  request: mockPermission({ tool_name: "Read", input: { file_path: "/src/index.ts" } }),
+                  behavior: "allow",
+                  reason: "Read is a read-only tool",
+                  timestamp: Date.now(),
+                }} />
+                <AiValidationBadge entry={{
+                  request: mockPermission({ tool_name: "Bash", input: { command: "rm -rf /" } }),
+                  behavior: "deny",
+                  reason: "Recursive delete of root directory",
+                  timestamp: Date.now(),
+                }} />
+                <AiValidationBadge entry={{
+                  request: mockPermission({ tool_name: "Grep", input: { pattern: "TODO", path: "/src" } }),
+                  behavior: "allow",
+                  reason: "Grep is a read-only tool",
+                  timestamp: Date.now(),
+                }} />
+              </div>
             </Card>
           </div>
         </Section>
@@ -1638,6 +1686,64 @@ function TaskRow({ task }: { task: TaskItem }) {
           <span>blocked by {task.blockedBy.map((b) => `#${b}`).join(", ")}</span>
         </p>
       )}
+    </div>
+  );
+}
+
+// ─── Inline AiValidationToggle playground wrapper ───────────────────────────
+
+const PLAYGROUND_AI_VALIDATION_SESSION = "ai-validation-playground";
+
+function PlaygroundAiValidationToggle({ enabled }: { enabled: boolean }) {
+  useEffect(() => {
+    const store = useStore.getState();
+    const prev = store.sessions.get(PLAYGROUND_AI_VALIDATION_SESSION);
+    store.updateSession(PLAYGROUND_AI_VALIDATION_SESSION, {
+      session_id: PLAYGROUND_AI_VALIDATION_SESSION,
+      model: "claude-sonnet-4-20250514",
+      cwd: "/workspace",
+      tools: [],
+      permissionMode: "default",
+      claude_code_version: "1.0.0",
+      mcp_servers: [],
+      agents: [],
+      slash_commands: [],
+      skills: [],
+      total_cost_usd: 0,
+      num_turns: 0,
+      context_used_percent: 0,
+      is_compacting: false,
+      git_branch: "main",
+      is_worktree: false,
+      is_containerized: false,
+      repo_root: "/workspace",
+      git_ahead: 0,
+      git_behind: 0,
+      total_lines_added: 0,
+      total_lines_removed: 0,
+      aiValidationEnabled: enabled,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
+      ...prev,
+    });
+    return () => {
+      if (prev) {
+        useStore.getState().updateSession(PLAYGROUND_AI_VALIDATION_SESSION, prev);
+      }
+    };
+  }, [enabled]);
+
+  // Force the enabled state each render to match the prop
+  useEffect(() => {
+    useStore.getState().setSessionAiValidation(PLAYGROUND_AI_VALIDATION_SESSION, {
+      aiValidationEnabled: enabled,
+    });
+  }, [enabled]);
+
+  return (
+    <div className="flex items-center gap-2 p-2">
+      <AiValidationToggle sessionId={PLAYGROUND_AI_VALIDATION_SESSION} />
+      <span className="text-xs text-cc-muted">Click to toggle</span>
     </div>
   );
 }

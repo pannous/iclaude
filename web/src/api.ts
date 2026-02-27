@@ -35,7 +35,10 @@ async function request<T = unknown>(method: string, path: string, body?: object)
   if (!res.ok) {
     handle401(res.status);
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || res.statusText);
+    const error = new Error(err.error || res.statusText);
+    captureEvent("api_request_failed", { method, status: res.status });
+    captureException(error, { method, path: path.split("?")[0], status: res.status });
+    throw error;
   }
   return res.json();
 }
@@ -263,10 +266,14 @@ export interface EditorStartResult {
 export interface AppSettings {
   openrouterApiKeyConfigured: boolean;
   openrouterModel: string;
+  aiProvider: "openrouter" | "claude";
   linearApiKeyConfigured: boolean;
   linearAutoTransition: boolean;
   linearAutoTransitionStateName: string;
   editorTabEnabled: boolean;
+  aiValidationEnabled: boolean;
+  aiValidationAutoApprove: boolean;
+  aiValidationAutoDeny: boolean;
 }
 
 export interface LinearWorkflowState {
@@ -301,6 +308,7 @@ export interface LinearIssue {
 
 export interface LinearConnectionInfo {
   connected: boolean;
+  viewerId: string;
   viewerName: string;
   viewerEmail: string;
   teamName: string;
@@ -334,6 +342,16 @@ export interface LinearProjectMapping {
   projectName: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface CreateLinearIssueInput {
+  title: string;
+  description?: string;
+  teamId: string;
+  priority?: number;
+  projectId?: string;
+  assigneeId?: string;
+  stateId?: string;
 }
 
 export interface GitHubPRInfo {
@@ -460,8 +478,13 @@ export type AgentExport = Omit<
 >;
 
 export interface SavedPrompt {
+  id: string;
   name: string;
   content: string;
+  scope: "global" | "project";
+  projectPath?: string;
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 // ─── Claude Config Browser ──────────────────────────────────────────────────
@@ -747,11 +770,15 @@ export const api = {
   updateSettings: (data: {
     openrouterApiKey?: string;
     openrouterModel?: string;
+    aiProvider?: "openrouter" | "claude";
     linearApiKey?: string;
     linearAutoTransition?: boolean;
     linearAutoTransitionStateId?: string;
     linearAutoTransitionStateName?: string;
     editorTabEnabled?: boolean;
+    aiValidationEnabled?: boolean;
+    aiValidationAutoApprove?: boolean;
+    aiValidationAutoDeny?: boolean;
   }) => put<AppSettings>("/settings", data),
   searchLinearIssues: (query: string, limit = 8) =>
     get<{ issues: LinearIssue[] }>(
@@ -790,6 +817,8 @@ export const api = {
     get<LinearIssueDetail>(
       `/sessions/${encodeURIComponent(sessionId)}/linear-issue${refresh ? "?refresh=true" : ""}`,
     ),
+  createLinearIssue: (input: CreateLinearIssueInput) =>
+    post<{ ok: boolean; issue: LinearIssue }>("/linear/issues", input),
   addLinearComment: (issueId: string, body: string) =>
     post<{ ok: boolean; comment: LinearComment }>(
       `/linear/issues/${encodeURIComponent(issueId)}/comments`,
@@ -988,14 +1017,21 @@ export const api = {
     post<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/message`, { content }),
 
   // Saved prompts ({cwd}/prompts/*.md)
-  listPrompts: (cwd?: string) => {
+  listPrompts: (cwd?: string, scope?: "global" | "project" | "all") => {
     const params = new URLSearchParams();
     if (cwd) params.set("cwd", cwd);
-    else params.set("scope", "global");
-    return get<SavedPrompt[]>(`/prompts?${params}`);
+    if (scope) params.set("scope", scope);
+    const query = params.toString();
+    return get<SavedPrompt[]>(`/prompts${query ? `?${query}` : ""}`);
   },
-  createPrompt: (data: { name: string; content: string; cwd: string }) =>
+  createPrompt: (data: { name: string; content: string; scope?: "global" | "project"; cwd?: string }) =>
     post<SavedPrompt>("/prompts", data),
-  deletePrompt: (name: string, cwd: string) =>
-    del<{ ok: boolean }>(`/prompts/${encodeURIComponent(name)}?cwd=${encodeURIComponent(cwd)}`),
+  updatePrompt: (id: string, data: { name?: string; content?: string }) =>
+    put<SavedPrompt>(`/prompts/${encodeURIComponent(id)}`, data),
+  deletePrompt: (id: string, _cwd?: string) =>
+    del<{ ok: boolean }>(`/prompts/${encodeURIComponent(id)}`),
+
+  // Skills
+  listSkills: () =>
+    get<{ slug: string; name: string; description: string; path: string }[]>("/skills"),
 };

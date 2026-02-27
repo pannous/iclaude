@@ -81,6 +81,16 @@ interface AppState {
   streamingStartedAt: Map<string, number>;
   streamingOutputTokens: Map<string, number>;
   pendingPermissions: Map<string, Map<string, PermissionRequest>>;
+
+  // AI-resolved permissions log per session
+  aiResolvedPermissions: Map<string, Array<{
+    request: PermissionRequest;
+    behavior: "allow" | "deny";
+    reason: string;
+    timestamp: number;
+  }>>;
+
+  /** Browser↔Server WebSocket connection state per session */
   connectionStatus: Map<string, "connecting" | "connected" | "disconnected">;
   cliConnected: Map<string, boolean>;
   sessionStatus: Map<string, "idle" | "running" | "compacting" | null>;
@@ -180,6 +190,8 @@ interface AppState {
 
   addPermission: (sessionId: string, perm: PermissionRequest) => void;
   removePermission: (sessionId: string, requestId: string) => void;
+  addAiResolvedPermission: (sessionId: string, entry: { request: PermissionRequest; behavior: "allow" | "deny"; reason: string; timestamp: number }) => void;
+  setSessionAiValidation: (sessionId: string, settings: { aiValidationEnabled?: boolean | null; aiValidationAutoApprove?: boolean | null; aiValidationAutoDeny?: boolean | null }) => void;
 
   addTask: (sessionId: string, task: TaskItem) => void;
   setTasks: (sessionId: string, tasks: TaskItem[]) => void;
@@ -212,7 +224,7 @@ interface AppState {
   setSessionStatus: (sessionId: string, status: "idle" | "running" | "compacting" | null) => void;
   markMessageQueued: (sessionId: string, msgId: string) => void;
   unmarkMessageQueued: (sessionId: string, msgId: string) => void;
-  setDiffPanelSelectedFile: (sessionId: string, filePath: string) => void;
+  setDiffPanelSelectedFile: (sessionId: string, filePath: string | null) => void;
   setUpdateInfo: (info: UpdateInfo | null) => void;
   dismissUpdate: (version: string) => void;
   setUpdateOverlayActive: (active: boolean) => void;
@@ -309,6 +321,7 @@ export const useStore = create<AppState>((set) => ({
   streamingStartedAt: new Map(),
   streamingOutputTokens: new Map(),
   pendingPermissions: new Map(),
+  aiResolvedPermissions: new Map(),
   connectionStatus: new Map(),
   cliConnected: new Map(),
   sessionStatus: new Map(),
@@ -404,9 +417,8 @@ export const useStore = create<AppState>((set) => ({
   },
 
   setDarkMode: (v) => {
-    const theme = v ? "dark" : "light";
-    safeStorage.setItem("cc-theme", theme);
-    set({ theme, darkMode: v });
+    safeStorage.setItem("cc-dark-mode", String(v));
+    set({ darkMode: v });
   },
   toggleDarkMode: () =>
     set((s) => {
@@ -534,6 +546,7 @@ export const useStore = create<AppState>((set) => ({
         sessionStatus: deleteFromMap(s.sessionStatus, sessionId),
         previousPermissionMode: deleteFromMap(s.previousPermissionMode, sessionId),
         pendingPermissions: deleteFromMap(s.pendingPermissions, sessionId),
+        aiResolvedPermissions: deleteFromMap(s.aiResolvedPermissions, sessionId),
         sessionTasks: deleteFromMap(s.sessionTasks, sessionId),
         changedFilesTick: deleteFromMap(s.changedFilesTick, sessionId),
         gitChangedFilesCount: deleteFromMap(s.gitChangedFilesCount, sessionId),
@@ -620,6 +633,25 @@ export const useStore = create<AppState>((set) => ({
       const sessionPerms = s.pendingPermissions.get(sessionId);
       if (!sessionPerms) return s;
       return { pendingPermissions: setInMap(s.pendingPermissions, sessionId, deleteFromMap(sessionPerms, requestId)) };
+    }),
+
+  addAiResolvedPermission: (sessionId, entry) =>
+    set((s) => {
+      const aiResolvedPermissions = new Map(s.aiResolvedPermissions);
+      const sessionEntries = [...(aiResolvedPermissions.get(sessionId) || []), entry];
+      // Keep only the last 50 entries per session to avoid unbounded growth
+      if (sessionEntries.length > 50) sessionEntries.splice(0, sessionEntries.length - 50);
+      aiResolvedPermissions.set(sessionId, sessionEntries);
+      return { aiResolvedPermissions };
+    }),
+
+  setSessionAiValidation: (sessionId, settings) =>
+    set((s) => {
+      const sessions = new Map(s.sessions);
+      const existing = sessions.get(sessionId);
+      if (!existing) return {};
+      sessions.set(sessionId, { ...existing, ...settings });
+      return { sessions };
     }),
 
   addTask: (sessionId, task) =>
@@ -797,7 +829,15 @@ export const useStore = create<AppState>((set) => ({
     set((s) => ({ chatTabReentryTickBySession: setInMap(s.chatTabReentryTickBySession, sessionId, (s.chatTabReentryTickBySession.get(sessionId) ?? 0) + 1) })),
 
   setDiffPanelSelectedFile: (sessionId, filePath) =>
-    set((s) => ({ diffPanelSelectedFile: setInMap(s.diffPanelSelectedFile, sessionId, filePath) })),
+    set((s) => {
+      const diffPanelSelectedFile = new Map(s.diffPanelSelectedFile);
+      if (filePath) {
+        diffPanelSelectedFile.set(sessionId, filePath);
+      } else {
+        diffPanelSelectedFile.delete(sessionId);
+      }
+      return { diffPanelSelectedFile };
+    }),
 
   openPanel: (slug) =>
     set((s) => {
@@ -927,6 +967,7 @@ export const useStore = create<AppState>((set) => ({
       streamingStartedAt: new Map(),
       streamingOutputTokens: new Map(),
       pendingPermissions: new Map(),
+      aiResolvedPermissions: new Map(),
       connectionStatus: new Map(),
       cliConnected: new Map(),
       sessionStatus: new Map(),

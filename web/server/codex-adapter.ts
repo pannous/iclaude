@@ -347,6 +347,7 @@ export class CodexAdapter {
   private connected = false;
   private initialized = false;
   private initFailed = false;
+  private initInProgress = false;
 
   // Streaming accumulator for agent messages
   private streamingText = "";
@@ -384,6 +385,7 @@ export class CodexAdapter {
   // Track request types that need different response formats
   private pendingUserInputQuestionIds = new Map<string, string[]>(); // request_id -> ordered Codex question IDs
   private pendingReviewDecisions = new Set<string>(); // request_ids that need ReviewDecision format
+  private pendingExitPlanModeRequests = new Set<string>(); // request_ids for ExitPlanMode approvals
   private pendingDynamicToolCalls = new Map<string, {
     jsonRpcId: number;
     callId: string;
@@ -458,6 +460,7 @@ export class CodexAdapter {
           clearTimeout(pending.timeout);
         }
         this.pendingDynamicToolCalls.clear();
+        this.pendingExitPlanModeRequests.clear();
         this.disconnectCb?.();
       });
     }
@@ -500,7 +503,41 @@ export class CodexAdapter {
       clearTimeout(pending.timeout);
     }
     this.pendingDynamicToolCalls.clear();
+    this.pendingExitPlanModeRequests.clear();
     this.disconnectCb?.();
+  }
+
+  /**
+   * Reset the adapter so it can re-initialize after a transport reconnection.
+   * Called by the launcher when a new proxy/transport is established for the
+   * same session (e.g. after relaunch).  The threadId is preserved so the
+   * adapter can resume the existing Codex thread.
+   */
+  resetForReconnect(newTransport: ICodexTransport): void {
+    this.transport = newTransport;
+    this.connected = false;
+    this.initialized = false;
+    this.initFailed = false;
+    this.initInProgress = false;
+
+    // Re-wire handlers on the new transport
+    this.transport.onNotification((method, params) => this.handleNotification(method, params));
+    this.transport.onRequest((method, id, params) => this.handleRequest(method, id, params));
+
+    // Re-wire raw recording if recorder was provided
+    if (this.options.recorder) {
+      const recorder = this.options.recorder;
+      const cwd = this.options.cwd || "";
+      this.transport.onRawIncoming((line) => {
+        recorder.record(this.sessionId, "in", line, "cli", "codex", cwd);
+      });
+      this.transport.onRawOutgoing((data) => {
+        recorder.record(this.sessionId, "out", data.trimEnd(), "cli", "codex", cwd);
+      });
+    }
+
+    // Re-run initialization (which will resume the thread if threadId is set)
+    this.initialize();
   }
 
   // ── Public API ──────────────────────────────────────────────────────────
@@ -516,7 +553,7 @@ export class CodexAdapter {
     }
 
     // Queue messages if not yet initialized (init is async)
-    if (!this.initialized || !this.threadId) {
+    if (!this.initialized || !this.threadId || this.initInProgress) {
       if (
         msg.type === "user_message"
         || msg.type === "permission_response"
@@ -532,7 +569,42 @@ export class CodexAdapter {
       if (!this.connected) return false;
     }
 
+    // Guard against dispatching when transport is down (e.g. after proxy WS drop)
+    if (!this.transport.isConnected()) {
+      console.warn(`[codex-adapter] Transport disconnected — cannot dispatch ${msg.type}`);
+      return false;
+    }
+
+    // Drain any messages that were queued during init but not yet flushed
+    // (e.g. if the post-init flush found the transport temporarily unavailable
+    // but it recovered by the time the next message arrives).
+    this.flushPendingOutgoing();
+
     return this.dispatchOutgoing(msg);
+  }
+
+  /**
+   * Drain any messages still sitting in the pendingOutgoing queue.
+   * Called both at the end of initialize() and as a safety net in
+   * sendBrowserMessage() — the latter covers edge cases where the
+   * post-init flush was skipped (e.g. transport was momentarily
+   * unavailable right after init completed in a Docker container).
+   */
+  private flushPendingOutgoing(): void {
+    if (this.pendingOutgoing.length === 0) return;
+    if (!this.transport.isConnected()) {
+      console.warn(
+        `[codex-adapter] Session ${this.sessionId}: transport disconnected — keeping ${this.pendingOutgoing.length} message(s) queued`,
+      );
+      return;
+    }
+    console.log(
+      `[codex-adapter] Session ${this.sessionId}: flushing ${this.pendingOutgoing.length} queued message(s)`,
+    );
+    const queued = this.pendingOutgoing.splice(0);
+    for (const msg of queued) {
+      this.dispatchOutgoing(msg);
+    }
   }
 
   private dispatchOutgoing(msg: BrowserOutgoingMessage): boolean {
@@ -604,7 +676,17 @@ export class CodexAdapter {
 
   // ── Initialization ──────────────────────────────────────────────────────
 
+  /** Max retries for thread/start or thread/resume during initialization. */
+  private static readonly INIT_THREAD_MAX_RETRIES = 3;
+  private static readonly INIT_THREAD_RETRY_BASE_MS = 500;
+
   private async initialize(): Promise<void> {
+    if (this.initInProgress) {
+      console.warn("[codex-adapter] initialize() called while already in progress — skipping");
+      return;
+    }
+    this.initInProgress = true;
+
     try {
       const result = await this.transport.call("initialize", {
         clientInfo: {
@@ -620,12 +702,14 @@ export class CodexAdapter {
       await this.transport.notify("initialized", {});
 
       this.connected = true;
-      this.initialized = true;
 
       this.threadId = await this.startOrResumeThreadWithFallback();
 
+      this.initialized = true;
+      console.log(`[codex-adapter] Session ${this.sessionId} initialized (threadId=${this.threadId})`);
+
       this.sessionMetaCb?.({
-        cliSessionId: this.threadId,
+        cliSessionId: this.threadId ?? undefined,
         model: this.options.model,
         cwd: this.options.cwd,
       });
@@ -678,26 +762,43 @@ export class CodexAdapter {
       this.pendingOutgoing.length = 0;
       this.emit({ type: "error", message: errorMsg });
       this.initErrorCb?.(errorMsg);
+    } finally {
+      this.initInProgress = false;
     }
   }
 
   private async startOrResumeThreadWithFallback(): Promise<string> {
-    try {
-      const result = await this.startOrResumeThread(this.options.model);
-      return result.thread.id;
-    } catch (err) {
-      const fallbackModel = this.getFallbackModel(this.options.model);
-      if (!fallbackModel || !this.isMissingModelOrAccessError(err)) {
+    // Retry with backoff on transient "Transport closed" errors, then try fallback model on access errors.
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < CodexAdapter.INIT_THREAD_MAX_RETRIES; attempt++) {
+      if (!this.transport.isConnected()) {
+        lastErr = new Error("Transport closed before thread start");
+        break;
+      }
+      try {
+        const result = await this.startOrResumeThread(this.options.model);
+        return result.thread.id;
+      } catch (err) {
+        lastErr = err;
+        const isTransportClosed = err instanceof Error && err.message === "Transport closed";
+        if (isTransportClosed && attempt < CodexAdapter.INIT_THREAD_MAX_RETRIES - 1) {
+          const delay = CodexAdapter.INIT_THREAD_RETRY_BASE_MS * Math.pow(2, attempt);
+          console.warn(`[codex-adapter] thread start attempt ${attempt + 1} failed (Transport closed), retrying in ${delay}ms`);
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+        // Non-transient error or last attempt — check for model fallback
+        const fallbackModel = this.getFallbackModel(this.options.model);
+        if (fallbackModel && this.isMissingModelOrAccessError(err)) {
+          console.warn(`[codex-adapter] Model ${this.options.model} unavailable; retrying with fallback ${fallbackModel}`);
+          this.options.model = fallbackModel;
+          const fallbackResult = await this.startOrResumeThread(fallbackModel);
+          return fallbackResult.thread.id;
+        }
         throw err;
       }
-
-      console.warn(
-        `[codex-adapter] Model ${this.options.model} unavailable; retrying with fallback ${fallbackModel}`,
-      );
-      this.options.model = fallbackModel;
-      const fallbackResult = await this.startOrResumeThread(fallbackModel);
-      return fallbackResult.thread.id;
     }
+    throw lastErr || new Error("Failed to start thread");
   }
 
   private async startOrResumeThread(model?: string): Promise<{ thread: { id: string } }> {
@@ -781,7 +882,12 @@ export class CodexAdapter {
 
       this.currentTurnId = result.turn.id;
     } catch (err) {
-      this.emit({ type: "error", message: `Failed to start turn: ${err}` });
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg === "Transport closed") {
+        this.emit({ type: "error", message: "Connection to Codex lost. Try relaunching the session." });
+      } else {
+        this.emit({ type: "error", message: `Failed to start turn: ${err}` });
+      }
     }
   }
 
@@ -803,6 +909,33 @@ export class CodexAdapter {
 
       const result = this.buildDynamicToolCallResponse(msg, pendingDynamic.toolName);
       await this.transport.respond(jsonRpcId, result);
+      return;
+    }
+
+    // ExitPlanMode requests need DynamicToolCallResponse + collaboration mode update
+    if (this.pendingExitPlanModeRequests.has(msg.request_id)) {
+      this.pendingExitPlanModeRequests.delete(msg.request_id);
+      this.pendingApprovals.delete(msg.request_id);
+
+      if (msg.behavior === "allow") {
+        // Exit plan mode: switch collaboration mode back to default
+        this.currentCollaborationModeKind = "default";
+        this.currentPermissionMode = this.lastNonPlanPermissionMode;
+        this.emit({
+          type: "session_update",
+          session: { permissionMode: this.currentPermissionMode },
+        });
+
+        await this.transport.respond(jsonRpcId, {
+          contentItems: [{ type: "inputText", text: "Plan approved. Exiting plan mode." }],
+          success: true,
+        });
+      } else {
+        await this.transport.respond(jsonRpcId, {
+          contentItems: [{ type: "inputText", text: "Plan denied by user." }],
+          success: false,
+        });
+      }
       return;
     }
 
@@ -935,7 +1068,12 @@ export class CodexAdapter {
 
       this.emit({ type: "mcp_status", servers });
     } catch (err) {
-      this.emit({ type: "error", message: `Failed to get MCP status: ${err}` });
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg === "Transport closed") {
+        this.emit({ type: "error", message: "Connection to Codex lost. Cannot fetch MCP status." });
+      } else {
+        this.emit({ type: "error", message: `Failed to get MCP status: ${err}` });
+      }
     }
   }
 
@@ -1083,7 +1221,7 @@ export class CodexAdapter {
       case "codex/event/stream_error": {
         const msg = params.msg as { message?: string } | undefined;
         if (msg?.message) {
-          console.warn(`[codex-adapter] Stream error: ${msg.message}`);
+          console.log(`[codex-adapter] Stream error: ${msg.message}`);
         }
         break;
       }
@@ -1096,6 +1234,7 @@ export class CodexAdapter {
         break;
       }
       default:
+        console.log(`[codex-adapter] Unhandled notification: ${method}`);
         break;
     }
     } catch (err) {
@@ -1118,7 +1257,11 @@ export class CodexAdapter {
           this.handleMcpToolCallApproval(id, params);
           break;
         case "item/tool/call":
-          this.handleDynamicToolCall(id, params);
+          if ((params as Record<string, unknown>).tool === "ExitPlanMode") {
+            this.handleExitPlanModeRequest(id, params);
+          } else {
+            this.handleDynamicToolCall(id, params);
+          }
           break;
         case "item/tool/requestUserInput":
           this.handleUserInputRequest(id, params);
@@ -1350,6 +1493,35 @@ export class CodexAdapter {
     this.emit({ type: "permission_request", request: perm });
   }
 
+  private handleExitPlanModeRequest(jsonRpcId: number, params: Record<string, unknown>): void {
+    const callId = params.callId as string || `exitplan-${randomUUID()}`;
+    const toolArgs = params.arguments as Record<string, unknown> || {};
+    const requestId = `codex-exitplan-${randomUUID()}`;
+
+    console.log(`[codex-adapter] ExitPlanMode request received (callId=${callId})`);
+
+    this.pendingApprovals.set(requestId, jsonRpcId);
+    this.pendingExitPlanModeRequests.add(requestId);
+
+    // Emit tool_use with the bare "ExitPlanMode" name (no "dynamic:" prefix)
+    this.emitToolUseTracked(callId, "ExitPlanMode", toolArgs);
+
+    // Build permission request with the format ExitPlanModeDisplay expects
+    const perm: PermissionRequest = {
+      request_id: requestId,
+      tool_name: "ExitPlanMode",
+      input: {
+        plan: typeof toolArgs.plan === "string" ? toolArgs.plan : "",
+        allowedPrompts: Array.isArray(toolArgs.allowedPrompts) ? toolArgs.allowedPrompts : [],
+      },
+      description: "Plan approval requested",
+      tool_use_id: callId,
+      timestamp: Date.now(),
+    };
+
+    this.emit({ type: "permission_request", request: perm });
+  }
+
   private handleApplyPatchApproval(jsonRpcId: number, params: Record<string, unknown>): void {
     const requestId = `codex-patch-${randomUUID()}`;
     this.pendingApprovals.set(requestId, jsonRpcId);
@@ -1497,6 +1669,7 @@ export class CodexAdapter {
         break;
 
       default:
+        console.log(`[codex-adapter] Unhandled item/started type: ${item.type}`, JSON.stringify(item));
         break;
     }
   }
@@ -1858,6 +2031,7 @@ export class CodexAdapter {
         break;
 
       default:
+        console.log(`[codex-adapter] Unhandled item/completed type: ${item.type}`, JSON.stringify(item));
         break;
     }
   }
@@ -2173,56 +2347,6 @@ export class CodexAdapter {
     if (Array.isArray(config.args)) out.args = config.args;
     if (config.env) out.env = config.env;
     if (typeof config.url === "string") out.url = config.url;
-    return out;
-  }
-
-  private normalizeRawMcpServerConfig(value: unknown): Record<string, unknown> {
-    const cfg = this.asRecord(value) || {};
-    const out: Record<string, unknown> = {};
-
-    // Keep only fields supported by Codex raw MCP config schema
-    if (typeof cfg.command === "string") out.command = cfg.command;
-    if (Array.isArray(cfg.args)) out.args = cfg.args.filter((a) => typeof a === "string");
-    if (typeof cfg.cwd === "string") out.cwd = cfg.cwd;
-    if (typeof cfg.url === "string") out.url = cfg.url;
-    if (typeof cfg.enabled === "boolean") out.enabled = cfg.enabled;
-    if (typeof cfg.required === "boolean") out.required = cfg.required;
-
-    const env = this.asRecord(cfg.env);
-    if (env) out.env = Object.fromEntries(
-      Object.entries(env).filter(([, v]) => typeof v === "string"),
-    );
-
-    const envHttpHeaders = this.asRecord(cfg.env_http_headers);
-    if (envHttpHeaders) out.env_http_headers = Object.fromEntries(
-      Object.entries(envHttpHeaders).filter(([, v]) => typeof v === "string"),
-    );
-
-    const httpHeaders = this.asRecord(cfg.http_headers);
-    if (httpHeaders) out.http_headers = Object.fromEntries(
-      Object.entries(httpHeaders).filter(([, v]) => typeof v === "string"),
-    );
-
-    const asStringArray = (arr: unknown): string[] | undefined =>
-      Array.isArray(arr)
-        ? arr.filter((x): x is string => typeof x === "string")
-        : undefined;
-
-    const disabledTools = asStringArray(cfg.disabled_tools);
-    if (disabledTools) out.disabled_tools = disabledTools;
-    const enabledTools = asStringArray(cfg.enabled_tools);
-    if (enabledTools) out.enabled_tools = enabledTools;
-    const envVars = asStringArray(cfg.env_vars);
-    if (envVars) out.env_vars = envVars;
-    const scopes = asStringArray(cfg.scopes);
-    if (scopes) out.scopes = scopes;
-
-    if (typeof cfg.startup_timeout_ms === "number") out.startup_timeout_ms = cfg.startup_timeout_ms;
-    if (typeof cfg.startup_timeout_sec === "number") out.startup_timeout_sec = cfg.startup_timeout_sec;
-    if (typeof cfg.tool_timeout_sec === "number") out.tool_timeout_sec = cfg.tool_timeout_sec;
-    if (typeof cfg.bearer_token === "string") out.bearer_token = cfg.bearer_token;
-    if (typeof cfg.bearer_token_env_var === "string") out.bearer_token_env_var = cfg.bearer_token_env_var;
-
     return out;
   }
 

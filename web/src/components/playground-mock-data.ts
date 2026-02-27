@@ -159,6 +159,27 @@ export const PERM_ASK_MULTI = mockPermission({
   },
 });
 
+// AI Validation mock: uncertain verdict (shown to user with recommendation)
+export const PERM_AI_UNCERTAIN = mockPermission({
+  tool_name: "Bash",
+  input: { command: "npm install --save-dev @types/react" },
+  ai_validation: { verdict: "uncertain", reason: "Package installation modifies node_modules", ruleBasedOnly: false },
+});
+
+// AI Validation mock: safe recommendation (shown when auto-approve is off)
+export const PERM_AI_SAFE = mockPermission({
+  tool_name: "Bash",
+  input: { command: "git status" },
+  ai_validation: { verdict: "safe", reason: "Read-only git command", ruleBasedOnly: false },
+});
+
+// AI Validation mock: dangerous recommendation (shown when auto-deny is off)
+export const PERM_AI_DANGEROUS = mockPermission({
+  tool_name: "Bash",
+  input: { command: "rm -rf node_modules && rm -rf .git" },
+  ai_validation: { verdict: "dangerous", reason: "Recursive delete of project files", ruleBasedOnly: false },
+});
+
 // Messages
 export const MSG_USER: ChatMessage = {
   id: "msg-1",

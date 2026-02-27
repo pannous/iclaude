@@ -1,5 +1,6 @@
 import type { Hono } from "hono";
 import { DEFAULT_OPENROUTER_MODEL, getSettings, updateSettings } from "../settings-manager.js";
+import type { AiProvider } from "../settings-manager.js";
 import { linearCache } from "../linear-cache.js";
 
 export function registerSettingsRoutes(api: Hono): void {
@@ -8,10 +9,14 @@ export function registerSettingsRoutes(api: Hono): void {
     return c.json({
       openrouterApiKeyConfigured: !!settings.openrouterApiKey.trim(),
       openrouterModel: settings.openrouterModel || DEFAULT_OPENROUTER_MODEL,
+      aiProvider: settings.aiProvider ?? "openrouter",
       linearApiKeyConfigured: !!settings.linearApiKey.trim(),
       linearAutoTransition: settings.linearAutoTransition,
       linearAutoTransitionStateName: settings.linearAutoTransitionStateName,
       editorTabEnabled: settings.editorTabEnabled,
+      aiValidationEnabled: settings.aiValidationEnabled,
+      aiValidationAutoApprove: settings.aiValidationAutoApprove,
+      aiValidationAutoDeny: settings.aiValidationAutoDeny,
     });
   });
 
@@ -25,6 +30,9 @@ export function registerSettingsRoutes(api: Hono): void {
     }
     if (body.openaiApiKey !== undefined && typeof body.openaiApiKey !== "string") {
       return c.json({ error: "openaiApiKey must be a string" }, 400);
+    }
+    if (body.aiProvider !== undefined && body.aiProvider !== "openrouter" && body.aiProvider !== "claude") {
+      return c.json({ error: "aiProvider must be 'openrouter' or 'claude'" }, 400);
     }
     if (body.linearApiKey !== undefined && typeof body.linearApiKey !== "string") {
       return c.json({ error: "linearApiKey must be a string" }, 400);
@@ -41,11 +49,22 @@ export function registerSettingsRoutes(api: Hono): void {
     if (body.editorTabEnabled !== undefined && typeof body.editorTabEnabled !== "boolean") {
       return c.json({ error: "editorTabEnabled must be a boolean" }, 400);
     }
+    if (body.aiValidationEnabled !== undefined && typeof body.aiValidationEnabled !== "boolean") {
+      return c.json({ error: "aiValidationEnabled must be a boolean" }, 400);
+    }
+    if (body.aiValidationAutoApprove !== undefined && typeof body.aiValidationAutoApprove !== "boolean") {
+      return c.json({ error: "aiValidationAutoApprove must be a boolean" }, 400);
+    }
+    if (body.aiValidationAutoDeny !== undefined && typeof body.aiValidationAutoDeny !== "boolean") {
+      return c.json({ error: "aiValidationAutoDeny must be a boolean" }, 400);
+    }
     const hasAnyField = body.openrouterApiKey !== undefined || body.openrouterModel !== undefined
-      || body.openaiApiKey !== undefined
+      || body.openaiApiKey !== undefined || body.aiProvider !== undefined
       || body.linearApiKey !== undefined || body.linearAutoTransition !== undefined
       || body.linearAutoTransitionStateId !== undefined || body.linearAutoTransitionStateName !== undefined
-      || body.editorTabEnabled !== undefined;
+      || body.editorTabEnabled !== undefined
+      || body.aiValidationEnabled !== undefined || body.aiValidationAutoApprove !== undefined
+      || body.aiValidationAutoDeny !== undefined;
     if (!hasAnyField) {
       return c.json({ error: "At least one settings field is required" }, 400);
     }
@@ -67,6 +86,9 @@ export function registerSettingsRoutes(api: Hono): void {
         typeof body.openaiApiKey === "string"
           ? body.openaiApiKey.trim()
           : undefined,
+      aiProvider: (body.aiProvider === "openrouter" || body.aiProvider === "claude")
+        ? body.aiProvider as AiProvider
+        : undefined,
       linearApiKey:
         typeof body.linearApiKey === "string"
           ? body.linearApiKey.trim()
@@ -87,15 +109,31 @@ export function registerSettingsRoutes(api: Hono): void {
         typeof body.editorTabEnabled === "boolean"
           ? body.editorTabEnabled
           : undefined,
+      aiValidationEnabled:
+        typeof body.aiValidationEnabled === "boolean"
+          ? body.aiValidationEnabled
+          : undefined,
+      aiValidationAutoApprove:
+        typeof body.aiValidationAutoApprove === "boolean"
+          ? body.aiValidationAutoApprove
+          : undefined,
+      aiValidationAutoDeny:
+        typeof body.aiValidationAutoDeny === "boolean"
+          ? body.aiValidationAutoDeny
+          : undefined,
     });
 
     return c.json({
       openrouterApiKeyConfigured: !!settings.openrouterApiKey.trim(),
       openrouterModel: settings.openrouterModel || DEFAULT_OPENROUTER_MODEL,
+      aiProvider: settings.aiProvider ?? "openrouter",
       linearApiKeyConfigured: !!settings.linearApiKey.trim(),
       linearAutoTransition: settings.linearAutoTransition,
       linearAutoTransitionStateName: settings.linearAutoTransitionStateName,
       editorTabEnabled: settings.editorTabEnabled,
+      aiValidationEnabled: settings.aiValidationEnabled,
+      aiValidationAutoApprove: settings.aiValidationAutoApprove,
+      aiValidationAutoDeny: settings.aiValidationAutoDeny,
     });
   });
 }
