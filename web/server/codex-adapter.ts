@@ -348,6 +348,7 @@ export class CodexAdapter {
   private initialized = false;
   private initFailed = false;
   private initInProgress = false;
+  private disposed = false;
 
   // Streaming accumulator for agent messages
   private streamingText = "";
@@ -498,6 +499,7 @@ export class CodexAdapter {
    * event to this method so the adapter can clean up and fire disconnectCb.
    */
   handleTransportClose(): void {
+    if (this.disposed) return;
     this.connected = false;
     for (const pending of this.pendingDynamicToolCalls.values()) {
       clearTimeout(pending.timeout);
@@ -547,6 +549,10 @@ export class CodexAdapter {
   }
 
   sendBrowserMessage(msg: BrowserOutgoingMessage): boolean {
+    if (this.disposed) {
+      return false;
+    }
+
     // If initialization failed, reject all new messages
     if (this.initFailed) {
       return false;
@@ -662,7 +668,13 @@ export class CodexAdapter {
   }
 
   async disconnect(): Promise<void> {
+    this.disposed = true;
     this.connected = false;
+    this.pendingOutgoing.length = 0;
+    for (const pending of this.pendingDynamicToolCalls.values()) {
+      clearTimeout(pending.timeout);
+    }
+    this.pendingDynamicToolCalls.clear();
     if (this.options.killProcess) {
       try {
         await this.options.killProcess();
@@ -699,12 +711,16 @@ export class CodexAdapter {
         },
       }) as Record<string, unknown>;
 
+      if (this.disposed) return;
+
       await this.transport.notify("initialized", {});
+      if (this.disposed) return;
 
       this.connected = true;
 
 
       this.threadId = await this.startOrResumeThreadWithFallback();
+      if (this.disposed) return;
 
       this.initialized = true;
       console.log(`[codex-adapter] Session ${this.sessionId} initialized (threadId=${this.threadId})`);
@@ -757,6 +773,9 @@ export class CodexAdapter {
       this.flushPendingOutgoing();
 
     } catch (err) {
+      if (this.disposed) {
+        return;
+      }
       const errorMsg = `Codex initialization failed: ${err}`;
       console.error(`[codex-adapter] ${errorMsg}`);
       this.initFailed = true;

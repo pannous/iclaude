@@ -918,15 +918,16 @@ export function createRoutes(
       // (directory-name decoding breaks for agent sessions stored under session-ID dirs)
       const discovered = discoverClaudeSessions({ limit: 40 });
 
+      const TARGET = 16;
       const results: { sessionId: string; project: string; lastModified: number; title: string }[] = [];
-      for (const session of discovered.slice(0, 20)) {
+      for (const session of discovered) {
+        if (results.length >= TARGET) break;
         const title = await extractSessionTitle(session.sourceFile);
-        if (title === "") continue;
         results.push({
           sessionId: session.sessionId,
           project: session.cwd,
           lastModified: session.lastActivityAt,
-          title,
+          title: title || session.sessionId.slice(0, 12),
         });
       }
 
