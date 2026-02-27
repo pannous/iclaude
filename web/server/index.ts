@@ -170,6 +170,71 @@ if (recorder.isGloballyEnabled()) {
 
 const app = new Hono();
 
+// Global auth gate: block all tunnel traffic that lacks a valid token.
+// Tunnel requests are identified by the X-Companion-Tunnel header injected by Apache.
+// Direct localhost requests are always trusted (no header = not via tunnel).
+app.use("/*", async (c, next) => {
+  if (!isAuthEnabled()) return next();
+  if (!c.req.header("X-Companion-Tunnel")) return next();
+
+  // Auth endpoints must be reachable to complete login
+  const path = new URL(c.req.url).pathname;
+  if (path === "/api/auth/verify" || path === "/api/auth/status") return next();
+
+  // Accept token from cookie, query param (?token=...), or Authorization header
+  const cookieToken = getCookie(c, "companion_auth");
+  const queryToken = new URL(c.req.url).searchParams.get("token");
+  const bearer = c.req.header("Authorization")?.replace(/^Bearer /, "") ?? null;
+  const candidate = cookieToken || queryToken || bearer;
+
+  if (verifyToken(candidate)) return next();
+
+  // Unauthenticated tunnel request — show minimal login page
+  return c.html(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Companion — Login</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#1a1917;color:#e8e6e0;font-family:system-ui,sans-serif;
+         display:flex;align-items:center;justify-content:center;min-height:100vh}
+    form{background:#262624;border:1px solid #3a3835;border-radius:12px;
+         padding:2rem;width:min(360px,90vw);display:flex;flex-direction:column;gap:1rem}
+    h1{font-size:1.1rem;font-weight:600;color:#d97757}
+    input{background:#1a1917;border:1px solid #3a3835;border-radius:6px;
+          color:#e8e6e0;font-size:1rem;padding:.6rem .8rem;width:100%}
+    input:focus{outline:2px solid #d97757;border-color:transparent}
+    button{background:#d97757;border:none;border-radius:6px;color:#fff;
+           cursor:pointer;font-size:1rem;font-weight:600;padding:.7rem}
+    button:hover{background:#c4663e}
+    #err{color:#e05c5c;font-size:.85rem;display:none}
+  </style>
+</head>
+<body>
+  <form id="f">
+    <h1>The Companion</h1>
+    <input id="t" type="password" placeholder="Auth token" autocomplete="current-password" autofocus>
+    <button type="submit">Sign in</button>
+    <div id="err">Invalid token</div>
+  </form>
+  <script>
+    document.getElementById('f').onsubmit = async e => {
+      e.preventDefault();
+      const token = document.getElementById('t').value.trim();
+      const r = await fetch('/api/auth/verify', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({token})
+      });
+      if (r.ok) location.reload();
+      else { document.getElementById('err').style.display='block'; }
+    };
+  </script>
+</body>
+</html>`, 401);
+});
+
 app.use("/api/*", cors());
 app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, agentExecutor));
 
