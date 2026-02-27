@@ -1687,22 +1687,42 @@ export function createRoutes(
     ).trim();
   };
 
+  type Turn = { role: "user" | "assistant"; content: string };
+  const shortcutSessions = new Map<string, Turn[]>();
+
+  const claudeAskWithSession = async (text: string, sessionId: string, cwd?: string): Promise<string> => {
+    const history = shortcutSessions.get(sessionId) ?? [];
+    const context = [...history, { role: "user" as const, content: text }]
+      .map(t => `${t.role === "user" ? "Human" : "Assistant"}: ${t.content}`)
+      .join("\n\n");
+    const response = await claudeAsk(context, cwd);
+    history.push({ role: "user", content: text }, { role: "assistant", content: response });
+    shortcutSessions.set(sessionId, history.slice(-20));
+    return response;
+  };
+
   // Plain-text variant — used by Siri Shortcuts (avoids JSON parsing on Watch)
   api.get("/ask/text", async (c) => {
     const text = (c.req.query("text") ?? c.req.query("q") ?? "").trim();
     if (!text) return c.text("Missing text parameter", 400);
-    try { return c.text(await claudeAsk(text, c.req.query("cwd"))); }
-    catch (err) { return c.text(getErrorMessage(err), 500); }
+    const session = c.req.query("session") ?? "";
+    try {
+      const reply = session ? await claudeAskWithSession(text, session, c.req.query("cwd")) : await claudeAsk(text, c.req.query("cwd"));
+      return c.text(reply);
+    } catch (err) { return c.text(getErrorMessage(err), 500); }
   });
 
   api.post("/ask/text", async (c) => {
     const ct = c.req.header("content-type") ?? "";
-    const text = ct.includes("form")
-      ? ((await c.req.formData()).get("text") as string ?? "").trim()
-      : ((await c.req.json<{ text?: string }>().catch(() => ({} as { text?: string }))).text ?? "").trim();
+    const form = ct.includes("form") ? await c.req.formData() : null;
+    const body = form ? null : await c.req.json<{ text?: string; session?: string }>().catch(() => ({} as { text?: string; session?: string }));
+    const text = (form ? (form.get("text") as string ?? "") : (body?.text ?? "")).trim();
+    const session = (form ? (form.get("session") as string ?? "") : (body?.session ?? "")).trim();
     if (!text) return c.text("Missing text parameter", 400);
-    try { return c.text(await claudeAsk(text)); }
-    catch (err) { return c.text(getErrorMessage(err), 500); }
+    try {
+      const reply = session ? await claudeAskWithSession(text, session) : await claudeAsk(text);
+      return c.text(reply);
+    } catch (err) { return c.text(getErrorMessage(err), 500); }
   });
 
   api.get("/ask", async (c) => {
