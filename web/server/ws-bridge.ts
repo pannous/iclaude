@@ -1,5 +1,5 @@
 import type { ServerWebSocket } from "bun";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type {
@@ -371,12 +371,24 @@ export class WsBridge {
     try {
       // Compute the project directory name (same logic as CLI)
       const projectDir = cwd ? cwd.replace(/\//g, "-") : "";
-      const projectPath = join(homedir(), ".claude", "projects", projectDir);
-      const sessionFile = join(projectPath, `${cliSessionId}.jsonl`);
+      const projectsRoot = join(homedir(), ".claude", "projects");
+      let sessionFile = join(projectsRoot, projectDir, `${cliSessionId}.jsonl`);
 
       if (!existsSync(sessionFile)) {
-        console.log(`[ws-bridge] CLI session file not found: ${sessionFile}`);
-        return [];
+        // Fall back to searching all project directories (handles cwd mismatches)
+        let found: string | null = null;
+        try {
+          for (const dir of readdirSync(projectsRoot)) {
+            const candidate = join(projectsRoot, dir, `${cliSessionId}.jsonl`);
+            if (existsSync(candidate)) { found = candidate; break; }
+          }
+        } catch { /* ignore scan errors */ }
+
+        if (!found) {
+          console.log(`[ws-bridge] CLI session file not found for session: ${cliSessionId}`);
+          return [];
+        }
+        sessionFile = found;
       }
 
       const content = readFileSync(sessionFile, "utf-8");
