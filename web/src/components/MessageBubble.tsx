@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import type { ChatMessage, ContentBlock } from "../types.js";
 import { ToolBlock, getToolIcon, getToolLabel, getPreview, ToolIcon } from "./ToolBlock.js";
 import { CopyButton } from "./CopyButton.js";
+import { RunnableCodeBlock, RUNNABLE_LANGS } from "./RunCodeButton.js";
 import { messageToText } from "../utils/message-text.js";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
@@ -338,6 +339,21 @@ function MarkdownContent({ text, showCursor = false }: { text: string; showCurso
 
             if (isBlock) {
               const lang = match?.[1] || "";
+              const codeText = typeof children === "string" ? children : String(children ?? "");
+              const pre = (
+                <pre className="px-2 sm:px-3 py-2 sm:py-2.5 bg-cc-code-bg text-cc-code-fg text-[12px] sm:text-[13px] font-mono-code leading-relaxed overflow-x-auto">
+                  <code>{children}</code>
+                </pre>
+              );
+
+              if (lang && RUNNABLE_LANGS.has(lang)) {
+                return (
+                  <RunnableCodeBlock lang={lang} code={codeText}>
+                    {pre}
+                  </RunnableCodeBlock>
+                );
+              }
+
               return (
                 <div className="my-2 rounded-lg overflow-hidden border border-cc-border">
                   {lang && (
@@ -345,9 +361,7 @@ function MarkdownContent({ text, showCursor = false }: { text: string; showCurso
                       {lang}
                     </div>
                   )}
-                  <pre className="px-2 sm:px-3 py-2 sm:py-2.5 bg-cc-code-bg text-cc-code-fg text-[12px] sm:text-[13px] font-mono-code leading-relaxed overflow-x-auto">
-                    <code>{children}</code>
-                  </pre>
+                  {pre}
                 </div>
               );
             }

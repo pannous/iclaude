@@ -25,6 +25,7 @@ import { SessionItem } from "./SessionItem.js";
 import type { CreationProgressEvent } from "../types.js";
 import type { SessionItem as SessionItemType } from "../utils/project-grouping.js";
 import { useToggle } from "../utils/use-toggle.js";
+import { RunnableCodeBlock } from "./RunCodeButton.js";
 import {
   MOCK_SESSION_ID,
   PERM_BASH, PERM_EDIT, PERM_WRITE, PERM_READ, PERM_GLOB, PERM_GREP,
@@ -264,6 +265,26 @@ export function Playground() {
             </Card>
             <Card label="System message">
               <MessageBubble message={MSG_SYSTEM} />
+            </Card>
+          </div>
+        </Section>
+
+        {/* ─── Runnable Code Blocks ──────────────────────── */}
+        <Section title="Runnable Code Blocks" description="Bash/shell code blocks with an inline Run button and output panel">
+          <div className="space-y-4 max-w-3xl">
+            <Card label="bash block — idle state">
+              <RunnableCodeBlock lang="bash" code="echo 'hello world'">
+                <pre className="px-3 py-2.5 bg-cc-code-bg text-cc-code-fg text-[13px] font-mono-code leading-relaxed overflow-x-auto">
+                  <code>{"echo 'hello world'"}</code>
+                </pre>
+              </RunnableCodeBlock>
+            </Card>
+            <Card label="sh block — multi-line command">
+              <RunnableCodeBlock lang="sh" code={"date\nls -la"}>
+                <pre className="px-3 py-2.5 bg-cc-code-bg text-cc-code-fg text-[13px] font-mono-code leading-relaxed overflow-x-auto">
+                  <code>{"date\nls -la"}</code>
+                </pre>
+              </RunnableCodeBlock>
             </Card>
           </div>
         </Section>
