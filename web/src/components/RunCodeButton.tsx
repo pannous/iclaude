@@ -1,7 +1,7 @@
 import { useState, useCallback, type ReactNode } from "react";
 
 /** Shell languages that show a Run button */
-export const RUNNABLE_LANGS = new Set(["bash", "sh", "shell", "zsh", "fish"]);
+export const RUNNABLE_LANGS = new Set(["bash", "sh", "shell", "zsh", "fish", "terminal"]);
 
 type RunState = "idle" | "running" | "success" | "error";
 

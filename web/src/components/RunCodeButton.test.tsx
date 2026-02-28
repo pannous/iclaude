@@ -25,7 +25,7 @@ const PRE = (
 
 describe("RUNNABLE_LANGS", () => {
   it("includes common shell languages", () => {
-    for (const lang of ["bash", "sh", "shell", "zsh", "fish"]) {
+    for (const lang of ["bash", "sh", "shell", "zsh", "fish", "terminal"]) {
       expect(RUNNABLE_LANGS.has(lang)).toBe(true);
     }
   });
