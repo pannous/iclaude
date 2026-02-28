@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useStore } from "../store.js";
 import { BashDisplay, EditDisplay, WriteDisplay, ReadDisplay, GlobDisplay, GrepDisplay } from "./ToolDisplays.js";
+import { execCode, PlayIcon, SpinnerIcon, RunOutput, type ExecResult } from "./RunCodeButton.js";
 
 const TOOL_ICONS: Record<string, string> = {
   Bash: "terminal",
@@ -56,14 +57,32 @@ export function ToolBlock({
   toolUseId: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [runState, setRunState] = useState<"idle" | "running" | "success" | "error">("idle");
+  const [runResult, setRunResult] = useState<ExecResult | null>(null);
   const iconType = getToolIcon(name);
   const label = getToolLabel(name);
+  const isBash = name === "Bash";
 
   // Extract the most useful preview
   const preview = getPreview(name, input);
 
   // Resolve clickable path from file_path (Read/Write/Edit), path (Grep/Glob), or notebook_path
   const clickablePath = (input.file_path || input.path || input.notebook_path) as string | undefined;
+
+  const handleRun = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRunState("running");
+    setRunResult(null);
+    setOpen(true);
+    try {
+      const res = await execCode(String(input.command || "").trim());
+      setRunResult(res);
+      setRunState(res.ok ? "success" : "error");
+    } catch {
+      setRunResult({ ok: false, stderr: "Failed to reach /api/exec", exitCode: 1 });
+      setRunState("error");
+    }
+  }, [input.command]);
 
   return (
     <div className="border border-cc-border rounded-[10px] overflow-hidden bg-cc-card">
@@ -97,6 +116,20 @@ export function ToolBlock({
             {preview}
           </span>
         ) : null}
+        {isBash && (
+          <button
+            onClick={handleRun}
+            disabled={runState === "running"}
+            title="Run"
+            className="ml-auto shrink-0 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:w-5 sm:h-5 flex items-center justify-center rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover active:scale-90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {runState === "running" ? (
+              <SpinnerIcon className="w-3 h-3" />
+            ) : (
+              <PlayIcon className={`w-3 h-3 ${runState === "success" ? "text-cc-success" : runState === "error" ? "text-red-400" : ""}`} />
+            )}
+          </button>
+        )}
       </div>
 
       {open && (
@@ -105,6 +138,9 @@ export function ToolBlock({
             <ToolDetail name={name} input={input} />
           </div>
         </div>
+      )}
+      {runResult && (
+        <RunOutput result={runResult} onDismiss={() => { setRunResult(null); setRunState("idle"); }} />
       )}
     </div>
   );

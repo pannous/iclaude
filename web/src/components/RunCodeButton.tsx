@@ -5,14 +5,14 @@ export const RUNNABLE_LANGS = new Set(["bash", "sh", "shell", "zsh", "fish", "te
 
 type RunState = "idle" | "running" | "success" | "error";
 
-interface ExecResult {
+export interface ExecResult {
   ok: boolean;
   stdout?: string;
   stderr?: string;
   exitCode?: number;
 }
 
-async function execCode(code: string, cwd?: string): Promise<ExecResult> {
+export async function execCode(code: string, cwd?: string): Promise<ExecResult> {
   const res = await fetch("/api/exec", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -21,7 +21,7 @@ async function execCode(code: string, cwd?: string): Promise<ExecResult> {
   return res.json();
 }
 
-function PlayIcon({ className }: { className?: string }) {
+export function PlayIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="currentColor" className={className}>
       <path d="M4 2.5L13 8 4 13.5V2.5z" />
@@ -29,7 +29,7 @@ function PlayIcon({ className }: { className?: string }) {
   );
 }
 
-function SpinnerIcon({ className }: { className?: string }) {
+export function SpinnerIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className={`animate-spin ${className}`}>
       <circle cx="8" cy="8" r="5.5" strokeOpacity="0.25" />
@@ -38,7 +38,7 @@ function SpinnerIcon({ className }: { className?: string }) {
   );
 }
 
-function RunOutput({ result, onDismiss }: { result: ExecResult; onDismiss: () => void }) {
+export function RunOutput({ result, onDismiss }: { result: ExecResult; onDismiss: () => void }) {
   const hasStdout = result.stdout?.trim();
   const hasStderr = result.stderr?.trim();
 
