@@ -1,4 +1,6 @@
 import { useState, useCallback, type ReactNode } from "react";
+import { useStore } from "../store.js";
+import { ansiToHtml, hasAnsi } from "../utils/ansi.js";
 
 /** Shell languages that show a Run button */
 export const RUNNABLE_LANGS = new Set(["bash", "sh", "shell", "zsh", "fish", "terminal"]);
@@ -39,8 +41,19 @@ export function SpinnerIcon({ className }: { className?: string }) {
 }
 
 export function RunOutput({ result, onDismiss }: { result: ExecResult; onDismiss: () => void }) {
+  const darkMode = useStore(s => s.darkMode);
   const hasStdout = result.stdout?.trim();
   const hasStderr = result.stderr?.trim();
+
+  const renderPre = (text: string, className: string) => {
+    const trimmed = text.trimEnd();
+    if (hasAnsi(trimmed)) {
+      return (
+        <pre className={className} dangerouslySetInnerHTML={{ __html: ansiToHtml(trimmed, darkMode) }} />
+      );
+    }
+    return <pre className={className}>{trimmed}</pre>;
+  };
 
   return (
     <div className="border-t border-cc-border bg-cc-bg/60">
@@ -60,15 +73,13 @@ export function RunOutput({ result, onDismiss }: { result: ExecResult; onDismiss
         <p className="px-3 py-2 text-[12px] text-cc-muted font-mono-code italic">no output</p>
       ) : (
         <>
-          {hasStdout && (
-            <pre className="px-3 py-2 text-[12px] font-mono-code text-cc-code-fg whitespace-pre-wrap overflow-x-auto max-h-64 overflow-y-auto">
-              {result.stdout!.trimEnd()}
-            </pre>
+          {hasStdout && renderPre(
+            result.stdout!,
+            "px-3 py-2 text-[12px] font-mono-code text-cc-code-fg whitespace-pre-wrap overflow-x-auto max-h-64 overflow-y-auto"
           )}
-          {hasStderr && (
-            <pre className={`px-3 py-2 text-[12px] font-mono-code whitespace-pre-wrap overflow-x-auto max-h-32 overflow-y-auto text-red-400 ${hasStdout ? "border-t border-cc-border/50" : ""}`}>
-              {result.stderr!.trimEnd()}
-            </pre>
+          {hasStderr && renderPre(
+            result.stderr!,
+            `px-3 py-2 text-[12px] font-mono-code whitespace-pre-wrap overflow-x-auto max-h-32 overflow-y-auto text-red-400 ${hasStdout ? "border-t border-cc-border/50" : ""}`
           )}
         </>
       )}

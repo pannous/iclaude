@@ -25,7 +25,7 @@ import { SessionItem } from "./SessionItem.js";
 import type { CreationProgressEvent } from "../types.js";
 import type { SessionItem as SessionItemType } from "../utils/project-grouping.js";
 import { useToggle } from "../utils/use-toggle.js";
-import { RunnableCodeBlock } from "./RunCodeButton.js";
+import { RunnableCodeBlock, RunOutput } from "./RunCodeButton.js";
 import {
   MOCK_SESSION_ID,
   PERM_BASH, PERM_EDIT, PERM_WRITE, PERM_READ, PERM_GLOB, PERM_GREP,
@@ -285,6 +285,16 @@ export function Playground() {
                   <code>{"date\nls -la"}</code>
                 </pre>
               </RunnableCodeBlock>
+            </Card>
+            <Card label="ANSI color output — mock RunOutput with colored stdout">
+              <RunOutput
+                result={{
+                  ok: true,
+                  stdout: "\x1b[32m✓\x1b[0m Test passed\n\x1b[31m✗\x1b[0m Test failed\n\x1b[33mwarning:\x1b[0m skipped 2\n\x1b[1;34minfo:\x1b[0m \x1b[2mrunning suite\x1b[0m\n\x1b[36mcyan text\x1b[0m and \x1b[35mmagenta text\x1b[0m",
+                  exitCode: 0,
+                }}
+                onDismiss={() => {}}
+              />
             </Card>
           </div>
         </Section>

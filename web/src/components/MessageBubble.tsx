@@ -9,6 +9,7 @@ import { messageToText } from "../utils/message-text.js";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { FeedSessionIdContext } from "./feed-context.js";
+import { ansiToHtml, hasAnsi } from "../utils/ansi.js";
 
 export function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.role === "system") {
@@ -510,10 +511,13 @@ function ContentBlockRenderer({
 }
 
 function BashResultBlock({ text, isError }: { text: string; isError: boolean }) {
+  const darkMode = useStore(s => s.darkMode);
   const lines = text.split(/\r?\n/);
   const hasMore = lines.length > 20;
   const [showFull, setShowFull] = useState(false);
-  const rendered = showFull || !hasMore ? text : lines.slice(-20).join("\n");
+  const rawText = showFull || !hasMore ? text : lines.slice(-20).join("\n");
+  const hasColor = hasAnsi(rawText);
+  const htmlContent = hasColor ? ansiToHtml(rawText, darkMode) : null;
 
   return (
     <div className={`rounded-lg border ${
@@ -536,11 +540,18 @@ function BashResultBlock({ text, isError }: { text: string; isError: boolean }) 
           </button>
         )}
       </div>
-      <pre className={`text-xs font-mono-code px-3 py-2 whitespace-pre-wrap max-h-60 overflow-y-auto ${
-        isError ? "text-cc-error" : "text-cc-muted"
-      }`}>
-        {rendered}
-      </pre>
+      {htmlContent != null ? (
+        <pre
+          className="text-xs font-mono-code px-3 py-2 whitespace-pre-wrap max-h-60 overflow-y-auto"
+          dangerouslySetInnerHTML={{ __html: htmlContent }}
+        />
+      ) : (
+        <pre className={`text-xs font-mono-code px-3 py-2 whitespace-pre-wrap max-h-60 overflow-y-auto ${
+          isError ? "text-cc-error" : "text-cc-muted"
+        }`}>
+          {rawText}
+        </pre>
+      )}
     </div>
   );
 }
