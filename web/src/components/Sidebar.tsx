@@ -220,25 +220,34 @@ export function Sidebar() {
 
   async function handleResumeSession(rs: ResumableSession) {
     setResumingId(rs.sessionId);
+    const name = rs.title.slice(0, 40) || rs.sessionId.slice(0, 8);
+    const tempId = `resuming-${rs.sessionId}`;
+    const stub = { sessionId: tempId, cwd: rs.project, title: rs.title || name, state: "starting" as const, createdAt: Date.now(), backendType: "claude" as const };
+
+    // Immediately move from resume list → folder list using a temp ID so the
+    // transition feels instant. Replaced with the real session ID once createSession returns.
+    const { sdkSessions, setSdkSessions, setSessionName } = useStore.getState();
+    setSdkSessions([...sdkSessions, stub]);
+    setSessionName(tempId, name);
+    setResumableSessions((prev) => prev.filter((s) => s.sessionId !== rs.sessionId));
+    setShowResumePicker(false);
+    if (window.innerWidth < 768) useStore.getState().setSidebarOpen(false);
+
     try {
       if (currentSessionId) disconnectSession(currentSessionId);
-      const result = await api.createSession({
-        cwd: rs.project,
-        resumeSessionId: rs.sessionId,
-      });
+      const result = await api.createSession({ cwd: rs.project, resumeSessionId: rs.sessionId });
       const sessionId = result.sessionId;
-      const name = rs.title.slice(0, 40) || rs.sessionId.slice(0, 8);
-      useStore.getState().setSessionName(sessionId, name);
+
+      // Swap temp stub for the real session
+      const s = useStore.getState();
+      s.setSdkSessions([...s.sdkSessions.filter((x) => x.sessionId !== tempId), { ...stub, sessionId }]);
+      s.setSessionName(sessionId, name);
       setCurrentSession(sessionId);
       connectSession(sessionId);
       await waitForConnection(sessionId);
-      setResumableSessions((prev) => prev.filter((s) => s.sessionId !== rs.sessionId));
-      setShowResumePicker(false);
-      if (window.innerWidth < 768) {
-        useStore.getState().setSidebarOpen(false);
-      }
     } catch (err) {
       console.error("Failed to resume session:", err);
+      useStore.getState().setSdkSessions(useStore.getState().sdkSessions.filter((x) => x.sessionId !== tempId));
     }
     setResumingId(null);
   }
