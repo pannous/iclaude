@@ -24,6 +24,7 @@ const mockApi = {
   archiveSession: vi.fn().mockResolvedValue({}),
   unarchiveSession: vi.fn().mockResolvedValue({}),
   renameSession: vi.fn().mockResolvedValue({}),
+  getArchiveInfo: vi.fn().mockResolvedValue({ hasLinkedIssue: false, issueNotDone: false }),
 };
 
 vi.mock("../api.js", () => ({
@@ -35,6 +36,7 @@ vi.mock("../api.js", () => ({
     renameSession: (...args: unknown[]) => mockApi.renameSession(...args),
     listPanels: () => Promise.resolve([]),
     listResumableSessions: () => Promise.resolve([]),
+    getArchiveInfo: (...args: unknown[]) => mockApi.getArchiveInfo(...args),
   },
 }));
 
@@ -53,6 +55,7 @@ interface MockStoreState {
   recentlyRenamed: Set<string>;
   pendingPermissions: Map<string, Map<string, unknown>>;
   sessionTasks: Map<string, unknown[]>;
+  linkedLinearIssues: Map<string, unknown>;
   collapsedProjects: Set<string>;
   setCurrentSession: ReturnType<typeof vi.fn>;
   toggleProjectCollapse: ReturnType<typeof vi.fn>;
@@ -121,6 +124,7 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     recentlyRenamed: new Set(),
     pendingPermissions: new Map(),
     sessionTasks: new Map(),
+    linkedLinearIssues: new Map(),
     collapsedProjects: new Set(),
     setCurrentSession: vi.fn(),
     toggleProjectCollapse: vi.fn(),
@@ -1250,6 +1254,95 @@ describe("Sidebar", () => {
     // Should navigate home
     expect(window.location.hash).toBe("");
     expect(mockState.newSession).toHaveBeenCalled();
+  });
+
+  // ─── Archive with linked Linear issue ─────────────────────────────────────
+
+  it("shows archive modal when session has a linked non-done Linear issue", async () => {
+    // Verifies that archiving a session linked to a non-done Linear issue
+    // shows the ArchiveLinearModal instead of archiving directly.
+    // LOCAL: uses direct "Archive session" button instead of upstream's three-dot "Session actions" menu.
+    const session = makeSession("s1", { is_containerized: false });
+    const sdk = makeSdkSession("s1");
+    const linkedIssues = new Map<string, unknown>([["s1", {
+      id: "issue-1",
+      identifier: "ENG-42",
+      title: "Test",
+      stateType: "started",
+      stateName: "In Progress",
+    }]]);
+    mockState = createMockState({
+      sessions: new Map([["s1", session]]),
+      sdkSessions: [sdk],
+      linkedLinearIssues: linkedIssues,
+    });
+    mockApi.getArchiveInfo.mockResolvedValue({
+      hasLinkedIssue: true,
+      issueNotDone: true,
+      issue: { id: "issue-1", identifier: "ENG-42", stateName: "In Progress", stateType: "started", teamId: "team-1" },
+      hasBacklogState: true,
+      archiveTransitionConfigured: false,
+    });
+
+    render(<Sidebar />);
+    // LOCAL: direct "Archive session" button instead of three-dot "Session actions" menu
+    fireEvent.click(screen.getByTitle("Archive session"));
+
+    // Wait for modal to appear (getArchiveInfo is async)
+    await vi.waitFor(() => {
+      expect(screen.getByText("ENG-42")).toBeInTheDocument();
+    });
+  });
+
+  it("archives directly when session has no linked Linear issue", async () => {
+    // Verifies that the modal is NOT shown for sessions without a linked issue.
+    // LOCAL: uses direct "Archive session" button instead of upstream's three-dot "Session actions" menu.
+    const session = makeSession("s1", { is_containerized: false });
+    const sdk = makeSdkSession("s1");
+    mockState = createMockState({
+      sessions: new Map([["s1", session]]),
+      sdkSessions: [sdk],
+      linkedLinearIssues: new Map(),
+    });
+
+    render(<Sidebar />);
+    // LOCAL: direct "Archive session" button instead of three-dot "Session actions" menu
+    fireEvent.click(screen.getByTitle("Archive session"));
+
+    // Should archive directly
+    await vi.waitFor(() => {
+      expect(mockApi.archiveSession).toHaveBeenCalledWith("s1", undefined);
+    });
+    // Modal should NOT appear
+    expect(screen.queryByText("ENG-42")).not.toBeInTheDocument();
+  });
+
+  it("archives directly when linked issue is already done", async () => {
+    // Verifies that completed issues don't trigger the modal.
+    // LOCAL: uses direct "Archive session" button instead of upstream's three-dot "Session actions" menu.
+    const session = makeSession("s1", { is_containerized: false });
+    const sdk = makeSdkSession("s1");
+    const linkedIssues = new Map<string, unknown>([["s1", {
+      id: "issue-1",
+      identifier: "ENG-42",
+      title: "Test",
+      stateType: "completed",
+      stateName: "Done",
+    }]]);
+    mockState = createMockState({
+      sessions: new Map([["s1", session]]),
+      sdkSessions: [sdk],
+      linkedLinearIssues: linkedIssues,
+    });
+
+    render(<Sidebar />);
+    // LOCAL: direct "Archive session" button instead of three-dot "Session actions" menu
+    fireEvent.click(screen.getByTitle("Archive session"));
+
+    // Should archive directly since issue is done
+    await vi.waitFor(() => {
+      expect(mockApi.archiveSession).toHaveBeenCalledWith("s1", undefined);
+    });
   });
 
   // ─── Unarchive flow ────────────────────────────────────────────────────────

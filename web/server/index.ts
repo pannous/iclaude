@@ -23,6 +23,7 @@ import { homedir } from "node:os";
 import { TerminalManager } from "./terminal-manager.js";
 import { generateSessionTitle } from "./auto-namer.js";
 import * as sessionNames from "./session-names.js";
+import { getSettings } from "./settings-manager.js";
 import { PRPoller } from "./pr-poller.js";
 import { RecorderManager } from "./recorder.js";
 import { CronScheduler } from "./cron-scheduler.js";
@@ -148,9 +149,10 @@ wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
 wsBridge.onFirstTurnCompletedCallback(async (sessionId, firstUserMessage) => {
   // Don't overwrite a name that was already set via manual rename
   if (sessionNames.getName(sessionId)) return;
+  if (!getSettings().anthropicApiKey.trim()) return;
   const info = launcher.getSession(sessionId);
   const model = info?.model || "claude-sonnet-4-6";
-  console.log(`[server] Auto-naming session ${sessionId}...`);
+  console.log(`[server] Auto-naming session ${sessionId} via Anthropic with model ${model}...`);
   const title = await generateSessionTitle(firstUserMessage, model);
   // Re-check: a manual rename may have occurred while we were generating
   if (title && !sessionNames.getName(sessionId)) {

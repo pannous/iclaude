@@ -79,14 +79,17 @@ vi.mock("./session-names.js", () => ({
 }));
 
 vi.mock("./settings-manager.js", () => ({
-  DEFAULT_OPENROUTER_MODEL: "openrouter/free",
+  DEFAULT_ANTHROPIC_MODEL: "claude-sonnet-4.6",
   getSettings: vi.fn(() => ({
-    openrouterApiKey: "",
-    openrouterModel: "openrouter/free",
+    anthropicApiKey: "",
+    anthropicModel: "claude-sonnet-4.6",
     linearApiKey: "",
     linearAutoTransition: false,
     linearAutoTransitionStateId: "",
     linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
     editorTabEnabled: false,
     aiValidationEnabled: false,
     aiValidationAutoApprove: true,
@@ -94,12 +97,15 @@ vi.mock("./settings-manager.js", () => ({
     updatedAt: 0,
   })),
   updateSettings: vi.fn((patch) => ({
-    openrouterApiKey: patch.openrouterApiKey ?? "",
-    openrouterModel: patch.openrouterModel ?? "openrouter/free",
+    anthropicApiKey: patch.anthropicApiKey ?? "",
+    anthropicModel: patch.anthropicModel ?? "claude-sonnet-4.6",
     linearApiKey: patch.linearApiKey ?? "",
     linearAutoTransition: patch.linearAutoTransition ?? false,
     linearAutoTransitionStateId: patch.linearAutoTransitionStateId ?? "",
     linearAutoTransitionStateName: patch.linearAutoTransitionStateName ?? "",
+    linearArchiveTransition: patch.linearArchiveTransition ?? false,
+    linearArchiveTransitionStateId: patch.linearArchiveTransitionStateId ?? "",
+    linearArchiveTransitionStateName: patch.linearArchiveTransitionStateName ?? "",
     editorTabEnabled: patch.editorTabEnabled ?? false,
     aiValidationEnabled: patch.aiValidationEnabled ?? false,
     aiValidationAutoApprove: patch.aiValidationAutoApprove ?? true,
@@ -107,6 +113,32 @@ vi.mock("./settings-manager.js", () => ({
     updatedAt: Date.now(),
   })),
 }));
+
+const mockGetLinearIssue = vi.hoisted(() => vi.fn(() => undefined as any));
+vi.mock("./session-linear-issues.js", () => ({
+  getLinearIssue: mockGetLinearIssue,
+  setLinearIssue: vi.fn(),
+  removeLinearIssue: vi.fn(),
+  getAllLinearIssues: vi.fn(() => ({})),
+  _resetForTest: vi.fn(),
+}));
+
+const mockTransitionLinearIssue = vi.hoisted(() => vi.fn(async () => ({ ok: true, issue: { id: "i1", identifier: "ENG-1", stateName: "Backlog", stateType: "backlog" } } as { ok: boolean; error?: string; issue?: { id: string; identifier: string; stateName: string; stateType: string } })));
+const mockFetchLinearTeamStates = vi.hoisted(() => vi.fn(async () => [
+  { id: "team-1", key: "ENG", name: "Engineering", states: [
+    { id: "state-backlog", name: "Backlog", type: "backlog" },
+    { id: "state-inprogress", name: "In Progress", type: "started" },
+    { id: "state-done", name: "Done", type: "completed" },
+  ] },
+]));
+vi.mock("./routes/linear-routes.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./routes/linear-routes.js")>();
+  return {
+    ...actual,
+    transitionLinearIssue: mockTransitionLinearIssue,
+    fetchLinearTeamStates: mockFetchLinearTeamStates,
+  };
+});
 
 vi.mock("./linear-project-manager.js", () => ({
   listMappings: vi.fn(() => []),
@@ -1652,6 +1684,216 @@ describe("POST /api/sessions/:id/archive", () => {
   });
 });
 
+describe("POST /api/sessions/:id/archive — Linear transition", () => {
+  const linkedIssue = {
+    id: "issue-1",
+    identifier: "ENG-42",
+    title: "Test issue",
+    description: "",
+    url: "https://linear.app/eng/issue/ENG-42",
+    branchName: "eng-42",
+    priorityLabel: "High",
+    stateName: "In Progress",
+    stateType: "started",
+    teamName: "Engineering",
+    teamKey: "ENG",
+    teamId: "team-1",
+  };
+
+  it("archives without transition when no linked issue", async () => {
+    mockGetLinearIssue.mockReturnValue(undefined);
+    const res = await app.request("/api/sessions/s1/archive", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ linearTransition: "backlog" }),
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.ok).toBe(true);
+    expect(json.linearTransition).toBeUndefined();
+    expect(mockTransitionLinearIssue).not.toHaveBeenCalled();
+  });
+
+  it("archives without transition when linearTransition is none", async () => {
+    mockGetLinearIssue.mockReturnValue(linkedIssue);
+    const res = await app.request("/api/sessions/s1/archive", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ linearTransition: "none" }),
+    });
+    expect(res.status).toBe(200);
+    expect(mockTransitionLinearIssue).not.toHaveBeenCalled();
+  });
+
+  it("transitions to backlog when linearTransition is backlog", async () => {
+    mockGetLinearIssue.mockReturnValue(linkedIssue);
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
+      linearApiKey: "lin_test_key",
+      linearAutoTransition: false,
+      linearAutoTransitionStateId: "",
+      linearAutoTransitionStateName: "",
+      linearArchiveTransition: false,
+      linearArchiveTransitionStateId: "",
+      linearArchiveTransitionStateName: "",
+      editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
+      updatedAt: 0,
+    });
+    const res = await app.request("/api/sessions/s1/archive", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ linearTransition: "backlog" }),
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.ok).toBe(true);
+    // Should have resolved backlog state from team states
+    expect(mockFetchLinearTeamStates).toHaveBeenCalledWith("lin_test_key");
+    expect(mockTransitionLinearIssue).toHaveBeenCalledWith("issue-1", "state-backlog", "lin_test_key");
+    expect(json.linearTransition).toBeDefined();
+    expect(json.linearTransition.ok).toBe(true);
+    // Session should still be archived
+    expect(launcher.setArchived).toHaveBeenCalledWith("s1", true);
+  });
+
+  it("transitions to configured state when linearTransition is configured", async () => {
+    mockGetLinearIssue.mockReturnValue(linkedIssue);
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
+      linearApiKey: "lin_test_key",
+      linearAutoTransition: false,
+      linearAutoTransitionStateId: "",
+      linearAutoTransitionStateName: "",
+      linearArchiveTransition: true,
+      linearArchiveTransitionStateId: "state-custom",
+      linearArchiveTransitionStateName: "Review",
+      editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
+      updatedAt: 0,
+    });
+    const res = await app.request("/api/sessions/s1/archive", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ linearTransition: "configured" }),
+    });
+    expect(res.status).toBe(200);
+    expect(mockTransitionLinearIssue).toHaveBeenCalledWith("issue-1", "state-custom", "lin_test_key");
+  });
+
+  it("archives successfully even when transition fails", async () => {
+    mockGetLinearIssue.mockReturnValue(linkedIssue);
+    mockTransitionLinearIssue.mockResolvedValue({ ok: false, error: "Linear API error" });
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
+      linearApiKey: "lin_test_key",
+      linearAutoTransition: false,
+      linearAutoTransitionStateId: "",
+      linearAutoTransitionStateName: "",
+      linearArchiveTransition: false,
+      linearArchiveTransitionStateId: "",
+      linearArchiveTransitionStateName: "",
+      editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
+      updatedAt: 0,
+    });
+    const res = await app.request("/api/sessions/s1/archive", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ linearTransition: "backlog" }),
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.ok).toBe(true);
+    expect(json.linearTransition.ok).toBe(false);
+    // Session is still archived
+    expect(launcher.setArchived).toHaveBeenCalledWith("s1", true);
+  });
+});
+
+describe("GET /api/sessions/:id/archive-info", () => {
+  it("returns no linked issue when session has none", async () => {
+    mockGetLinearIssue.mockReturnValue(undefined);
+    const res = await app.request("/api/sessions/s1/archive-info", { method: "GET" });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({ hasLinkedIssue: false, issueNotDone: false });
+  });
+
+  it("returns issueNotDone false for completed issues", async () => {
+    mockGetLinearIssue.mockReturnValue({
+      id: "issue-1",
+      identifier: "ENG-42",
+      title: "Done issue",
+      description: "",
+      url: "",
+      branchName: "",
+      priorityLabel: "",
+      stateName: "Done",
+      stateType: "completed",
+      teamName: "Engineering",
+      teamKey: "ENG",
+      teamId: "team-1",
+    });
+    const res = await app.request("/api/sessions/s1/archive-info", { method: "GET" });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.hasLinkedIssue).toBe(true);
+    expect(json.issueNotDone).toBe(false);
+  });
+
+  it("returns transition options for non-done issues", async () => {
+    mockGetLinearIssue.mockReturnValue({
+      id: "issue-1",
+      identifier: "ENG-42",
+      title: "In progress issue",
+      description: "",
+      url: "",
+      branchName: "",
+      priorityLabel: "",
+      stateName: "In Progress",
+      stateType: "started",
+      teamName: "Engineering",
+      teamKey: "ENG",
+      teamId: "team-1",
+    });
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
+      linearApiKey: "lin_test_key",
+      linearAutoTransition: false,
+      linearAutoTransitionStateId: "",
+      linearAutoTransitionStateName: "",
+      linearArchiveTransition: true,
+      linearArchiveTransitionStateId: "state-custom",
+      linearArchiveTransitionStateName: "Review",
+      editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
+      updatedAt: 0,
+    });
+    const res = await app.request("/api/sessions/s1/archive-info", { method: "GET" });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.hasLinkedIssue).toBe(true);
+    expect(json.issueNotDone).toBe(true);
+    expect(json.hasBacklogState).toBe(true);
+    expect(json.archiveTransitionConfigured).toBe(true);
+    expect(json.archiveTransitionStateName).toBe("Review");
+    expect(json.issue.identifier).toBe("ENG-42");
+  });
+});
+
 describe("POST /api/sessions/:id/unarchive", () => {
   it("unarchives the session", async () => {
     const res = await app.request("/api/sessions/s1/unarchive", { method: "POST" });
@@ -1924,12 +2166,15 @@ describe("POST /api/images/:tag/pull", () => {
 describe("GET /api/settings", () => {
   it("returns settings status without exposing the key", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "or-secret",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "or-secret",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -1942,12 +2187,13 @@ describe("GET /api/settings", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({
-      openrouterApiKeyConfigured: true,
-      openrouterModel: "openrouter/free",
-      aiProvider: "openrouter",
+      anthropicApiKeyConfigured: true,
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -1957,12 +2203,15 @@ describe("GET /api/settings", () => {
 
   it("reports key as not configured when empty", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openai/gpt-4o-mini",
+      anthropicApiKey: "",
+      anthropicModel: "openai/gpt-4o-mini",
       linearApiKey: "lin_api_123",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -1975,12 +2224,13 @@ describe("GET /api/settings", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({
-      openrouterApiKeyConfigured: false,
-      openrouterModel: "openai/gpt-4o-mini",
-      aiProvider: "openrouter",
+      anthropicApiKeyConfigured: false,
+      anthropicModel: "openai/gpt-4o-mini",
       linearApiKeyConfigured: true,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -1992,12 +2242,15 @@ describe("GET /api/settings", () => {
 describe("PUT /api/settings", () => {
   it("updates settings", async () => {
     vi.mocked(settingsManager.updateSettings).mockReturnValue({
-      openrouterApiKey: "new-key",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "new-key",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2008,19 +2261,20 @@ describe("PUT /api/settings", () => {
     const res = await app.request("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ openrouterApiKey: "new-key" }),
+      body: JSON.stringify({ anthropicApiKey: "new-key" }),
     });
 
     expect(res.status).toBe(200);
     expect(settingsManager.updateSettings).toHaveBeenCalledWith({
-      openrouterApiKey: "new-key",
-      openrouterModel: undefined,
-      openaiApiKey: undefined,
-      aiProvider: undefined,
+      anthropicApiKey: "new-key",
+      anthropicModel: undefined,
       linearApiKey: undefined,
       linearAutoTransition: undefined,
       linearAutoTransitionStateId: undefined,
       linearAutoTransitionStateName: undefined,
+      linearArchiveTransition: undefined,
+      linearArchiveTransitionStateId: undefined,
+      linearArchiveTransitionStateName: undefined,
       editorTabEnabled: undefined,
       aiValidationEnabled: undefined,
       aiValidationAutoApprove: undefined,
@@ -2028,12 +2282,13 @@ describe("PUT /api/settings", () => {
     });
     const json = await res.json();
     expect(json).toEqual({
-      openrouterApiKeyConfigured: true,
-      openrouterModel: "openrouter/free",
-      aiProvider: "openrouter",
+      anthropicApiKeyConfigured: true,
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2043,12 +2298,15 @@ describe("PUT /api/settings", () => {
 
   it("trims key and falls back to default model for blank value", async () => {
     vi.mocked(settingsManager.updateSettings).mockReturnValue({
-      openrouterApiKey: "trimmed-key",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "trimmed-key",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "lin_api_trimmed",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2059,13 +2317,13 @@ describe("PUT /api/settings", () => {
     const res = await app.request("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ openrouterApiKey: "  trimmed-key  ", openrouterModel: "   ", linearApiKey: "  lin_api_trimmed  " }),
+      body: JSON.stringify({ anthropicApiKey: "  trimmed-key  ", anthropicModel: "   ", linearApiKey: "  lin_api_trimmed  " }),
     });
 
     expect(res.status).toBe(200);
     expect(settingsManager.updateSettings).toHaveBeenCalledWith({
-      openrouterApiKey: "trimmed-key",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "trimmed-key",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "lin_api_trimmed",
       linearAutoTransition: undefined,
       linearAutoTransitionStateId: undefined,
@@ -2076,12 +2334,15 @@ describe("PUT /api/settings", () => {
 
   it("updates only model without overriding key", async () => {
     vi.mocked(settingsManager.updateSettings).mockReturnValue({
-      openrouterApiKey: "existing-key",
-      openrouterModel: "openai/gpt-4o-mini",
+      anthropicApiKey: "existing-key",
+      anthropicModel: "openai/gpt-4o-mini",
       linearApiKey: "lin_api_existing",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2092,13 +2353,13 @@ describe("PUT /api/settings", () => {
     const res = await app.request("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ openrouterModel: "openai/gpt-4o-mini" }),
+      body: JSON.stringify({ anthropicModel: "openai/gpt-4o-mini" }),
     });
 
     expect(res.status).toBe(200);
     expect(settingsManager.updateSettings).toHaveBeenCalledWith({
-      openrouterApiKey: undefined,
-      openrouterModel: "openai/gpt-4o-mini",
+      anthropicApiKey: undefined,
+      anthropicModel: "openai/gpt-4o-mini",
       linearApiKey: undefined,
       linearAutoTransition: undefined,
       linearAutoTransitionStateId: undefined,
@@ -2123,24 +2384,24 @@ describe("PUT /api/settings", () => {
     const res = await app.request("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ openrouterApiKey: "new-key", openrouterModel: 123 }),
+      body: JSON.stringify({ anthropicApiKey: "new-key", anthropicModel: 123 }),
     });
 
     expect(res.status).toBe(400);
     const json = await res.json();
-    expect(json).toEqual({ error: "openrouterModel must be a string" });
+    expect(json).toEqual({ error: "anthropicModel must be a string" });
   });
 
   it("returns 400 for non-string key", async () => {
     const res = await app.request("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ openrouterApiKey: 123 }),
+      body: JSON.stringify({ anthropicApiKey: 123 }),
     });
 
     expect(res.status).toBe(400);
     const json = await res.json();
-    expect(json).toEqual({ error: "openrouterApiKey must be a string" });
+    expect(json).toEqual({ error: "anthropicApiKey must be a string" });
   });
 
   it("returns 400 for non-boolean editor tab setting", async () => {
@@ -2168,6 +2429,92 @@ describe("PUT /api/settings", () => {
   });
 });
 
+describe("POST /api/settings/anthropic/verify", () => {
+  it("returns 400 when no apiKey provided", async () => {
+    // Verifies the endpoint rejects requests that omit the apiKey field
+    const res = await app.request("/api/settings/anthropic/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json).toEqual({ valid: false, error: "API key is required" });
+  });
+
+  it("returns valid:true when fetch succeeds", async () => {
+    // Verifies successful Anthropic API key validation when the upstream API responds ok
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await app.request("/api/settings/anthropic/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey: "sk-ant-valid-key" }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({ valid: true });
+
+    // Verify the correct Anthropic API endpoint and headers were used
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.anthropic.com/v1/models",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "x-api-key": "sk-ant-valid-key",
+          "anthropic-version": "2023-06-01",
+        }),
+      }),
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it("returns valid:false with error when fetch returns non-ok", async () => {
+    // Verifies the endpoint correctly reports invalid keys when the Anthropic API rejects them
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await app.request("/api/settings/anthropic/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey: "sk-ant-invalid-key" }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({ valid: false, error: "API returned 401" });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("returns valid:false when fetch throws", async () => {
+    // Verifies graceful error handling when the network request itself fails
+    const fetchMock = vi.fn().mockRejectedValue(new Error("Network error"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await app.request("/api/settings/anthropic/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey: "sk-ant-some-key" }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({ valid: false, error: "Request failed" });
+
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("GET /api/linear/issues", () => {
   it("returns empty list when query is blank", async () => {
     const res = await app.request("/api/linear/issues?query=   ", { method: "GET" });
@@ -2178,12 +2525,15 @@ describe("GET /api/linear/issues", () => {
 
   it("returns 400 when linear key is not configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2199,12 +2549,15 @@ describe("GET /api/linear/issues", () => {
 
   it("proxies Linear issue search results with branchName", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "lin_api_123",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2274,12 +2627,15 @@ describe("GET /api/linear/issues", () => {
     // The home page issue picker should hide done/cancelled work and show backlog-like
     // items before currently started ones.
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "lin_api_123",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2356,12 +2712,15 @@ describe("GET /api/linear/issues", () => {
     // Verifies fallback: when branchName is null/missing from Linear API,
     // the response maps it to an empty string so the frontend can generate a slug
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "lin_api_123",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2403,12 +2762,15 @@ describe("GET /api/linear/issues", () => {
 describe("GET /api/linear/connection", () => {
   it("returns 400 when linear key is not configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2424,12 +2786,15 @@ describe("GET /api/linear/connection", () => {
 
   it("returns viewer/team info when connection works", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "lin_api_123",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2468,12 +2833,15 @@ describe("POST /api/linear/issues/:id/transition", () => {
   // Skips when auto-transition is disabled in settings
   it("skips when auto-transition is disabled", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "lin_api_123",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "state-123",
       linearAutoTransitionStateName: "In Progress",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2494,12 +2862,15 @@ describe("POST /api/linear/issues/:id/transition", () => {
   // Skips when no target state is configured
   it("skips when no target state is configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "lin_api_123",
       linearAutoTransition: true,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2519,12 +2890,15 @@ describe("POST /api/linear/issues/:id/transition", () => {
 
   it("returns 400 when linear key is not configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "",
       linearAutoTransition: true,
       linearAutoTransitionStateId: "state-123",
       linearAutoTransitionStateName: "In Progress",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2545,12 +2919,15 @@ describe("POST /api/linear/issues/:id/transition", () => {
   // Happy path: uses configured stateId to update the issue directly
   it("transitions issue to configured state", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "lin_api_123",
       linearAutoTransition: true,
       linearAutoTransitionStateId: "state-doing",
       linearAutoTransitionStateName: "Doing",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2606,12 +2983,15 @@ describe("POST /api/linear/issues/:id/transition", () => {
   // Error case: Linear API returns an error when updating issue state
   it("returns 502 when issue update fails", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "lin_api_123",
       linearAutoTransition: true,
       linearAutoTransitionStateId: "state-doing",
       linearAutoTransitionStateName: "Doing",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2646,12 +3026,15 @@ describe("POST /api/linear/issues/:id/transition", () => {
 describe("GET /api/linear/projects", () => {
   it("returns 400 when linear key is not configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2667,12 +3050,15 @@ describe("GET /api/linear/projects", () => {
 
   it("returns project list from Linear API", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "lin_api_123",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2719,12 +3105,15 @@ describe("GET /api/linear/project-issues", () => {
 
   it("returns 400 when linear key is not configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2740,12 +3129,15 @@ describe("GET /api/linear/project-issues", () => {
 
   it("returns recent non-done issues for a project", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "lin_api_123",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
@@ -2807,12 +3199,15 @@ describe("GET /api/linear/project-issues", () => {
   it("orders project issues backlog-like first, then in-progress", async () => {
     // UI issue lists should present queued/backlog work first, followed by started work.
     vi.mocked(settingsManager.getSettings).mockReturnValue({
-      openrouterApiKey: "",
-      openrouterModel: "openrouter/free",
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKey: "lin_api_123",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
       linearAutoTransitionStateName: "",
+    linearArchiveTransition: false,
+    linearArchiveTransitionStateId: "",
+    linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,

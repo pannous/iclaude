@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.66.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.65.0...the-companion-v0.66.0) (2026-02-28)
+
+
+### Features
+
+* **web:** prompt to transition Linear issue status on session archive ([#441](https://github.com/The-Vibe-Company/companion/issues/441)) ([e8ed5bd](https://github.com/The-Vibe-Company/companion/commit/e8ed5bd4a3b30f20dcd7e10d64f834752bed8b37))
+
+## [0.65.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.64.3...the-companion-v0.65.0) (2026-02-27)
+
+
+### Features
+
+* **web:** replace OpenRouter by Anthropic for AI features ([#439](https://github.com/The-Vibe-Company/companion/issues/439)) ([40d794c](https://github.com/The-Vibe-Company/companion/commit/40d794c24f90cd31628a362c960ad135877326e9))
+
+## [0.64.3](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.64.2...the-companion-v0.64.3) (2026-02-27)
+
+
+### Bug Fixes
+
+* **web:** send full Linear ticket description in session prompt ([#435](https://github.com/The-Vibe-Company/companion/issues/435)) ([bd9745a](https://github.com/The-Vibe-Company/companion/commit/bd9745a81b43fccb843a32d9a842e6c04e7fb8b5))
+
 ## [0.64.2](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.64.1...the-companion-v0.64.2) (2026-02-27)
 
 

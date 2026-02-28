@@ -91,20 +91,21 @@ function ConfigItemRow({
         {sublabel && (
           <span className="text-[10px] text-cc-muted shrink-0">{sublabel}</span>
         )}
-        <svg
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          className="w-3 h-3 text-cc-muted shrink-0"
-        >
-          <path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); onClick(); }}
+        className={`shrink-0 h-7 ${onExecute ? "pl-2 pr-1" : "px-2 mr-2"} flex items-center justify-center rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer`}
+        aria-label={`Edit ${label}`}
+        title={`Edit ${label}`}
+      >
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3">
+          <path d="M11 2.5l2.5 2.5-7.5 7.5H3.5V10L11 2.5z" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
       {onExecute && (
         <button
           onClick={(e) => { e.stopPropagation(); onExecute(); }}
-          className="shrink-0 w-7 h-7 mr-2 flex items-center justify-center rounded-md text-cc-muted hover:text-cc-primary hover:bg-cc-primary/10 transition-colors cursor-pointer"
+          className="shrink-0 h-7 pl-1 pr-2 mr-2 flex items-center justify-center rounded-md text-cc-muted hover:text-cc-primary hover:bg-cc-primary/10 transition-colors cursor-pointer"
           aria-label={`Run ${label}`}
           title={`Run ${label}`}
         >

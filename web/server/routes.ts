@@ -33,8 +33,9 @@ import { registerPromptRoutes } from "./routes/prompt-routes.js";
 import { registerSettingsRoutes } from "./routes/settings-routes.js";
 import { registerGitRoutes } from "./routes/git-routes.js";
 import { registerSystemRoutes } from "./routes/system-routes.js";
-import { registerLinearRoutes } from "./routes/linear-routes.js";
+import { registerLinearRoutes, transitionLinearIssue, fetchLinearTeamStates } from "./routes/linear-routes.js";
 import { registerCompleteRoutes } from "./routes/complete-routes.js";
+import { getSettings } from "./settings-manager.js";
 import { discoverClaudeSessions } from "./claude-session-discovery.js";
 import { getClaudeSessionHistoryPage } from "./claude-session-history.js";
 import { verifyToken, getToken, getLanAddress, regenerateToken, getAllAddresses, isAuthEnabled } from "./auth-manager.js";
@@ -1524,9 +1525,101 @@ export function createRoutes(
     return c.json({ ok: true, worktree: worktreeResult });
   });
 
+  api.get("/sessions/:id/archive-info", async (c) => {
+    const id = c.req.param("id");
+    const linkedIssue = sessionLinearIssues.getLinearIssue(id);
+
+    if (!linkedIssue) {
+      return c.json({ hasLinkedIssue: false, issueNotDone: false });
+    }
+
+    const stateType = (linkedIssue.stateType || "").toLowerCase();
+    const isDone = stateType === "completed" || stateType === "canceled" || stateType === "cancelled";
+
+    if (isDone) {
+      return c.json({
+        hasLinkedIssue: true,
+        issueNotDone: false,
+        issue: {
+          id: linkedIssue.id,
+          identifier: linkedIssue.identifier,
+          stateName: linkedIssue.stateName,
+          stateType: linkedIssue.stateType,
+          teamId: linkedIssue.teamId,
+        },
+      });
+    }
+
+    // Issue is not done — check if backlog state is available and if archive transition is configured
+    const settings = getSettings();
+    const linearApiKey = settings.linearApiKey.trim();
+    let hasBacklogState = false;
+    if (linearApiKey && linkedIssue.teamId) {
+      const teams = await fetchLinearTeamStates(linearApiKey);
+      const team = teams.find((t) => t.id === linkedIssue.teamId);
+      if (team) {
+        hasBacklogState = team.states.some((s) => s.type === "backlog");
+      }
+    }
+
+    return c.json({
+      hasLinkedIssue: true,
+      issueNotDone: true,
+      issue: {
+        id: linkedIssue.id,
+        identifier: linkedIssue.identifier,
+        stateName: linkedIssue.stateName,
+        stateType: linkedIssue.stateType,
+        teamId: linkedIssue.teamId,
+      },
+      hasBacklogState,
+      archiveTransitionConfigured: settings.linearArchiveTransition && !!settings.linearArchiveTransitionStateId.trim(),
+      archiveTransitionStateName: settings.linearArchiveTransitionStateName || undefined,
+    });
+  });
+
   api.post("/sessions/:id/archive", async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json().catch(() => ({}));
+
+    // ─── Best-effort Linear transition before archive ─────────────────
+    let linearTransitionResult: { ok: boolean; skipped?: boolean; error?: string; issue?: { id: string; identifier: string; stateName: string; stateType: string } } | undefined;
+    const linearTransition = body.linearTransition as string | undefined;
+
+    if (linearTransition && linearTransition !== "none") {
+      const linkedIssue = sessionLinearIssues.getLinearIssue(id);
+      if (linkedIssue) {
+        const settings = getSettings();
+        const linearApiKey = settings.linearApiKey.trim();
+        if (linearApiKey) {
+          let targetStateId = "";
+
+          if (linearTransition === "backlog" && linkedIssue.teamId) {
+            // Resolve backlog state for the issue's team
+            const teams = await fetchLinearTeamStates(linearApiKey);
+            const team = teams.find((t) => t.id === linkedIssue.teamId);
+            const backlogState = team?.states.find((s) => s.type === "backlog");
+            if (backlogState) {
+              targetStateId = backlogState.id;
+            }
+          } else if (linearTransition === "configured") {
+            targetStateId = settings.linearArchiveTransitionStateId.trim();
+          }
+
+          if (targetStateId) {
+            try {
+              linearTransitionResult = await transitionLinearIssue(linkedIssue.id, targetStateId, linearApiKey);
+            } catch {
+              linearTransitionResult = { ok: false, error: "Transition failed unexpectedly" };
+            }
+          } else {
+            linearTransitionResult = { ok: true, skipped: true };
+          }
+        }
+      }
+    }
+
+    // ─── Existing archive logic ───────────────────────────────────────
     await launcher.kill(id);
 
     containerManager.removeContainer(id);
@@ -1538,7 +1631,7 @@ export function createRoutes(
     sessionStore.setArchived(id, true);
     // Notify browser clients so they disconnect immediately rather than reconnecting
     wsBridge.broadcastToSession(id, { type: "session_archived" });
-    return c.json({ ok: true, worktree: worktreeResult });
+    return c.json({ ok: true, worktree: worktreeResult, linearTransition: linearTransitionResult });
   });
 
   api.post("/sessions/:id/unarchive", (c) => {
