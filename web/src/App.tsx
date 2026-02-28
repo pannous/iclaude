@@ -76,6 +76,7 @@ export default function App() {
   const currentSessionId = useStore((s) => s.currentSessionId);
   const sidebarOpen = useStore((s) => s.sidebarOpen);
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
+  const focusedFolder = useStore((s) => s.focusedFolder);
   const homeResetKey = useStore((s) => s.homeResetKey);
   const activeTab = useStore((s) => s.activeTab);
   const [showArchiveAllConfirm, setShowArchiveAllConfirm] = useState(false);
@@ -431,7 +432,8 @@ export default function App() {
       </div>
 
       {/* Task panel — overlay on mobile, inline on desktop */}
-      {currentSessionId && isSessionView && (
+      {/* Show when viewing a session, or when a folder is focused (home page) */}
+      {(currentSessionId || focusedFolder) && isSessionView && (
         <>
           {!taskPanelOpen && (
             <button

@@ -1076,9 +1076,10 @@ function TaskPanelConfigView({ isCodex }: { isCodex: boolean }) {
 
 export { CodexRateLimitsSection, CodexTokenDetailsSection };
 
-export function TaskPanel({ sessionId }: { sessionId: string }) {
-  const session = useStore((s) => s.sessions.get(sessionId));
-  const sdk = useStore((s) => s.sdkSessions.find((x) => x.sessionId === sessionId));
+export function TaskPanel({ sessionId }: { sessionId: string | null }) {
+  const focusedFolder = useStore((s) => s.focusedFolder);
+  const session = useStore((s) => (sessionId ? s.sessions.get(sessionId) : undefined));
+  const sdk = useStore((s) => (sessionId ? s.sdkSessions.find((x) => x.sessionId === sessionId) : undefined));
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
   const setTaskPanelOpen = useStore((s) => s.setTaskPanelOpen);
   const configMode = useStore((s) => s.taskPanelConfigMode);
@@ -1132,18 +1133,30 @@ export function TaskPanel({ sessionId }: { sessionId: string }) {
       ) : (
         <>
           <div data-testid="task-panel-content" className="min-h-0 flex-1 overflow-y-auto">
-            {applicableSections
-              .filter((id) => config.enabled[id] !== false)
-              .map((sectionId) => {
-                const Component = SECTION_COMPONENTS[sectionId];
-                if (!Component) return null;
-                const label = SECTION_DEFINITIONS.find((d) => d.id === sectionId)?.label;
-                return (
-                  <SectionErrorBoundary key={sectionId} label={label}>
-                    <Component sessionId={sessionId} />
-                  </SectionErrorBoundary>
-                );
-              })}
+            {!sessionId ? (
+              /* Folder-level view: no session selected */
+              <div className="px-4 py-6 flex flex-col items-start gap-2">
+                {focusedFolder && (
+                  <span className="text-[11px] text-cc-muted font-mono truncate max-w-full" title={focusedFolder}>
+                    {focusedFolder.split("/").pop() || focusedFolder}
+                  </span>
+                )}
+                <span className="text-[12px] text-cc-muted/70">Select a session to see context.</span>
+              </div>
+            ) : (
+              applicableSections
+                .filter((id) => config.enabled[id] !== false)
+                .map((sectionId) => {
+                  const Component = SECTION_COMPONENTS[sectionId];
+                  if (!Component) return null;
+                  const label = SECTION_DEFINITIONS.find((d) => d.id === sectionId)?.label;
+                  return (
+                    <SectionErrorBoundary key={sectionId} label={label}>
+                      <Component sessionId={sessionId} />
+                    </SectionErrorBoundary>
+                  );
+                })
+            )}
           </div>
 
           {/* Settings button at bottom */}

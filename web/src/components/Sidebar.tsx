@@ -555,6 +555,7 @@ export function Sidebar() {
 
   function handleFolderClick(cwd: string) {
     useStore.getState().setFocusedFolder(cwd);
+    useStore.getState().setTaskPanelOpen(true);
   }
 
   function handleNewSessionInFolder(cwd: string) {
