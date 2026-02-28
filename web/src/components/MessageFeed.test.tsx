@@ -41,8 +41,11 @@ vi.mock("../store.js", () => {
     chatTabReentryTickBySession: mockStoreValues.chatTabReentryTickBySession ?? new Map(),
     sdkSessions: mockStoreValues.sdkSessions ?? [],
     queuedMessageIds: mockStoreValues.queuedMessageIds ?? new Map(),
+    archivedSubagentSessions: mockStoreValues.archivedSubagentSessions ?? new Set(),
     unmarkMessageQueued: vi.fn(),
     setMessages: vi.fn(),
+    archiveSubagents: vi.fn(),
+    unarchiveSubagents: vi.fn(),
   });
   const useStore = (selector?: (state: ReturnType<typeof storeGetState>) => unknown) => {
     const state = storeGetState();
@@ -723,5 +726,83 @@ describe("MessageFeed - subagent grouping", () => {
     expect(screen.getByText("receivers: 2")).toBeTruthy();
     expect(screen.getByText("thr_sub_1")).toBeTruthy();
     expect(screen.getByText("thr_sub_2")).toBeTruthy();
+  });
+});
+
+// ─── Subagent archive functionality ──────────────────────────────────────────
+
+describe("MessageFeed - subagent archive", () => {
+  function makeSubagentMessages(sid: string) {
+    return [
+      makeMessage({
+        id: "a1",
+        role: "assistant",
+        content: "",
+        contentBlocks: [
+          {
+            type: "tool_use",
+            id: "task-arc-1",
+            name: "Task",
+            input: { description: "Run linter", subagent_type: "general-purpose" },
+          },
+        ],
+      }),
+      makeMessage({
+        id: "child-1",
+        role: "assistant",
+        content: "Linting done",
+        parentToolUseId: "task-arc-1",
+      }),
+      makeMessage({
+        id: "a2",
+        role: "assistant",
+        content: "",
+        contentBlocks: [
+          {
+            type: "tool_use",
+            id: "task-arc-2",
+            name: "Task",
+            input: { description: "Run tests", subagent_type: "general-purpose" },
+          },
+        ],
+      }),
+      makeMessage({
+        id: "child-2",
+        role: "assistant",
+        content: "Tests passed",
+        parentToolUseId: "task-arc-2",
+      }),
+    ];
+  }
+
+  it("shows archive button on hover for each subagent group", () => {
+    // The archive button is rendered in the DOM even when opacity-0 (hidden via CSS hover group)
+    const sid = "test-arc-button";
+    setStoreMessages(sid, makeSubagentMessages(sid));
+
+    render(<MessageFeed sessionId={sid} />);
+
+    const archiveButtons = screen.getAllByTitle("Archive all agent runs");
+    expect(archiveButtons.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("replaces subagent groups with archived pill when session is archived", () => {
+    // When archivedSubagentSessions contains the session, all SubagentContainers are replaced
+    // with a single "N agent runs archived · Show" pill.
+    const sid = "test-arc-pill";
+    setStoreMessages(sid, makeSubagentMessages(sid));
+    const archived = new Set<string>([sid]);
+    mockStoreValues.archivedSubagentSessions = archived;
+
+    render(<MessageFeed sessionId={sid} />);
+
+    // The pill should appear instead of the individual runs
+    expect(screen.getByText(/agent runs archived · Show/i)).toBeTruthy();
+    // Individual subagent descriptions should be hidden
+    expect(screen.queryByText("Run linter")).toBeNull();
+    expect(screen.queryByText("Run tests")).toBeNull();
+
+    // Reset
+    mockStoreValues.archivedSubagentSessions = new Set();
   });
 });

@@ -339,7 +339,52 @@ function ToolMessageGroup({ group }: { group: ToolMsgGroup }) {
   );
 }
 
-function FeedEntries({ entries }: { entries: FeedEntry[] }) {
+function ArchivedSubagentsPill({ count, onUnarchive }: { count: number; onUnarchive: () => void }) {
+  return (
+    <div className="ml-10 pl-4 py-1">
+      <button
+        onClick={onUnarchive}
+        className="flex items-center gap-1.5 text-[10px] text-cc-muted hover:text-cc-fg bg-cc-hover hover:bg-cc-border rounded-full px-2.5 py-1 transition-colors cursor-pointer"
+      >
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3 shrink-0">
+          <path d="M2 4.5h12M3 4.5l1 8.5h8l1-8.5M6 4.5V3h4v1.5M6 7.5v3M10 7.5v3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        {count} agent run{count !== 1 ? "s" : ""} archived · Show
+      </button>
+    </div>
+  );
+}
+
+function FeedEntries({ entries, isNested = false }: { entries: FeedEntry[]; isNested?: boolean }) {
+  const sessionId = useContext(FeedSessionIdContext);
+  const subagentsArchived = useStore((s) => !isNested && s.archivedSubagentSessions.has(sessionId));
+
+  if (subagentsArchived) {
+    const subagentCount = entries.filter((e) => e.kind === "subagent").length;
+    let pillShown = false;
+    return (
+      <>
+        {entries.map((entry, i) => {
+          if (entry.kind === "subagent") {
+            if (pillShown) return null;
+            pillShown = true;
+            return (
+              <ArchivedSubagentsPill
+                key="archived-subagents-pill"
+                count={subagentCount}
+                onUnarchive={() => useStore.getState().unarchiveSubagents(sessionId)}
+              />
+            );
+          }
+          if (entry.kind === "tool_msg_group") {
+            return <ToolMessageGroup key={`tool:${entry.firstId}:${i}`} group={entry} />;
+          }
+          return <MessageBubble key={`message:${entry.msg.id}:${i}`} message={entry.msg} />;
+        })}
+      </>
+    );
+  }
+
   return (
     <>
       {entries.map((entry, i) => {
@@ -540,6 +585,7 @@ function normalizeSubagentStatus(status?: string): {
 function SubagentContainer({ group }: { group: SubagentGroup }) {
   const [open, setOpen] = useState(false);
   const [showAllActivity, setShowAllActivity] = useState(false);
+  const sessionId = useContext(FeedSessionIdContext);
   const label = group.description || "Subagent";
   const agentType = group.agentType;
   const childCount = group.children.length;
@@ -560,7 +606,7 @@ function SubagentContainer({ group }: { group: SubagentGroup }) {
       <div className="ml-10 border-l-2 border-cc-primary/20 pl-4">
         <button
           onClick={() => setOpen(!open)}
-          className="w-full flex items-center gap-2 py-1.5 text-left cursor-pointer mb-1"
+          className="group w-full flex items-center gap-2 py-1.5 text-left cursor-pointer mb-1"
         >
           <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 text-cc-muted transition-transform shrink-0 ${open ? "rotate-90" : ""}`}>
             <path d="M6 4l4 4-4 4" />
@@ -596,6 +642,15 @@ function SubagentContainer({ group }: { group: SubagentGroup }) {
           <span className="text-[10px] text-cc-muted bg-cc-hover rounded-full px-1.5 py-0.5 tabular-nums shrink-0 ml-auto">
             {childCount}
           </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); useStore.getState().archiveSubagents(sessionId); }}
+            title="Archive all agent runs"
+            className="shrink-0 w-5 h-5 flex items-center justify-center rounded text-cc-muted opacity-0 group-hover:opacity-100 hover:text-cc-fg hover:bg-cc-hover transition-all"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3">
+              <path d="M2 4h12v1.5H2zM3 5.5l1 8h8l1-8M6 5.5V4a1 1 0 011-1h2a1 1 0 011 1v1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
         </button>
 
         {/* Compact tool activity log (visible when collapsed) */}
@@ -650,7 +705,7 @@ function SubagentContainer({ group }: { group: SubagentGroup }) {
                 )}
               </div>
             )}
-            <FeedEntries entries={group.children} />
+            <FeedEntries entries={group.children} isNested />
           </div>
         )}
       </div>

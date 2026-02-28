@@ -114,6 +114,7 @@ interface AppState {
   fragmentState: Map<string, Record<string, unknown>>;
   fragmentConsole: Map<string, ConsoleLogEntry[]>;
   collapsedProjects: Set<string>;
+  archivedSubagentSessions: Set<string>;
   diffPanelSelectedFile: Map<string, string>;
   /** Last folder path clicked in the sidebar — panels can react to this */
   focusedFolder: string | null;
@@ -218,6 +219,8 @@ interface AppState {
   appendConsoleLog: (fragmentId: string, entry: ConsoleLogEntry) => void;
   toggleProjectCollapse: (projectKey: string) => void;
   setAllProjectsCollapsed: (projectKeys: string[], collapsed: boolean) => void;
+  archiveSubagents: (sessionId: string) => void;
+  unarchiveSubagents: (sessionId: string) => void;
   setPreviousPermissionMode: (sessionId: string, mode: string) => void;
   setConnectionStatus: (sessionId: string, status: "connecting" | "connected" | "disconnected") => void;
   setCliConnected: (sessionId: string, connected: boolean) => void;
@@ -343,6 +346,7 @@ export const useStore = create<AppState>((set) => ({
   fragmentState: new Map(),
   fragmentConsole: new Map(),
   collapsedProjects: initParsed("cc-collapsed-projects", (r) => new Set(JSON.parse(r) as string[]), new Set<string>()),
+  archivedSubagentSessions: new Set<string>(),
   creationProgress: null,
   creationError: null,
   sessionCreating: false,
@@ -785,6 +789,12 @@ export const useStore = create<AppState>((set) => ({
       safeStorage.setItem("cc-collapsed-projects", JSON.stringify(Array.from(collapsedProjects)));
       return { collapsedProjects };
     }),
+
+  archiveSubagents: (sessionId) =>
+    set((s) => ({ archivedSubagentSessions: addToSet(s.archivedSubagentSessions, sessionId) })),
+
+  unarchiveSubagents: (sessionId) =>
+    set((s) => ({ archivedSubagentSessions: deleteFromSet(s.archivedSubagentSessions, sessionId) })),
 
   setPreviousPermissionMode: (sessionId, mode) =>
     set((s) => ({ previousPermissionMode: setInMap(s.previousPermissionMode, sessionId, mode) })),
