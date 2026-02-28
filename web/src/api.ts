@@ -264,16 +264,34 @@ export interface EditorStartResult {
 }
 
 export interface AppSettings {
-  openrouterApiKeyConfigured: boolean;
-  openrouterModel: string;
-  aiProvider: "openrouter" | "claude";
+  anthropicApiKeyConfigured: boolean;
+  anthropicModel: string;
   linearApiKeyConfigured: boolean;
   linearAutoTransition: boolean;
   linearAutoTransitionStateName: string;
+  linearArchiveTransition: boolean;
+  linearArchiveTransitionStateName: string;
   editorTabEnabled: boolean;
   aiValidationEnabled: boolean;
   aiValidationAutoApprove: boolean;
   aiValidationAutoDeny: boolean;
+  // LOCAL: aiProvider toggles between openrouter and direct claude API
+  aiProvider?: "openrouter" | "claude";
+}
+
+export interface ArchiveInfo {
+  hasLinkedIssue: boolean;
+  issueNotDone: boolean;
+  issue?: {
+    id: string;
+    identifier: string;
+    stateName: string;
+    stateType: string;
+    teamId: string;
+  };
+  hasBacklogState?: boolean;
+  archiveTransitionConfigured?: boolean;
+  archiveTransitionStateName?: string;
 }
 
 export interface LinearWorkflowState {
@@ -688,8 +706,11 @@ export const api = {
   relaunchSession: (sessionId: string) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/relaunch`),
 
-  archiveSession: (sessionId: string, opts?: { force?: boolean }) =>
+  archiveSession: (sessionId: string, opts?: { force?: boolean; linearTransition?: "none" | "backlog" | "configured" }) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/archive`, opts),
+
+  getArchiveInfo: (sessionId: string) =>
+    get<ArchiveInfo>(`/sessions/${encodeURIComponent(sessionId)}/archive-info`),
 
   unarchiveSession: (sessionId: string) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/unarchive`),
@@ -768,18 +789,24 @@ export const api = {
   // Settings
   getSettings: () => get<AppSettings>("/settings"),
   updateSettings: (data: {
-    openrouterApiKey?: string;
-    openrouterModel?: string;
-    aiProvider?: "openrouter" | "claude";
+    anthropicApiKey?: string;
+    anthropicModel?: string;
     linearApiKey?: string;
     linearAutoTransition?: boolean;
     linearAutoTransitionStateId?: string;
     linearAutoTransitionStateName?: string;
+    linearArchiveTransition?: boolean;
+    linearArchiveTransitionStateId?: string;
+    linearArchiveTransitionStateName?: string;
     editorTabEnabled?: boolean;
     aiValidationEnabled?: boolean;
     aiValidationAutoApprove?: boolean;
     aiValidationAutoDeny?: boolean;
+    // LOCAL: aiProvider toggles between openrouter and direct claude API
+    aiProvider?: "openrouter" | "claude";
   }) => put<AppSettings>("/settings", data),
+  verifyAnthropicKey: (apiKey: string) =>
+    post<{ valid: boolean; error?: string }>("/settings/anthropic/verify", { apiKey }),
   searchLinearIssues: (query: string, limit = 8) =>
     get<{ issues: LinearIssue[] }>(
       `/linear/issues?query=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}`,

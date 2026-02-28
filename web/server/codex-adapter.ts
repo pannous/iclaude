@@ -108,6 +108,16 @@ interface CodexContextCompactionItem extends CodexItem {
   type: "contextCompaction";
 }
 
+interface CodexCollabAgentToolCallItem extends CodexItem {
+  type: "collabAgentToolCall";
+  tool: string;
+  status: "inProgress" | "completed" | "failed";
+  senderThreadId?: string;
+  receiverThreadIds?: string[];
+  prompt?: string | null;
+  agentsStates?: Record<string, unknown>;
+}
+
 interface PlanTodo {
   content: string;
   status: "pending" | "in_progress" | "completed";
@@ -376,6 +386,8 @@ export class CodexAdapter {
   // When Codex auto-approves (approvalPolicy "never"), it may skip item/started
   // and only send item/completed — we need to emit tool_use before tool_result.
   private emittedToolUseIds = new Set<string>();
+  // Receiver subagent thread ID -> parent collab tool_use ID.
+  private parentToolUseByThreadId = new Map<string, string>();
 
   // Queue messages received before initialization completes
   private pendingOutgoing: BrowserOutgoingMessage[] = [];
@@ -1600,6 +1612,8 @@ export class CodexAdapter {
   private handleItemStarted(params: Record<string, unknown>): void {
     const item = params.item as CodexItem;
     if (!item) return;
+    const threadId = typeof params.threadId === "string" ? params.threadId : undefined;
+    const parentToolUseId = this.getParentToolUseIdForThread(threadId);
 
     switch (item.type) {
       case "agentMessage":
@@ -1621,7 +1635,7 @@ export class CodexAdapter {
               usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
             },
           },
-          parent_tool_use_id: null,
+          parent_tool_use_id: parentToolUseId,
         });
         // Also emit content_block_start
         this.emit({
@@ -1631,7 +1645,7 @@ export class CodexAdapter {
             index: 0,
             content_block: { type: "text", text: "" },
           },
-          parent_tool_use_id: null,
+          parent_tool_use_id: parentToolUseId,
         });
         break;
 
@@ -1689,6 +1703,29 @@ export class CodexAdapter {
       case "contextCompaction":
         this.emit({ type: "status_change", status: "compacting" });
         break;
+
+      case "collabAgentToolCall": {
+        const collab = item as CodexCollabAgentToolCallItem;
+        const receiverThreadIds = Array.isArray(collab.receiverThreadIds)
+          ? collab.receiverThreadIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+          : [];
+        const prompt = typeof collab.prompt === "string" ? collab.prompt.trim() : "";
+        const description = prompt
+          || `${collab.tool || "agent"} (${receiverThreadIds.length || 1} agent${(receiverThreadIds.length || 1) === 1 ? "" : "s"})`;
+        this.emitToolUseStart(item.id, "Task", {
+          description,
+          subagent_type: collab.tool || "codex-collab",
+          codex_status: collab.status,
+          sender_thread_id: collab.senderThreadId || null,
+          receiver_thread_ids: receiverThreadIds,
+        }, parentToolUseId);
+        this.setSubagentThreadMappings(item.id, collab);
+        this.emitAssistantText(
+          `Started ${collab.tool || "collab"} for ${receiverThreadIds.length || 1} agent${(receiverThreadIds.length || 1) === 1 ? "" : "s"}.`,
+          item.id,
+        );
+        break;
+      }
 
       default:
         console.log(`[codex-adapter] Unhandled item/started type: ${item.type}`, JSON.stringify(item));
@@ -1869,6 +1906,8 @@ export class CodexAdapter {
   private handleAgentMessageDelta(params: Record<string, unknown>): void {
     const delta = params.delta as string;
     if (!delta) return;
+    const threadId = typeof params.threadId === "string" ? params.threadId : undefined;
+    const parentToolUseId = this.getParentToolUseIdForThread(threadId);
 
     this.streamingText += delta;
 
@@ -1880,7 +1919,7 @@ export class CodexAdapter {
         index: 0,
         delta: { type: "text_delta", text: delta },
       },
-      parent_tool_use_id: null,
+      parent_tool_use_id: parentToolUseId,
     });
   }
 
@@ -1892,6 +1931,8 @@ export class CodexAdapter {
   private handleItemCompleted(params: Record<string, unknown>): void {
     const item = params.item as CodexItem;
     if (!item) return;
+    const threadId = typeof params.threadId === "string" ? params.threadId : undefined;
+    const parentToolUseId = this.getParentToolUseIdForThread(threadId);
 
     switch (item.type) {
       case "agentMessage": {
@@ -1905,7 +1946,7 @@ export class CodexAdapter {
             type: "content_block_stop",
             index: 0,
           },
-          parent_tool_use_id: null,
+          parent_tool_use_id: parentToolUseId,
         });
         this.emit({
           type: "stream_event",
@@ -1914,7 +1955,7 @@ export class CodexAdapter {
             delta: { stop_reason: null }, // null, not "end_turn" — the turn may continue with tool calls
             usage: { output_tokens: 0 },
           },
-          parent_tool_use_id: null,
+          parent_tool_use_id: parentToolUseId,
         });
 
         // Emit the full assistant message
@@ -1929,7 +1970,7 @@ export class CodexAdapter {
             stop_reason: "end_turn",
             usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
           },
-          parent_tool_use_id: null,
+          parent_tool_use_id: parentToolUseId,
           timestamp: Date.now(),
         });
 
@@ -2051,6 +2092,27 @@ export class CodexAdapter {
       case "contextCompaction":
         this.emit({ type: "status_change", status: null });
         break;
+
+      case "collabAgentToolCall": {
+        const collab = item as CodexCollabAgentToolCallItem;
+        const receiverThreadIds = Array.isArray(collab.receiverThreadIds)
+          ? collab.receiverThreadIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+          : [];
+        this.ensureToolUseEmitted(item.id, "Task", {
+          description: (typeof collab.prompt === "string" && collab.prompt.trim())
+            || `${collab.tool || "agent"} (${receiverThreadIds.length || 1} agent${(receiverThreadIds.length || 1) === 1 ? "" : "s"})`,
+          subagent_type: collab.tool || "codex-collab",
+          codex_status: collab.status,
+          sender_thread_id: collab.senderThreadId || null,
+          receiver_thread_ids: receiverThreadIds,
+        });
+        const isError = collab.status === "failed";
+        const summary = this.summarizeCollabCall(collab);
+        this.emitToolResult(item.id, summary, isError);
+        this.emitAssistantText(summary, item.id);
+        this.clearSubagentThreadMappings(collab);
+        break;
+      }
 
       default:
         console.log(`[codex-adapter] Unhandled item/completed type: ${item.type}`, JSON.stringify(item));
@@ -2185,7 +2247,66 @@ export class CodexAdapter {
     this.browserMessageCb?.(msg);
   }
 
-  private emitToolUse(toolUseId: string, toolName: string, input: Record<string, unknown>): void {
+  private getParentToolUseIdForThread(threadId?: string): string | null {
+    if (!threadId) return null;
+    return this.parentToolUseByThreadId.get(threadId) || null;
+  }
+
+  private setSubagentThreadMappings(parentToolUseId: string, collab: CodexCollabAgentToolCallItem): void {
+    const receiverThreadIds = Array.isArray(collab.receiverThreadIds)
+      ? collab.receiverThreadIds
+      : [];
+    for (const receiverThreadId of receiverThreadIds) {
+      if (typeof receiverThreadId === "string" && receiverThreadId.length > 0) {
+        this.parentToolUseByThreadId.set(receiverThreadId, parentToolUseId);
+      }
+    }
+  }
+
+  private clearSubagentThreadMappings(collab: CodexCollabAgentToolCallItem): void {
+    const receiverThreadIds = Array.isArray(collab.receiverThreadIds)
+      ? collab.receiverThreadIds
+      : [];
+    for (const receiverThreadId of receiverThreadIds) {
+      if (typeof receiverThreadId === "string" && receiverThreadId.length > 0) {
+        this.parentToolUseByThreadId.delete(receiverThreadId);
+      }
+    }
+  }
+
+  private summarizeCollabCall(collab: CodexCollabAgentToolCallItem): string {
+    const receiverCount = Array.isArray(collab.receiverThreadIds)
+      ? collab.receiverThreadIds.filter((id): id is string => typeof id === "string" && id.length > 0).length
+      : 0;
+    const statusText = collab.status === "completed"
+      ? "completed"
+      : collab.status === "failed"
+        ? "failed"
+        : "running";
+    const tool = collab.tool || "collab";
+    const count = receiverCount || 1;
+    return `${tool} ${statusText} for ${count} agent${count === 1 ? "" : "s"}`;
+  }
+
+  private emitAssistantText(text: string, parentToolUseId: string | null): void {
+    this.emit({
+      type: "assistant",
+      message: {
+        id: this.makeMessageId("agent_text"),
+        type: "message",
+        role: "assistant",
+        model: this.options.model || "",
+        content: [{ type: "text", text }],
+        stop_reason: null,
+        usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      },
+      parent_tool_use_id: parentToolUseId,
+      timestamp: Date.now(),
+    });
+  }
+
+  /** Emit an assistant message with a tool_use content block (no tracking). */
+  private emitToolUse(toolUseId: string, toolName: string, input: Record<string, unknown>, parentToolUseId: string | null = null): void {
     this.emit({
       type: "assistant",
       message: {
@@ -2204,15 +2325,15 @@ export class CodexAdapter {
         stop_reason: null,
         usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
       },
-      parent_tool_use_id: null,
+      parent_tool_use_id: parentToolUseId,
       timestamp: Date.now(),
     });
   }
 
   /** Emit tool_use and track the ID so we don't double-emit. */
-  private emitToolUseTracked(toolUseId: string, toolName: string, input: Record<string, unknown>): void {
+  private emitToolUseTracked(toolUseId: string, toolName: string, input: Record<string, unknown>, parentToolUseId: string | null = null): void {
     this.emittedToolUseIds.add(toolUseId);
-    this.emitToolUse(toolUseId, toolName, input);
+    this.emitToolUse(toolUseId, toolName, input, parentToolUseId);
   }
 
   /**
@@ -2220,7 +2341,12 @@ export class CodexAdapter {
    * This matches Claude Code's streaming pattern and ensures the frontend sees the tool block
    * even during active streaming.
    */
-  private emitToolUseStart(toolUseId: string, toolName: string, input: Record<string, unknown>): void {
+  private emitToolUseStart(
+    toolUseId: string,
+    toolName: string,
+    input: Record<string, unknown>,
+    parentToolUseId: string | null = null,
+  ): void {
     // Emit stream event for tool_use start (matches Claude Code pattern)
     this.emit({
       type: "stream_event",
@@ -2229,9 +2355,9 @@ export class CodexAdapter {
         index: 0,
         content_block: { type: "tool_use", id: toolUseId, name: toolName, input: {} },
       },
-      parent_tool_use_id: null,
+      parent_tool_use_id: parentToolUseId,
     });
-    this.emitToolUseTracked(toolUseId, toolName, input);
+    this.emitToolUseTracked(toolUseId, toolName, input, parentToolUseId);
   }
 
   /** Emit tool_use only if item/started was never received for this ID. */

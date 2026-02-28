@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
 // IntersectionObserver is not available in jsdom — provide a no-op mock
@@ -63,6 +63,7 @@ const mockApi = {
   getAuthToken: vi.fn(),
   regenerateAuthToken: vi.fn(),
   getAuthQr: vi.fn(),
+  verifyAnthropicKey: vi.fn(),
 };
 
 const mockTelemetry = {
@@ -79,6 +80,7 @@ vi.mock("../api.js", () => ({
     getAuthToken: (...args: unknown[]) => mockApi.getAuthToken(...args),
     regenerateAuthToken: (...args: unknown[]) => mockApi.regenerateAuthToken(...args),
     getAuthQr: (...args: unknown[]) => mockApi.getAuthQr(...args),
+    verifyAnthropicKey: (...args: unknown[]) => mockApi.verifyAnthropicKey(...args),
   },
 }));
 
@@ -100,16 +102,16 @@ beforeEach(() => {
   mockState = createMockState();
   window.location.hash = "#/settings";
   mockApi.getSettings.mockResolvedValue({
-    openrouterApiKeyConfigured: true,
-    openrouterModel: "openrouter/free",
+    anthropicApiKeyConfigured: true,
+    anthropicModel: "claude-sonnet-4.6",
     linearApiKeyConfigured: false,
     linearAutoTransition: false,
     linearAutoTransitionStateName: "",
     editorTabEnabled: false,
   });
   mockApi.updateSettings.mockResolvedValue({
-    openrouterApiKeyConfigured: true,
-    openrouterModel: "openrouter/free",
+    anthropicApiKeyConfigured: true,
+    anthropicModel: "claude-sonnet-4.6",
     linearApiKeyConfigured: false,
     linearAutoTransition: false,
     linearAutoTransitionStateName: "",
@@ -143,8 +145,8 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
 
     expect(mockApi.getSettings).toHaveBeenCalledTimes(1);
-    await screen.findByText("OpenRouter key configured");
-    expect(screen.getByDisplayValue("openrouter/free")).toBeInTheDocument();
+    await screen.findByText("Anthropic key configured");
+    expect(screen.getByDisplayValue("claude-sonnet-4.6")).toBeInTheDocument();
   });
 
   // When a key is already configured, the input shows masked dots (••••) to
@@ -152,9 +154,9 @@ describe("SettingsPage", () => {
   // can type a replacement key.
   it("shows masked dots in API key field when key is configured", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
-    const input = screen.getByLabelText("OpenRouter API Key") as HTMLInputElement;
+    const input = screen.getByLabelText("Anthropic API Key") as HTMLInputElement;
     expect(input.value).toBe("••••••••••••••••");
 
     // On focus the dots clear to allow entering a new key
@@ -164,8 +166,8 @@ describe("SettingsPage", () => {
 
   it("shows not configured status", async () => {
     mockApi.getSettings.mockResolvedValueOnce({
-      openrouterApiKeyConfigured: false,
-      openrouterModel: "openrouter/free",
+      anthropicApiKeyConfigured: false,
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -174,7 +176,7 @@ describe("SettingsPage", () => {
 
     render(<SettingsPage />);
 
-    await screen.findByText("OpenRouter key not configured");
+    await screen.findByText("Anthropic key not configured");
   });
 
   it("shows the auto-renaming helper copy under the API key input", async () => {
@@ -185,12 +187,12 @@ describe("SettingsPage", () => {
 
   it("saves settings with trimmed values", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
-    fireEvent.change(screen.getByLabelText("OpenRouter API Key"), {
+    fireEvent.change(screen.getByLabelText("Anthropic API Key"), {
       target: { value: "  or-key  " },
     });
-    fireEvent.change(screen.getByLabelText("OpenRouter Model"), {
+    fireEvent.change(screen.getByLabelText("Anthropic Model"), {
       target: { value: "  openai/gpt-4o-mini  " },
     });
 
@@ -198,8 +200,8 @@ describe("SettingsPage", () => {
 
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
-        openrouterApiKey: "or-key",
-        openrouterModel: "openai/gpt-4o-mini",
+        anthropicApiKey: "or-key",
+        anthropicModel: "openai/gpt-4o-mini",
         editorTabEnabled: false,
       });
     });
@@ -207,10 +209,10 @@ describe("SettingsPage", () => {
     expect(await screen.findByText("Settings saved.")).toBeInTheDocument();
   });
 
-  it("falls back model to openrouter/free when blank", async () => {
+  it("falls back model to claude-sonnet-4.6 when blank", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
-    fireEvent.change(screen.getByLabelText("OpenRouter Model"), {
+    await screen.findByText("Anthropic key configured");
+    fireEvent.change(screen.getByLabelText("Anthropic Model"), {
       target: { value: "   " },
     });
 
@@ -218,7 +220,7 @@ describe("SettingsPage", () => {
 
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
-        openrouterModel: "openrouter/free",
+        anthropicModel: "claude-sonnet-4.6",
         editorTabEnabled: false,
       });
     });
@@ -226,33 +228,33 @@ describe("SettingsPage", () => {
 
   it("does not send key when left empty", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
-    fireEvent.change(screen.getByLabelText("OpenRouter Model"), {
+    fireEvent.change(screen.getByLabelText("Anthropic Model"), {
       target: { value: "openai/gpt-4o-mini" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
-        openrouterModel: "openai/gpt-4o-mini",
+        anthropicModel: "openai/gpt-4o-mini",
         editorTabEnabled: false,
       });
     });
   });
 
   // Editor tab toggle is in the General section; toggling it updates local state,
-  // which is then included in the OpenRouter form's save payload.
+  // which is then included in the Anthropic form's save payload.
   it("saves editor tab toggle in settings payload", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     fireEvent.click(screen.getByRole("button", { name: /Enable Editor tab \(CodeMirror\)/i }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
-        openrouterModel: "openrouter/free",
+        anthropicModel: "claude-sonnet-4.6",
         editorTabEnabled: true,
       });
     });
@@ -270,9 +272,9 @@ describe("SettingsPage", () => {
     mockApi.updateSettings.mockRejectedValueOnce(new Error("save failed"));
 
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
-    fireEvent.change(screen.getByLabelText("OpenRouter API Key"), {
+    fireEvent.change(screen.getByLabelText("Anthropic API Key"), {
       target: { value: "or-key" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -282,7 +284,7 @@ describe("SettingsPage", () => {
 
   it("navigates back when Back button is clicked", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(window.location.hash).toBe("");
@@ -290,14 +292,14 @@ describe("SettingsPage", () => {
 
   it("hides Back button in embedded mode", async () => {
     render(<SettingsPage embedded />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
     expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
   });
 
   it("shows saving state while request is in flight", async () => {
     let resolveSave: ((value: {
-      openrouterApiKeyConfigured: boolean;
-      openrouterModel: string;
+      anthropicApiKeyConfigured: boolean;
+      anthropicModel: string;
       linearApiKeyConfigured: boolean;
       linearAutoTransition: boolean;
       linearAutoTransitionStateName: string;
@@ -310,9 +312,9 @@ describe("SettingsPage", () => {
     );
 
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
-    fireEvent.change(screen.getByLabelText("OpenRouter API Key"), {
+    fireEvent.change(screen.getByLabelText("Anthropic API Key"), {
       target: { value: "or-key" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -320,8 +322,8 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
 
     resolveSave?.({
-      openrouterApiKeyConfigured: true,
-      openrouterModel: "openrouter/free",
+      anthropicApiKeyConfigured: true,
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -333,7 +335,7 @@ describe("SettingsPage", () => {
 
   it("toggles sound notifications from settings", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     fireEvent.click(screen.getByRole("button", { name: /Sound/i }));
     expect(mockState.toggleNotificationSound).toHaveBeenCalledTimes(1);
@@ -343,7 +345,7 @@ describe("SettingsPage", () => {
   it("cycles theme from settings", async () => {
     mockState = createMockState({ theme: "system" });
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     fireEvent.click(screen.getByRole("button", { name: /Theme/i }));
     expect(mockState.cycleTheme).toHaveBeenCalledTimes(1);
@@ -351,7 +353,7 @@ describe("SettingsPage", () => {
 
   it("toggles telemetry preference from settings", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     fireEvent.click(screen.getByRole("button", { name: /Usage analytics and errors/i }));
     expect(mockTelemetry.setTelemetryPreferenceEnabled).toHaveBeenCalledWith(false);
@@ -359,7 +361,7 @@ describe("SettingsPage", () => {
 
   it("navigates to environments page from settings", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     fireEvent.click(screen.getByRole("button", { name: "Open Environments Page" }));
     expect(window.location.hash).toBe("#/environments");
@@ -373,7 +375,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
     fireEvent.click(screen.getByRole("button", { name: /Desktop Alerts/i }));
 
     await waitFor(() => {
@@ -394,7 +396,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
     fireEvent.click(screen.getByRole("button", { name: "Check for updates" }));
 
     await waitFor(() => {
@@ -419,7 +421,7 @@ describe("SettingsPage", () => {
       },
     });
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     fireEvent.click(screen.getByRole("button", { name: "Update & Restart" }));
 
@@ -433,7 +435,7 @@ describe("SettingsPage", () => {
   // Verify left sidebar nav renders category labels for quick navigation
   it("renders category navigation with all section labels", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     // Each category appears in both desktop sidebar and mobile nav (jsdom renders both)
     const generalButtons = screen.getAllByRole("button", { name: "General" });
@@ -446,12 +448,12 @@ describe("SettingsPage", () => {
   // Verify section headings have correct IDs for anchor-based scrolling
   it("renders section headings with anchor IDs", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     expect(document.getElementById("general")).toBeInTheDocument();
     expect(document.getElementById("authentication")).toBeInTheDocument();
     expect(document.getElementById("notifications")).toBeInTheDocument();
-    expect(document.getElementById("openrouter")).toBeInTheDocument();
+    expect(document.getElementById("anthropic")).toBeInTheDocument();
     expect(document.getElementById("updates")).toBeInTheDocument();
     expect(document.getElementById("telemetry")).toBeInTheDocument();
     expect(document.getElementById("environments")).toBeInTheDocument();
@@ -462,7 +464,7 @@ describe("SettingsPage", () => {
   // The auth section fetches the token on mount and displays it masked.
   it("fetches and displays the auth token masked by default", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     // Token should be fetched
     expect(mockApi.getAuthToken).toHaveBeenCalledTimes(1);
@@ -477,7 +479,7 @@ describe("SettingsPage", () => {
   // Clicking "Show" reveals the actual token value.
   it("reveals the token when Show is clicked", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     await waitFor(() => {
       expect(screen.getByText("\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022")).toBeInTheDocument();
@@ -490,7 +492,7 @@ describe("SettingsPage", () => {
   // Clicking "Show QR Code" loads and displays QR with address tabs.
   it("shows QR code with address tabs when button is clicked", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     fireEvent.click(screen.getByRole("button", { name: "Show QR Code" }));
 
@@ -519,7 +521,7 @@ describe("SettingsPage", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     fireEvent.click(screen.getByRole("button", { name: "Regenerate Token" }));
 
@@ -538,7 +540,7 @@ describe("SettingsPage", () => {
     vi.spyOn(window, "confirm").mockReturnValue(false);
 
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     fireEvent.click(screen.getByRole("button", { name: "Regenerate Token" }));
 
@@ -550,19 +552,132 @@ describe("SettingsPage", () => {
   // The Authentication navigation item appears in the sidebar.
   it("includes Authentication in category navigation", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     const authButtons = screen.getAllByRole("button", { name: "Authentication" });
     expect(authButtons.length).toBeGreaterThanOrEqual(1);
   });
 
+  // ─── Verify button tests ──────────────────────────────────
+
+  // The Verify button is disabled when the API key input is empty.
+  it("disables Verify button when anthropic key input is empty", async () => {
+    render(<SettingsPage />);
+    await screen.findByText("Anthropic key configured");
+
+    const verifyBtn = screen.getByRole("button", { name: "Verify" });
+    expect(verifyBtn).toBeDisabled();
+  });
+
+  // The Verify button is enabled when the user types a new key.
+  it("enables Verify button when user types a key", async () => {
+    render(<SettingsPage />);
+    await screen.findByText("Anthropic key configured");
+
+    const keyInput = screen.getByLabelText("Anthropic API Key");
+    fireEvent.focus(keyInput);
+    fireEvent.change(keyInput, { target: { value: "sk-ant-test-key" } });
+
+    const verifyBtn = screen.getByRole("button", { name: "Verify" });
+    expect(verifyBtn).toBeEnabled();
+  });
+
+  // Clicking Verify calls verifyAnthropicKey and shows success state.
+  it("shows success message when verify succeeds", async () => {
+    mockApi.verifyAnthropicKey.mockResolvedValueOnce({ valid: true });
+
+    render(<SettingsPage />);
+    await screen.findByText("Anthropic key configured");
+
+    const keyInput = screen.getByLabelText("Anthropic API Key");
+    fireEvent.focus(keyInput);
+    fireEvent.change(keyInput, { target: { value: "sk-ant-test-key" } });
+
+    const verifyBtn = screen.getByRole("button", { name: "Verify" });
+    fireEvent.click(verifyBtn);
+
+    expect(mockApi.verifyAnthropicKey).toHaveBeenCalledWith("sk-ant-test-key");
+    await screen.findByText("API key is valid.");
+  });
+
+  // Clicking Verify shows error state when verification fails.
+  it("shows error message when verify fails", async () => {
+    mockApi.verifyAnthropicKey.mockResolvedValueOnce({ valid: false, error: "API returned 401" });
+
+    render(<SettingsPage />);
+    await screen.findByText("Anthropic key configured");
+
+    const keyInput = screen.getByLabelText("Anthropic API Key");
+    fireEvent.focus(keyInput);
+    fireEvent.change(keyInput, { target: { value: "sk-ant-bad-key" } });
+
+    const verifyBtn = screen.getByRole("button", { name: "Verify" });
+    fireEvent.click(verifyBtn);
+
+    expect(mockApi.verifyAnthropicKey).toHaveBeenCalledWith("sk-ant-bad-key");
+    await screen.findByText("Invalid API key: API returned 401");
+  });
+
+  // Verify result auto-dismisses after 5 seconds.
+  it("auto-dismisses verify result after 5 seconds", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockApi.verifyAnthropicKey.mockResolvedValueOnce({ valid: true });
+
+    render(<SettingsPage />);
+    await screen.findByText("Anthropic key configured");
+
+    const keyInput = screen.getByLabelText("Anthropic API Key");
+    fireEvent.focus(keyInput);
+    fireEvent.change(keyInput, { target: { value: "sk-ant-test-key" } });
+
+    const verifyBtn = screen.getByRole("button", { name: "Verify" });
+    fireEvent.click(verifyBtn);
+
+    await screen.findByText("API key is valid.");
+
+    // Advance past the 5s auto-dismiss
+    act(() => {
+      vi.advanceTimersByTime(5100);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("API key is valid.")).not.toBeInTheDocument();
+    });
+
+    vi.useRealTimers();
+  });
+
+  // Verify result clears when the key input changes.
+  it("clears verify result when key input changes", async () => {
+    mockApi.verifyAnthropicKey.mockResolvedValueOnce({ valid: true });
+
+    render(<SettingsPage />);
+    await screen.findByText("Anthropic key configured");
+
+    const keyInput = screen.getByLabelText("Anthropic API Key");
+    fireEvent.focus(keyInput);
+    fireEvent.change(keyInput, { target: { value: "sk-ant-test-key" } });
+
+    const verifyBtn = screen.getByRole("button", { name: "Verify" });
+    fireEvent.click(verifyBtn);
+
+    await screen.findByText("API key is valid.");
+
+    // Changing the key should clear the verify result
+    fireEvent.change(keyInput, { target: { value: "sk-ant-test-key-changed" } });
+
+    await waitFor(() => {
+      expect(screen.queryByText("API key is valid.")).not.toBeInTheDocument();
+    });
+  });
+
   // ─── AI Validation section tests ──────────────────────────────────
 
   // The AI Validation section renders with its heading and the toggle button
-  // when an OpenRouter key is configured (configured === true).
-  it("renders AI Validation section with toggle when OpenRouter key is configured", async () => {
+  // when an Anthropic key is configured (configured === true).
+  it("renders AI Validation section with toggle when Anthropic key is configured", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     // Section heading should be present inside the #ai-validation section
     const section = document.getElementById("ai-validation");
@@ -577,12 +692,12 @@ describe("SettingsPage", () => {
     expect(toggleBtn).toHaveTextContent("Off");
   });
 
-  // When no OpenRouter API key is configured, the AI Validation toggle should
+  // When no Anthropic API key is configured, the AI Validation toggle should
   // be disabled and a warning message should appear.
-  it("disables AI Validation toggle when OpenRouter key is NOT configured", async () => {
+  it("disables AI Validation toggle when Anthropic key is NOT configured", async () => {
     mockApi.getSettings.mockResolvedValueOnce({
-      openrouterApiKeyConfigured: false,
-      openrouterModel: "openrouter/free",
+      anthropicApiKeyConfigured: false,
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -590,14 +705,14 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key not configured");
+    await screen.findByText("Anthropic key not configured");
 
     const toggleBtn = screen.getByRole("button", { name: /AI Validation Mode/i });
     expect(toggleBtn).toBeDisabled();
 
     // Warning message should be shown
     expect(
-      screen.getByText("Configure an OpenRouter API key above to enable AI validation."),
+      screen.getByText("Configure an Anthropic API key above to enable AI validation."),
     ).toBeInTheDocument();
   });
 
@@ -605,8 +720,8 @@ describe("SettingsPage", () => {
   // aiValidationEnabled set to the opposite of its current value.
   it("calls updateSettings with aiValidationEnabled when toggle is clicked", async () => {
     mockApi.updateSettings.mockResolvedValue({
-      openrouterApiKeyConfigured: true,
-      openrouterModel: "openrouter/free",
+      anthropicApiKeyConfigured: true,
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -617,7 +732,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     fireEvent.click(screen.getByRole("button", { name: /AI Validation Mode/i }));
 
@@ -626,13 +741,13 @@ describe("SettingsPage", () => {
     });
   });
 
-  // When AI Validation is enabled (and OpenRouter key is configured), the
+  // When AI Validation is enabled (and Anthropic key is configured), the
   // auto-approve and auto-deny sub-toggles should appear.
   it("shows auto-approve and auto-deny sub-toggles when AI Validation is enabled", async () => {
     // Return settings with aiValidationEnabled: true so sub-toggles render
     mockApi.getSettings.mockResolvedValueOnce({
-      openrouterApiKeyConfigured: true,
-      openrouterModel: "openrouter/free",
+      anthropicApiKeyConfigured: true,
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -643,7 +758,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     // Sub-toggles should be visible
     expect(screen.getByRole("button", { name: /Auto-approve safe tools/i })).toBeInTheDocument();
@@ -653,8 +768,8 @@ describe("SettingsPage", () => {
   // Sub-toggles should NOT appear when AI Validation is disabled.
   it("hides auto-approve and auto-deny sub-toggles when AI Validation is disabled", async () => {
     mockApi.getSettings.mockResolvedValueOnce({
-      openrouterApiKeyConfigured: true,
-      openrouterModel: "openrouter/free",
+      anthropicApiKeyConfigured: true,
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -665,7 +780,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     expect(screen.queryByRole("button", { name: /Auto-approve safe tools/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Auto-deny dangerous tools/i })).not.toBeInTheDocument();
@@ -675,8 +790,8 @@ describe("SettingsPage", () => {
   // aiValidationAutoApprove field toggled to the opposite value.
   it("calls updateSettings with aiValidationAutoApprove when auto-approve is toggled", async () => {
     mockApi.getSettings.mockResolvedValueOnce({
-      openrouterApiKeyConfigured: true,
-      openrouterModel: "openrouter/free",
+      anthropicApiKeyConfigured: true,
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -686,8 +801,8 @@ describe("SettingsPage", () => {
       aiValidationAutoDeny: true,
     });
     mockApi.updateSettings.mockResolvedValue({
-      openrouterApiKeyConfigured: true,
-      openrouterModel: "openrouter/free",
+      anthropicApiKeyConfigured: true,
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -698,7 +813,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     // Auto-approve is currently "On" (true), clicking should toggle to false
     fireEvent.click(screen.getByRole("button", { name: /Auto-approve safe tools/i }));
@@ -712,8 +827,8 @@ describe("SettingsPage", () => {
   // aiValidationAutoDeny field toggled to the opposite value.
   it("calls updateSettings with aiValidationAutoDeny when auto-deny is toggled", async () => {
     mockApi.getSettings.mockResolvedValueOnce({
-      openrouterApiKeyConfigured: true,
-      openrouterModel: "openrouter/free",
+      anthropicApiKeyConfigured: true,
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -723,8 +838,8 @@ describe("SettingsPage", () => {
       aiValidationAutoDeny: true,
     });
     mockApi.updateSettings.mockResolvedValue({
-      openrouterApiKeyConfigured: true,
-      openrouterModel: "openrouter/free",
+      anthropicApiKeyConfigured: true,
+      anthropicModel: "claude-sonnet-4.6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -735,7 +850,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     // Auto-deny is currently "On" (true), clicking should toggle to false
     fireEvent.click(screen.getByRole("button", { name: /Auto-deny dangerous tools/i }));
@@ -751,7 +866,7 @@ describe("SettingsPage", () => {
     mockApi.updateSettings.mockRejectedValueOnce(new Error("network error"));
 
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     const toggleBtn = screen.getByRole("button", { name: /AI Validation Mode/i });
     // Initially off
@@ -769,7 +884,7 @@ describe("SettingsPage", () => {
   // The AI Validation section includes its anchor ID for sidebar navigation.
   it("renders AI Validation section with anchor ID for navigation", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     expect(document.getElementById("ai-validation")).toBeInTheDocument();
   });
@@ -777,7 +892,7 @@ describe("SettingsPage", () => {
   // The AI Validation category appears in the sidebar navigation.
   it("includes AI Validation in category navigation", async () => {
     render(<SettingsPage />);
-    await screen.findByText("OpenRouter key configured");
+    await screen.findByText("Anthropic key configured");
 
     const aiValButtons = screen.getAllByRole("button", { name: "AI Validation" });
     expect(aiValButtons.length).toBeGreaterThanOrEqual(1);

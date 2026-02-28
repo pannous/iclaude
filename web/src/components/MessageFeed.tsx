@@ -37,6 +37,11 @@ interface SubagentGroup {
   taskToolUseId: string;
   description: string;
   agentType: string;
+  backend?: "claude" | "codex";
+  status?: string;
+  receiverCount?: number;
+  senderThreadId?: string;
+  receiverThreadIds?: string[];
   children: FeedEntry[];
 }
 
@@ -149,7 +154,15 @@ function groupToolMessages(messages: ChatMessage[]): FeedEntry[] {
 /** Build feed entries with subagent nesting */
 function buildEntries(
   messages: ChatMessage[],
-  taskInfo: Map<string, { description: string; agentType: string }>,
+  taskInfo: Map<string, {
+    description: string;
+    agentType: string;
+    backend?: "claude" | "codex";
+    status?: string;
+    receiverCount?: number;
+    senderThreadId?: string;
+    receiverThreadIds?: string[];
+  }>,
   childrenByParent: Map<string, ChatMessage[]>,
 ): FeedEntry[] {
   const grouped = groupToolMessages(messages);
@@ -170,6 +183,11 @@ function buildEntries(
           taskToolUseId: taskId,
           description: info.description,
           agentType: info.agentType,
+          backend: info.backend,
+          status: info.status,
+          receiverCount: info.receiverCount,
+          senderThreadId: info.senderThreadId,
+          receiverThreadIds: info.receiverThreadIds,
           children: childEntries,
         });
       }
@@ -181,15 +199,40 @@ function buildEntries(
 
 function groupMessages(messages: ChatMessage[]): FeedEntry[] {
   // Phase 1: Find all Task tool_use IDs across all messages
-  const taskInfo = new Map<string, { description: string; agentType: string }>();
+  const taskInfo = new Map<string, {
+    description: string;
+    agentType: string;
+    backend?: "claude" | "codex";
+    status?: string;
+    receiverCount?: number;
+    senderThreadId?: string;
+    receiverThreadIds?: string[];
+  }>();
   for (const msg of messages) {
     if (!msg.contentBlocks) continue;
     for (const b of msg.contentBlocks) {
       if (b.type === "tool_use" && b.name === "Task") {
         const { input, id } = b;
+        const receiverThreadIds = Array.isArray(input?.receiver_thread_ids)
+          ? input.receiver_thread_ids.filter((threadId): threadId is string => typeof threadId === "string" && threadId.length > 0)
+          : undefined;
+        const receiverCount = receiverThreadIds && receiverThreadIds.length > 0
+          ? receiverThreadIds.length
+          : undefined;
+        const senderThreadId = typeof input?.sender_thread_id === "string" && input.sender_thread_id.length > 0
+          ? input.sender_thread_id
+          : undefined;
+        const hasCodexMetadata = typeof input?.codex_status === "string"
+          || senderThreadId !== undefined
+          || receiverCount !== undefined;
         taskInfo.set(id, {
           description: String(input?.description || "Subagent"),
           agentType: String(input?.subagent_type || ""),
+          backend: hasCodexMetadata ? "codex" : "claude",
+          status: typeof input?.codex_status === "string" ? input.codex_status : undefined,
+          receiverCount,
+          senderThreadId,
+          receiverThreadIds,
         });
       }
     }
@@ -452,12 +495,60 @@ function ToolResultPreview({ content, isError, toolName }: { content: string; is
   );
 }
 
+function normalizeSubagentStatus(status?: string): {
+  label: string;
+  className: string;
+  summaryLabel: "pending" | "running" | "completed" | "failed";
+} | null {
+  if (!status) return null;
+  const normalized = status.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "completed") {
+    return {
+      label: "completed",
+      summaryLabel: "completed",
+      className: "text-green-600 bg-green-500/15",
+    };
+  }
+  if (normalized === "failed" || normalized === "error" || normalized === "errored") {
+    return {
+      label: "failed",
+      summaryLabel: "failed",
+      className: "text-cc-error bg-cc-error/10",
+    };
+  }
+  if (normalized === "pending" || normalized === "pendinginit" || normalized === "pending_init") {
+    return {
+      label: "pending",
+      summaryLabel: "pending",
+      className: "text-amber-700 bg-amber-500/15",
+    };
+  }
+  if (normalized === "running" || normalized === "inprogress" || normalized === "in_progress" || normalized === "started") {
+    return {
+      label: "running",
+      summaryLabel: "running",
+      className: "text-blue-600 bg-blue-500/15",
+    };
+  }
+  return {
+    label: status,
+    summaryLabel: "running",
+    className: "text-amber-700 bg-amber-500/15",
+  };
+}
 function SubagentContainer({ group }: { group: SubagentGroup }) {
   const [open, setOpen] = useState(false);
   const [showAllActivity, setShowAllActivity] = useState(false);
   const label = group.description || "Subagent";
   const agentType = group.agentType;
   const childCount = group.children.length;
+  const status = normalizeSubagentStatus(group.status);
+  const receiverCount = group.receiverCount;
+  const senderThreadId = group.senderThreadId;
+  const receiverThreadIds = group.receiverThreadIds || [];
+  const backend = group.backend || "claude";
+  const statusSummaryCount = receiverCount !== undefined ? receiverCount : childCount;
 
   // Extract all tool operations from children
   const activities = useMemo(() => extractToolActivity(group.children), [group.children]);
@@ -482,6 +573,19 @@ function SubagentContainer({ group }: { group: SubagentGroup }) {
           {agentType && (
             <span className="text-[10px] text-cc-muted bg-cc-hover rounded-full px-1.5 py-0.5 shrink-0">
               {agentType}
+            </span>
+          )}
+          <span className="text-[10px] text-cc-muted bg-cc-hover rounded-full px-1.5 py-0.5 shrink-0">
+            {backend === "codex" ? "Codex" : "Claude"}
+          </span>
+          {status && (
+            <span className={`text-[10px] rounded-full px-1.5 py-0.5 shrink-0 ${status.className}`}>
+              {status.label}
+            </span>
+          )}
+          {receiverCount !== undefined && (
+            <span className="text-[10px] text-cc-muted bg-cc-hover rounded-full px-1.5 py-0.5 shrink-0">
+              {receiverCount} agent{receiverCount === 1 ? "" : "s"}
             </span>
           )}
           {activities.length > 0 && !open && (
@@ -513,6 +617,39 @@ function SubagentContainer({ group }: { group: SubagentGroup }) {
 
         {open && (
           <div className="space-y-3 pb-2">
+            {(status || senderThreadId || receiverThreadIds.length > 0) && (
+              <div className="rounded-lg border border-cc-border bg-cc-card px-2.5 py-2 space-y-1.5">
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                  {status && (
+                    <span className={`rounded-full px-1.5 py-0.5 ${status.className}`}>
+                      {statusSummaryCount} {status.summaryLabel}
+                    </span>
+                  )}
+                  {senderThreadId && (
+                    <span className="rounded-full px-1.5 py-0.5 text-cc-muted bg-cc-hover font-mono-code">
+                      sender: {senderThreadId}
+                    </span>
+                  )}
+                  {receiverThreadIds.length > 0 && (
+                    <span className="rounded-full px-1.5 py-0.5 text-cc-muted bg-cc-hover">
+                      receivers: {receiverThreadIds.length}
+                    </span>
+                  )}
+                </div>
+                {receiverThreadIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {receiverThreadIds.map((threadId) => (
+                      <span
+                        key={threadId}
+                        className="text-[10px] rounded-full px-1.5 py-0.5 text-cc-muted bg-cc-hover font-mono-code"
+                      >
+                        {threadId}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <FeedEntries entries={group.children} />
           </div>
         )}
@@ -793,11 +930,12 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
         <div className="text-center">
           {canLoadResumeHistory ? (
             <>
-              <p className="text-sm text-cc-fg font-medium mb-1">This session has prior Claude context</p>
+              <p className="text-sm text-cc-fg font-medium mb-1">{resumeModeLabel} existing Claude thread</p>
               <p className="text-xs text-cc-muted leading-relaxed mb-3">
-                {resumeModeLabel} {resumeSourceSessionId.slice(0, 8)}.{" "}
+                {resumeSourceSessionId.slice(0, 8)}.{" "}
                 {isForkSession ? "Loading prior conversation..." : "Load earlier messages into this chat when needed."}
               </p>
+              {/* LOCAL: Fork sessions auto-load history via useEffect, so no manual button needed */}
               {!isForkSession && (
                 <button
                   onClick={() => void loadResumeHistoryPage({ preserveScroll: false })}
@@ -806,9 +944,6 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
                 >
                   {resumeHistoryLoading ? "Loading..." : "Load previous history"}
                 </button>
-              )}
-              {resumeHistoryLoading && (
-                <p className="text-xs text-cc-muted mt-2">Loading...</p>
               )}
               {resumeHistoryError && (
                 <p className="text-xs text-cc-error mt-2">{resumeHistoryError}</p>

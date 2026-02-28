@@ -1,9 +1,6 @@
-import { getSettings, DEFAULT_OPENROUTER_MODEL } from "./settings-manager.js";
+import { getSettings, DEFAULT_ANTHROPIC_MODEL } from "./settings-manager.js";
 
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_VERSION = "2023-06-01";
-const DEFAULT_CLAUDE_MODEL = "claude-haiku-4-5-20251001";
 const AI_TIMEOUT_MS = 5_000;
 
 export type AiVerdict = "safe" | "dangerous" | "uncertain";
@@ -107,66 +104,8 @@ Rules:
 
 Be conservative: when in doubt, say "uncertain" rather than "safe".`;
 
-async function callOpenRouter(userPrompt: string, signal: AbortSignal): Promise<string> {
-  const settings = getSettings();
-  const apiKey = settings.openrouterApiKey.trim();
-  const model = settings.openrouterModel?.trim() || DEFAULT_OPENROUTER_MODEL;
-
-  const res = await fetch(OPENROUTER_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0,
-    }),
-    signal,
-  });
-
-  if (!res.ok) {
-    throw new Error(`OpenRouter request failed: ${res.status} ${res.statusText}`);
-  }
-
-  const data = (await res.json()) as { choices?: Array<{ message?: { content?: unknown } }> };
-  return typeof data.choices?.[0]?.message?.content === "string"
-    ? data.choices[0].message.content
-    : "";
-}
-
-async function callAnthropic(userPrompt: string, signal: AbortSignal): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim() || "";
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
-
-  const res = await fetch(ANTHROPIC_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": ANTHROPIC_VERSION,
-    },
-    body: JSON.stringify({
-      model: DEFAULT_CLAUDE_MODEL,
-      max_tokens: 256,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userPrompt }],
-    }),
-    signal,
-  });
-
-  if (!res.ok) {
-    throw new Error(`Anthropic request failed: ${res.status} ${res.statusText}`);
-  }
-
-  const data = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
-  return data.content?.find((b) => b.type === "text")?.text ?? "";
-}
-
 /**
- * Call the configured AI provider to evaluate a tool call.
- * Provider is determined by the `aiProvider` setting ("openrouter" or "claude").
+ * Call the AI model via Anthropic to evaluate a tool call.
  */
 export async function aiEvaluate(
   toolName: string,
@@ -174,39 +113,67 @@ export async function aiEvaluate(
   description?: string,
 ): Promise<AiValidationResult> {
   const settings = getSettings();
-  const provider = settings.aiProvider ?? "openrouter";
+  const apiKey = settings.anthropicApiKey.trim();
 
-  // Guard: ensure the selected provider has its key available
-  if (provider === "openrouter" && !settings.openrouterApiKey.trim()) {
-    return { verdict: "uncertain", reason: "No OpenRouter API key configured", ruleBasedOnly: false };
-  }
-  if (provider === "claude" && !process.env.ANTHROPIC_API_KEY?.trim()) {
-    return { verdict: "uncertain", reason: "ANTHROPIC_API_KEY not set", ruleBasedOnly: false };
+  if (!apiKey) {
+    return { verdict: "uncertain", reason: "No Anthropic API key configured", ruleBasedOnly: false };
   }
 
+  const model = settings.anthropicModel?.trim() || DEFAULT_ANTHROPIC_MODEL;
+
+  // Build a concise representation of the tool call for the AI
   const inputStr = JSON.stringify(input, null, 0);
   const truncatedInput = inputStr.length > 1000 ? inputStr.slice(0, 1000) + "..." : inputStr;
   let userPrompt = `Tool: ${toolName}\nInput: ${truncatedInput}`;
-  if (description) userPrompt += `\nDescription: ${description}`;
+  if (description) {
+    userPrompt += `\nDescription: ${description}`;
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
 
   try {
-    const raw = provider === "claude"
-      ? await callAnthropic(userPrompt, controller.signal)
-      : await callOpenRouter(userPrompt, controller.signal);
+    const res = await fetch(ANTHROPIC_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 256,
+        system: SYSTEM_PROMPT,
+        messages: [
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      console.warn(`[ai-validator] Anthropic request failed: ${res.status} ${res.statusText}`);
+      return { verdict: "uncertain", reason: "AI service request failed", ruleBasedOnly: false };
+    }
+
+    const data = (await res.json()) as {
+      content?: Array<{ type: string; text?: string }>;
+    };
+
+    const raw = data.content?.[0]?.type === "text"
+      ? (data.content[0].text ?? "")
+      : "";
+
     return parseAiResponse(raw);
   } catch (err) {
     const isAbort = err instanceof Error && err.name === "AbortError";
-    console.warn(`[ai-validator] AI evaluation failed (${provider}):`, isAbort ? "timeout" : err);
-    // HTTP errors include "request failed" in the message; network-level errors → "unavailable"
-    const reason = isAbort
-      ? "AI evaluation timed out"
-      : err instanceof Error && err.message.includes("request failed")
-        ? err.message
-        : "AI service unavailable";
-    return { verdict: "uncertain", reason, ruleBasedOnly: false };
+    console.warn(`[ai-validator] AI evaluation failed:`, isAbort ? "timeout" : err);
+    return {
+      verdict: "uncertain",
+      reason: isAbort ? "AI evaluation timed out" : "AI service unavailable",
+      ruleBasedOnly: false,
+    };
   } finally {
     clearTimeout(timer);
   }

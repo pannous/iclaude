@@ -7,22 +7,18 @@ import {
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 
-export const DEFAULT_OPENROUTER_MODEL = "openrouter/free";
-
-/** Which AI provider to use for validation and auto-naming. Persisted only when non-default. */
-export type AiProvider = "openrouter" | "claude";
+export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4.6";
 
 export interface CompanionSettings {
-  openrouterApiKey: string;
-  openrouterModel: string;
-  /** OpenAI API key for session title generation fallback. Stored in settings.json. */
-  openaiApiKey?: string;
-  /** Which AI provider to use for validation and auto-naming. Absent means "openrouter" (default). */
-  aiProvider?: AiProvider;
+  anthropicApiKey: string;
+  anthropicModel: string;
   linearApiKey: string;
   linearAutoTransition: boolean;
   linearAutoTransitionStateId: string;
   linearAutoTransitionStateName: string;
+  linearArchiveTransition: boolean;
+  linearArchiveTransitionStateId: string;
+  linearArchiveTransitionStateName: string;
   editorTabEnabled: boolean;
   aiValidationEnabled: boolean;
   aiValidationAutoApprove: boolean;
@@ -35,12 +31,15 @@ const DEFAULT_PATH = join(homedir(), ".companion", "settings.json");
 let loaded = false;
 let filePath = DEFAULT_PATH;
 let settings: CompanionSettings = {
-  openrouterApiKey: "",
-  openrouterModel: DEFAULT_OPENROUTER_MODEL,
+  anthropicApiKey: "",
+  anthropicModel: DEFAULT_ANTHROPIC_MODEL,
   linearApiKey: "",
   linearAutoTransition: false,
   linearAutoTransitionStateId: "",
   linearAutoTransitionStateName: "",
+  linearArchiveTransition: false,
+  linearArchiveTransitionStateId: "",
+  linearArchiveTransitionStateName: "",
   editorTabEnabled: false,
   aiValidationEnabled: false,
   aiValidationAutoApprove: true,
@@ -49,21 +48,19 @@ let settings: CompanionSettings = {
 };
 
 function normalize(raw: Partial<CompanionSettings> | null | undefined): CompanionSettings {
-  const openaiApiKey = typeof raw?.openaiApiKey === "string" && raw.openaiApiKey.trim()
-    ? raw.openaiApiKey.trim()
-    : undefined;
   return {
-    openrouterApiKey: typeof raw?.openrouterApiKey === "string" ? raw.openrouterApiKey : "",
-    openrouterModel:
-      typeof raw?.openrouterModel === "string" && raw.openrouterModel.trim()
-        ? raw.openrouterModel
-        : DEFAULT_OPENROUTER_MODEL,
-    ...(openaiApiKey !== undefined ? { openaiApiKey } : {}),
-    ...(raw?.aiProvider === "claude" || raw?.aiProvider === "openrouter" ? { aiProvider: raw.aiProvider } : {}),
+    anthropicApiKey: typeof raw?.anthropicApiKey === "string" ? raw.anthropicApiKey : "",
+    anthropicModel:
+      typeof raw?.anthropicModel === "string" && raw.anthropicModel.trim()
+        ? raw.anthropicModel
+        : DEFAULT_ANTHROPIC_MODEL,
     linearApiKey: typeof raw?.linearApiKey === "string" ? raw.linearApiKey : "",
     linearAutoTransition: typeof raw?.linearAutoTransition === "boolean" ? raw.linearAutoTransition : false,
     linearAutoTransitionStateId: typeof raw?.linearAutoTransitionStateId === "string" ? raw.linearAutoTransitionStateId : "",
     linearAutoTransitionStateName: typeof raw?.linearAutoTransitionStateName === "string" ? raw.linearAutoTransitionStateName : "",
+    linearArchiveTransition: typeof raw?.linearArchiveTransition === "boolean" ? raw.linearArchiveTransition : false,
+    linearArchiveTransitionStateId: typeof raw?.linearArchiveTransitionStateId === "string" ? raw.linearArchiveTransitionStateId : "",
+    linearArchiveTransitionStateName: typeof raw?.linearArchiveTransitionStateName === "string" ? raw.linearArchiveTransitionStateName : "",
     editorTabEnabled: typeof raw?.editorTabEnabled === "boolean" ? raw.editorTabEnabled : false,
     aiValidationEnabled: typeof raw?.aiValidationEnabled === "boolean" ? raw.aiValidationEnabled : false,
     aiValidationAutoApprove: typeof raw?.aiValidationAutoApprove === "boolean" ? raw.aiValidationAutoApprove : true,
@@ -96,18 +93,19 @@ export function getSettings(): CompanionSettings {
 }
 
 export function updateSettings(
-  patch: Partial<Pick<CompanionSettings, "openrouterApiKey" | "openrouterModel" | "openaiApiKey" | "aiProvider" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "editorTabEnabled" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny">>,
+  patch: Partial<Pick<CompanionSettings, "anthropicApiKey" | "anthropicModel" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "editorTabEnabled" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny">>,
 ): CompanionSettings {
   ensureLoaded();
   settings = normalize({
-    openrouterApiKey: patch.openrouterApiKey ?? settings.openrouterApiKey,
-    openrouterModel: patch.openrouterModel ?? settings.openrouterModel,
-    openaiApiKey: patch.openaiApiKey ?? settings.openaiApiKey,
-    aiProvider: patch.aiProvider ?? settings.aiProvider,
+    anthropicApiKey: patch.anthropicApiKey ?? settings.anthropicApiKey,
+    anthropicModel: patch.anthropicModel ?? settings.anthropicModel,
     linearApiKey: patch.linearApiKey ?? settings.linearApiKey,
     linearAutoTransition: patch.linearAutoTransition ?? settings.linearAutoTransition,
     linearAutoTransitionStateId: patch.linearAutoTransitionStateId ?? settings.linearAutoTransitionStateId,
     linearAutoTransitionStateName: patch.linearAutoTransitionStateName ?? settings.linearAutoTransitionStateName,
+    linearArchiveTransition: patch.linearArchiveTransition ?? settings.linearArchiveTransition,
+    linearArchiveTransitionStateId: patch.linearArchiveTransitionStateId ?? settings.linearArchiveTransitionStateId,
+    linearArchiveTransitionStateName: patch.linearArchiveTransitionStateName ?? settings.linearArchiveTransitionStateName,
     editorTabEnabled: patch.editorTabEnabled ?? settings.editorTabEnabled,
     aiValidationEnabled: patch.aiValidationEnabled ?? settings.aiValidationEnabled,
     aiValidationAutoApprove: patch.aiValidationAutoApprove ?? settings.aiValidationAutoApprove,

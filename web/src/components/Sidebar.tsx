@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useStore } from "../store.js";
-import { api, type ResumableSession } from "../api.js";
+// LOCAL: keep ResumableSession import + disconnectAllExcept/waitForConnection for resume session flow
+import { api, type ResumableSession, type ArchiveInfo } from "../api.js";
+import { ArchiveLinearModal, type LinearTransitionChoice } from "./ArchiveLinearModal.js";
 import { connectSession, disconnectSession, disconnectAllExcept, waitForConnection } from "../ws.js";
 import { navigateToSession, navigateHome, parseHash } from "../utils/routing.js";
 import { ProjectGroup } from "./ProjectGroup.js";
@@ -112,6 +114,11 @@ export function Sidebar() {
   const [resumingId, setResumingId] = useState<string | null>(null);
   const [allResumable, setAllResumable] = useState<ResumableSession[]>([]);
   const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
+  const [archiveModalSessionId, setArchiveModalSessionId] = useState<string | null>(null);
+  const [archiveModalInfo, setArchiveModalInfo] = useState<ArchiveInfo | null>(null);
+  const [archiveModalContainerized, setArchiveModalContainerized] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [hash, setHash] = useState(() => (typeof window !== "undefined" ? window.location.hash : ""));
   const editInputRef = useRef<HTMLInputElement>(null);
   const sessions = useStore((s) => s.sessions);
@@ -125,6 +132,7 @@ export function Sidebar() {
   const recentlyRenamed = useStore((s) => s.recentlyRenamed);
   const clearRecentlyRenamed = useStore((s) => s.clearRecentlyRenamed);
   const pendingPermissions = useStore((s) => s.pendingPermissions);
+  const linkedLinearIssues = useStore((s) => s.linkedLinearIssues);
   const collapsedProjects = useStore((s) => s.collapsedProjects);
   const toggleProjectCollapse = useStore((s) => s.toggleProjectCollapse);
   const setAllProjectsCollapsed = useStore((s) => s.setAllProjectsCollapsed);
@@ -302,20 +310,62 @@ export function Sidebar() {
     }
   }, [doDelete]);
 
-  const handleArchiveSession = useCallback((e: React.MouseEvent, sessionId: string) => {
+  const cancelDeleteAll = useCallback(() => {
+    setConfirmDeleteAll(false);
+  }, []);
+
+  const cancelDelete = useCallback(() => {
+    setConfirmDeleteId(null);
+  }, []);
+
+  const confirmDelete = useCallback(() => {
+    if (confirmDeleteId) {
+      doDelete(confirmDeleteId);
+      setConfirmDeleteId(null);
+    }
+  }, [confirmDeleteId, doDelete]);
+
+  const confirmDeleteAllArchived = useCallback(async () => {
+    setConfirmDeleteAll(false);
+    await clearAllArchived();
+  }, [clearAllArchived]);
+
+  const handleArchiveSession = useCallback(async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
-    // Check if session uses a container — if so, ask for confirmation
     const sdkInfo = sdkSessions.find((s) => s.sessionId === sessionId);
     const bridgeState = sessions.get(sessionId);
     const isContainerized = bridgeState?.is_containerized || !!sdkInfo?.containerId || false;
+
+    // Check if session has a linked non-done Linear issue
+    const linkedIssue = linkedLinearIssues.get(sessionId);
+    const stateType = (linkedIssue?.stateType || "").toLowerCase();
+    const isIssueDone = stateType === "completed" || stateType === "canceled" || stateType === "cancelled";
+
+    if (linkedIssue && !isIssueDone) {
+      // Fetch archive info (backlog availability, configured transition state)
+      try {
+        const info = await api.getArchiveInfo(sessionId);
+        if (info.issueNotDone) {
+          setArchiveModalSessionId(sessionId);
+          setArchiveModalInfo(info);
+          setArchiveModalContainerized(isContainerized);
+          return;
+        }
+      } catch {
+        // Fall through to normal archive flow on error
+      }
+    }
+
+    // No linked non-done issue — use existing container-only confirmation or direct archive
     if (isContainerized) {
       setConfirmArchiveId(sessionId);
       return;
     }
     doArchive(sessionId);
-  }, [sdkSessions, sessions]);
+  }, [sdkSessions, sessions, linkedLinearIssues]);
 
-  const doArchive = useCallback(async (sessionId: string, force?: boolean) => {
+  // LOCAL: pre-disconnect state cleanup so scheduleReconnect skips archived sessions
+  const doArchive = useCallback(async (sessionId: string, force?: boolean, linearTransition?: LinearTransitionChoice) => {
     const store = useStore.getState();
     // Mark archived in sdkSessions BEFORE disconnect so scheduleReconnect skips it
     store.setSdkSessions(
@@ -332,7 +382,10 @@ export function Sidebar() {
       store.newSession();
     }
     try {
-      await api.archiveSession(sessionId, force ? { force: true } : undefined);
+      const opts: { force?: boolean; linearTransition?: LinearTransitionChoice } = {};
+      if (force) opts.force = true;
+      if (linearTransition && linearTransition !== "none") opts.linearTransition = linearTransition;
+      await api.archiveSession(sessionId, Object.keys(opts).length > 0 ? opts : undefined);
     } catch {
       // best-effort
     }
@@ -357,6 +410,19 @@ export function Sidebar() {
 
   const cancelArchive = useCallback(() => {
     setConfirmArchiveId(null);
+  }, []);
+
+  const handleArchiveModalConfirm = useCallback((choice: LinearTransitionChoice, force?: boolean) => {
+    if (archiveModalSessionId) {
+      doArchive(archiveModalSessionId, force, choice);
+      setArchiveModalSessionId(null);
+      setArchiveModalInfo(null);
+    }
+  }, [archiveModalSessionId, doArchive]);
+
+  const handleArchiveModalCancel = useCallback(() => {
+    setArchiveModalSessionId(null);
+    setArchiveModalInfo(null);
   }, []);
 
   const handleUnarchiveSession = useCallback(async (e: React.MouseEvent, sessionId: string) => {
@@ -825,6 +891,67 @@ export function Sidebar() {
         </div>
       </div>
 
+      {/* Delete confirmation modal */}
+      {(confirmDeleteId || confirmDeleteAll) && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-[fadeIn_150ms_ease-out]"
+          onClick={confirmDeleteAll ? cancelDeleteAll : cancelDelete}
+        >
+          <div
+            className="mx-4 w-full max-w-[280px] bg-cc-card border border-cc-border rounded-xl shadow-2xl p-5 animate-[menu-appear_150ms_ease-out]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Icon */}
+            <div className="flex justify-center mb-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-5 h-5 text-red-400">
+                  <path d="M5.5 5.5A.5.5 0 016 6v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm2.5 0a.5.5 0 01.5.5v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm3 .5a.5.5 0 00-1 0v6a.5.5 0 001 0V6z" />
+                  <path fillRule="evenodd" d="M14.5 3a1 1 0 01-1 1H13v9a2 2 0 01-2 2H5a2 2 0 01-2-2V4h-.5a1 1 0 010-2H6a1 1 0 011-1h2a1 1 0 011 1h3.5a1 1 0 011 1zM4.118 4L4 4.059V13a1 1 0 001 1h6a1 1 0 001-1V4.059L11.882 4H4.118zM6 2h4v1H6V2z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Text */}
+            <h3 className="text-[13px] font-semibold text-cc-fg text-center">
+              {confirmDeleteAll ? "Delete all archived?" : "Delete session?"}
+            </h3>
+            <p className="text-[12px] text-cc-muted text-center mt-1.5 leading-relaxed">
+              {confirmDeleteAll
+                ? `This will permanently delete ${archivedSessions.length} archived session${archivedSessions.length === 1 ? "" : "s"}. This cannot be undone.`
+                : "This will permanently delete this session and its history. This cannot be undone."}
+            </p>
+
+            {/* Actions */}
+            <div className="flex gap-2.5 mt-4">
+              <button
+                onClick={confirmDeleteAll ? cancelDeleteAll : cancelDelete}
+                className="flex-1 px-3 py-2 text-[12px] font-medium rounded-lg bg-cc-hover text-cc-muted hover:text-cc-fg transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteAll ? confirmDeleteAllArchived : confirmDelete}
+                className="flex-1 px-3 py-2 text-[12px] font-medium rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors cursor-pointer"
+              >
+                {confirmDeleteAll ? "Delete all" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Archive Linear transition modal */}
+      {archiveModalSessionId && archiveModalInfo && (
+        <ArchiveLinearModal
+          issueIdentifier={archiveModalInfo.issue?.identifier || ""}
+          issueStateName={archiveModalInfo.issue?.stateName || ""}
+          isContainerized={archiveModalContainerized}
+          archiveTransitionConfigured={archiveModalInfo.archiveTransitionConfigured || false}
+          archiveTransitionStateName={archiveModalInfo.archiveTransitionStateName}
+          hasBacklogState={archiveModalInfo.hasBacklogState || false}
+          onConfirm={handleArchiveModalConfirm}
+          onCancel={handleArchiveModalCancel}
+        />
+      )}
     </aside>
   );
 }

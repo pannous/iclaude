@@ -12,7 +12,7 @@ const CATEGORIES = [
   { id: "general", label: "General" },
   { id: "authentication", label: "Authentication" },
   { id: "notifications", label: "Notifications" },
-  { id: "openrouter", label: "OpenRouter" },
+  { id: "anthropic", label: "Anthropic" },
   { id: "ai-validation", label: "AI Validation" },
   { id: "updates", label: "Updates" },
   { id: "telemetry", label: "Telemetry" },
@@ -22,8 +22,8 @@ const CATEGORIES = [
 type CategoryId = (typeof CATEGORIES)[number]["id"];
 
 export function SettingsPage({ embedded = false }: SettingsPageProps) {
-  const [openrouterApiKey, setOpenrouterApiKey] = useState("");
-  const [openrouterModel, setOpenrouterModel] = useState("openrouter/free");
+  const [anthropicApiKey, setAnthropicApiKey] = useState("");
+  const [anthropicModel, setAnthropicModel] = useState("claude-sonnet-4.6");
   const [editorTabEnabled, setEditorTabEnabled] = useState(false);
   const [configured, setConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -54,6 +54,8 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [aiValidationAutoDeny, setAiValidationAutoDeny] = useState(true);
   const [activeSection, setActiveSection] = useState<CategoryId>("general");
   const [apiKeyFocused, setApiKeyFocused] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<{ valid: boolean; error?: string } | null>(null);
 
   // Auth section state
   const [authToken, setAuthToken] = useState<string | null>(null);
@@ -114,8 +116,8 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     api
       .getSettings()
       .then((s) => {
-        setConfigured(s.openrouterApiKeyConfigured);
-        setOpenrouterModel(s.openrouterModel || "openrouter/free");
+        setConfigured(s.anthropicApiKeyConfigured);
+        setAnthropicModel(s.anthropicModel || "claude-sonnet-4.6");
         setEditorTabEnabled(s.editorTabEnabled);
         setStoreEditorTabEnabled(s.editorTabEnabled);
         if (s.aiProvider) setAiProvider(s.aiProvider);
@@ -136,20 +138,20 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     setError("");
     setSaved(false);
     try {
-      const nextKey = openrouterApiKey.trim();
-      const payload: { openrouterApiKey?: string; openrouterModel: string; editorTabEnabled: boolean } = {
-        openrouterModel: openrouterModel.trim() || "openrouter/free",
+      const nextKey = anthropicApiKey.trim();
+      const payload: { anthropicApiKey?: string; anthropicModel: string; editorTabEnabled: boolean } = {
+        anthropicModel: anthropicModel.trim() || "claude-sonnet-4.6",
         editorTabEnabled,
       };
       if (nextKey) {
-        payload.openrouterApiKey = nextKey;
+        payload.anthropicApiKey = nextKey;
       }
 
       const res = await api.updateSettings(payload);
-      setConfigured(res.openrouterApiKeyConfigured);
+      setConfigured(res.anthropicApiKeyConfigured);
       setEditorTabEnabled(res.editorTabEnabled);
       setStoreEditorTabEnabled(res.editorTabEnabled);
-      setOpenrouterApiKey("");
+      setAnthropicApiKey("");
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
     } catch (err: unknown) {
@@ -522,7 +524,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
             </section>
 
             {/* OpenRouter */}
-            <section id="openrouter" ref={setSectionRef("openrouter")}>
+            <section id="anthropic" ref={setSectionRef("anthropic")}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-semibold text-cc-fg">AI Provider</h2>
                 <div className="flex items-center gap-1 rounded-lg bg-cc-hover p-0.5">
@@ -564,17 +566,17 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
               )}
               <form onSubmit={onSave} className={`space-y-4 ${aiProvider === "claude" ? "opacity-50 pointer-events-none" : ""}`}>
                 <div>
-                  <label className="block text-sm font-medium mb-1.5" htmlFor="openrouter-key">
-                    OpenRouter API Key
+                  <label className="block text-sm font-medium mb-1.5" htmlFor="anthropic-key">
+                    Anthropic API Key
                   </label>
                   <input
-                    id="openrouter-key"
+                    id="anthropic-key"
                     type="password"
-                    value={configured && !apiKeyFocused && !openrouterApiKey ? "••••••••••••••••" : openrouterApiKey}
-                    onChange={(e) => setOpenrouterApiKey(e.target.value)}
+                    value={configured && !apiKeyFocused && !anthropicApiKey ? "••••••••••••••••" : anthropicApiKey}
+                    onChange={(e) => { setAnthropicApiKey(e.target.value); setVerifyResult(null); }}
                     onFocus={() => setApiKeyFocused(true)}
                     onBlur={() => setApiKeyFocused(false)}
-                    placeholder={configured ? "Enter a new key to replace" : "sk-or-v1-..."}
+                    placeholder={configured ? "Enter a new key to replace" : "sk-ant-api03-..."}
                     className="w-full px-3 py-2.5 min-h-[44px] text-sm bg-cc-bg rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:ring-1 focus:ring-cc-primary/40 transition-shadow"
                   />
                   <p className="mt-1.5 text-xs text-cc-muted">
@@ -583,15 +585,15 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1.5" htmlFor="openrouter-model">
-                    OpenRouter Model
+                  <label className="block text-sm font-medium mb-1.5" htmlFor="anthropic-model">
+                    Anthropic Model
                   </label>
                   <input
-                    id="openrouter-model"
+                    id="anthropic-model"
                     type="text"
-                    value={openrouterModel}
-                    onChange={(e) => setOpenrouterModel(e.target.value)}
-                    placeholder="openrouter/free"
+                    value={anthropicModel}
+                    onChange={(e) => setAnthropicModel(e.target.value)}
+                    placeholder="claude-sonnet-4.6"
                     className="w-full px-3 py-2.5 min-h-[44px] text-sm bg-cc-bg rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:ring-1 focus:ring-cc-primary/40 transition-shadow"
                   />
                 </div>
@@ -610,20 +612,57 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
 
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-cc-muted">
-                    {loading ? "Loading..." : configured ? "OpenRouter key configured" : "OpenRouter key not configured"}
+                    {loading ? "Loading..." : configured ? "Anthropic key configured" : "Anthropic key not configured"}
                   </span>
-                  <button
-                    type="submit"
-                    disabled={saving || loading}
-                    className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                      saving || loading
-                        ? "bg-cc-hover text-cc-muted cursor-not-allowed"
-                        : "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
-                    }`}
-                  >
-                    {saving ? "Saving..." : "Save"}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={verifying || !anthropicApiKey.trim()}
+                      onClick={async () => {
+                        setVerifying(true);
+                        setVerifyResult(null);
+                        try {
+                          const result = await api.verifyAnthropicKey(anthropicApiKey.trim());
+                          setVerifyResult(result);
+                          setTimeout(() => setVerifyResult(null), 5000);
+                        } catch (err: unknown) {
+                          setVerifyResult({ valid: false, error: err instanceof Error ? err.message : String(err) });
+                          setTimeout(() => setVerifyResult(null), 5000);
+                        } finally {
+                          setVerifying(false);
+                        }
+                      }}
+                      className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
+                        verifying || !anthropicApiKey.trim()
+                          ? "bg-cc-hover text-cc-muted cursor-not-allowed"
+                          : "bg-cc-hover hover:bg-cc-active text-cc-fg cursor-pointer"
+                      }`}
+                    >
+                      {verifying ? "Verifying..." : "Verify"}
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={saving || loading}
+                      className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
+                        saving || loading
+                          ? "bg-cc-hover text-cc-muted cursor-not-allowed"
+                          : "bg-cc-primary hover:bg-cc-primary-hover text-white cursor-pointer"
+                      }`}
+                    >
+                      {saving ? "Saving..." : "Save"}
+                    </button>
+                  </div>
                 </div>
+
+                {verifyResult && (
+                  <div className={`px-3 py-2 rounded-lg text-xs ${
+                    verifyResult.valid
+                      ? "bg-cc-success/10 border border-cc-success/20 text-cc-success"
+                      : "bg-cc-error/10 border border-cc-error/20 text-cc-error"
+                  }`}>
+                    {verifyResult.valid ? "API key is valid." : `Invalid API key${verifyResult.error ? `: ${verifyResult.error}` : "."}`}
+                  </div>
+                )}
               </form>
             </section>
 
@@ -661,7 +700,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                         </span>
                       </button>
                       {!aiReady && (
-                        <p className="text-[11px] text-cc-warning">Configure an OpenRouter API key above to enable AI validation.</p>
+                        <p className="text-[11px] text-cc-warning">Configure an Anthropic API key above to enable AI validation.</p>
                       )}
                     </>
                   );
