@@ -1763,26 +1763,28 @@ describe("saved prompts API", () => {
     });
   });
 
-  it("updatePrompt sends PUT to /api/prompts/:id", async () => {
-    const updated = { ...mockPrompt, name: "Updated name" };
+  it("updatePrompt sends PUT to /api/prompts/:id with content+scope+cwd", async () => {
+    // Validates file-based update forwards content, scope, and cwd in the request body.
+    const updated = { ...mockPrompt, content: "Updated content" };
     mockFetch.mockResolvedValueOnce(mockResponse(updated));
 
-    const result = await api.updatePrompt("p1", { name: "Updated name" });
+    const result = await api.updatePrompt("p1", "Updated content", "global");
 
     const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toBe("/api/prompts/p1");
     expect(opts.method).toBe("PUT");
-    expect(JSON.parse(opts.body)).toEqual({ name: "Updated name" });
+    expect(JSON.parse(opts.body)).toEqual({ content: "Updated content", scope: "global" });
     expect(result).toEqual(updated);
   });
 
-  it("deletePrompt sends DELETE to /api/prompts/:id", async () => {
+  it("deletePrompt sends DELETE with scope=global when no cwd provided", async () => {
+    // Validates that a prompt with no cwd is deleted from the global prompts directory.
     mockFetch.mockResolvedValueOnce(mockResponse({ ok: true }));
 
     await api.deletePrompt("p1");
 
     const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe("/api/prompts/p1");
+    expect(url).toBe("/api/prompts/p1?scope=global");
     expect(opts.method).toBe("DELETE");
   });
 });

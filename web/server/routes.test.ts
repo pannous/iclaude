@@ -2078,37 +2078,32 @@ describe("Saved prompts API", () => {
   });
 
   it("updates a prompt", async () => {
-    // Confirms update fields are forwarded verbatim.
+    // Confirms update forwards content + scope + cwd to the file-based manager.
     vi.mocked(promptManager.updatePrompt).mockReturnValue({
       id: "p1",
-      name: "Updated",
+      name: "p1",
       content: "Updated content",
-      scope: "global",
-      createdAt: 1,
-      updatedAt: 2,
+      scope: "project",
     });
 
     const res = await app.request("/api/prompts/p1", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Updated", content: "Updated content" }),
+      body: JSON.stringify({ content: "Updated content", scope: "project", cwd: "/repo" }),
     });
     expect(res.status).toBe(200);
-    expect(promptManager.updatePrompt).toHaveBeenCalledWith("p1", {
-      name: "Updated",
-      content: "Updated content",
-    });
+    expect(promptManager.updatePrompt).toHaveBeenCalledWith("p1", "Updated content", "project", "/repo");
   });
 
   it("deletes a prompt", async () => {
-    // Confirms delete endpoint calls manager and returns ok shape.
+    // Confirms delete endpoint calls manager with name + scope + cwd and returns ok shape.
     vi.mocked(promptManager.deletePrompt).mockReturnValue(true);
 
-    const res = await app.request("/api/prompts/p1", { method: "DELETE" });
+    const res = await app.request("/api/prompts/p1?scope=project&cwd=%2Frepo", { method: "DELETE" });
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({ ok: true });
-    expect(promptManager.deletePrompt).toHaveBeenCalledWith("p1");
+    expect(promptManager.deletePrompt).toHaveBeenCalledWith("p1", "project", "/repo");
   });
 });
 

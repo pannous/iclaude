@@ -7,8 +7,8 @@ import { MentionMenu } from "./MentionMenu.js";
 import type { SavedPrompt } from "../api.js";
 
 const samplePrompts: SavedPrompt[] = [
-  { id: "1", name: "review", content: "Please review this code", scope: "global", createdAt: Date.now(), updatedAt: Date.now() },
-  { id: "2", name: "refactor", content: "Refactor this module", scope: "project", createdAt: Date.now(), updatedAt: Date.now() },
+  { id: "1", name: "review", content: "Please review this code", scope: "global" },
+  { id: "2", name: "refactor", content: "Refactor this module", scope: "project" },
 ];
 
 describe("MentionMenu", () => {

@@ -495,14 +495,12 @@ export type AgentExport = Omit<
   "id" | "createdAt" | "updatedAt" | "totalRuns" | "consecutiveFailures" | "lastRunAt" | "lastSessionId" | "enabled" | "nextRunAt"
 >;
 
+// LOCAL: File-based prompts — global: ~/.claude/prompts/*.md, project: {cwd}/.claude/commands/*.md
 export interface SavedPrompt {
   id: string;
   name: string;
   content: string;
   scope: "global" | "project";
-  projectPath?: string;
-  createdAt?: number;
-  updatedAt?: number;
 }
 
 // ─── Claude Config Browser ──────────────────────────────────────────────────
@@ -1043,7 +1041,7 @@ export const api = {
   sendSessionMessage: (sessionId: string, content: string) =>
     post<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/message`, { content }),
 
-  // Saved prompts ({cwd}/prompts/*.md)
+  // Saved prompts — global: ~/.claude/prompts/*.md, project: {cwd}/.claude/commands/*.md
   listPrompts: (cwd?: string, scope?: "global" | "project" | "all") => {
     const params = new URLSearchParams();
     if (cwd) params.set("cwd", cwd);
@@ -1053,10 +1051,15 @@ export const api = {
   },
   createPrompt: (data: { name: string; content: string; scope?: "global" | "project"; cwd?: string }) =>
     post<SavedPrompt>("/prompts", data),
-  updatePrompt: (id: string, data: { name?: string; content?: string }) =>
-    put<SavedPrompt>(`/prompts/${encodeURIComponent(id)}`, data),
-  deletePrompt: (id: string, _cwd?: string) =>
-    del<{ ok: boolean }>(`/prompts/${encodeURIComponent(id)}`),
+  updatePrompt: (name: string, content: string, scope: "global" | "project", cwd?: string) =>
+    put<SavedPrompt>(`/prompts/${encodeURIComponent(name)}`, { content, scope, cwd }),
+  // cwd present → project prompt in {cwd}/.claude/commands/; absent → global in ~/.claude/prompts/
+  deletePrompt: (id: string, cwd?: string) => {
+    const scope = cwd ? "project" : "global";
+    const params = new URLSearchParams({ scope });
+    if (cwd) params.set("cwd", cwd);
+    return del<{ ok: boolean }>(`/prompts/${encodeURIComponent(id)}?${params.toString()}`);
+  },
 
   // Skills
   listSkills: () =>

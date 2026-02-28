@@ -78,10 +78,11 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
     }
   }
 
-  async function handleDelete(promptName: string) {
-    if (!cwd) return;
+  async function handleDelete(prompt: SavedPrompt) {
+    const isGlobal = prompt.scope === "global";
+    if (!isGlobal && !cwd) return;
     try {
-      await api.deletePrompt(promptName, cwd);
+      await api.deletePrompt(prompt.name, isGlobal ? undefined : cwd);
       await loadPrompts();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -104,7 +105,7 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
     }
   }
 
-  const promptsPath = cwd ? `${cwd}/prompts/` : "prompts/";
+  const promptsPath = cwd ? `${cwd}/.claude/commands/` : "~/.claude/prompts/";
 
   return (
     <div className={`${embedded ? "h-full" : "h-[100dvh]"} bg-cc-bg text-cc-fg font-sans-ui antialiased overflow-y-auto`}>
@@ -257,7 +258,7 @@ export function PromptsPage({ embedded = false }: PromptsPageProps) {
                   setEditContent("");
                 }}
                 onSaveEdit={() => void handleSaveEdit()}
-                onDelete={() => void handleDelete(prompt.name)}
+                onDelete={() => void handleDelete(prompt)}
               />
             ))}
           </div>
