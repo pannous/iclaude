@@ -14,6 +14,7 @@ vi.mock("../api.js", () => ({
     unlinkLinearIssue: vi.fn().mockResolvedValue({}),
     linkLinearIssue: vi.fn().mockResolvedValue({}),
     archiveSession: vi.fn().mockResolvedValue({}),
+    listPanels: vi.fn().mockResolvedValue([]),
   },
 }));
 
