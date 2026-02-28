@@ -922,9 +922,11 @@ export const api = {
       `/fs/tree?path=${encodeURIComponent(path)}`,
     ),
   statFile: (path: string) =>
-    get<{ path: string; size: number; isFile: boolean }>(
+    get<{ path: string; size: number; isFile: boolean; isDirectory: boolean }>(
       `/fs/stat?path=${encodeURIComponent(path)}`,
     ),
+  revealInFinder: (path: string) =>
+    post<{ ok: boolean }>("/fs/reveal", { path }),
   readFile: (path: string) =>
     get<{ path: string; content: string }>(
       `/fs/read?path=${encodeURIComponent(path)}`,

@@ -88,6 +88,9 @@ export function FileEditor() {
   // Content maps are keyed by *resolved* (absolute) path
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
   const [editBuffers, setEditBuffers] = useState<Map<string, string>>(new Map());
+  // Paths that resolved to directories (not files)
+  const [directoryPaths, setDirectoryPaths] = useState<Set<string>>(new Set());
+  const [directoryTrees, setDirectoryTrees] = useState<Map<string, TreeNode[]>>(new Map());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sidebarVisible, setSidebarVisible] = useState(true);
@@ -109,17 +112,28 @@ export function FileEditor() {
       .finally(() => setTreeLoading(false));
   }, [cwd]);
 
-  // Load file content when a new file is opened
+  // Load file content (or directory listing) when a new path is opened
   useEffect(() => {
-    if (!resolved || fileContents.has(resolved)) return;
+    if (!resolved || fileContents.has(resolved) || directoryPaths.has(resolved)) return;
     setError(null);
     api.readFile(resolved)
       .then((res) => {
         setFileContents((prev) => new Map(prev).set(resolved, res.content));
         setEditBuffers((prev) => new Map(prev).set(resolved, res.content));
       })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, [resolved, fileContents]);
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        // EISDIR: path is a directory — show directory view instead of error
+        if (msg.includes("EISDIR") || msg.includes("illegal operation on a directory") || msg.includes("Is a directory")) {
+          setDirectoryPaths((prev) => new Set(prev).add(resolved));
+          api.getFileTree(resolved)
+            .then((res) => setDirectoryTrees((prev) => new Map(prev).set(resolved, res.tree)))
+            .catch(() => {});
+        } else {
+          setError(msg);
+        }
+      });
+  }, [resolved, fileContents, directoryPaths]);
 
   // Focus textarea when switching files
   useEffect(() => {
@@ -163,8 +177,12 @@ export function FileEditor() {
     }
     setFileContents((prev) => { const m = new Map(prev); m.delete(abs); return m; });
     setEditBuffers((prev) => { const m = new Map(prev); m.delete(abs); return m; });
+    setDirectoryPaths((prev) => { const s = new Set(prev); s.delete(abs); return s; });
+    setDirectoryTrees((prev) => { const m = new Map(prev); m.delete(abs); return m; });
     closeEditorFile(filePath);
   };
+
+  const isDirectory = resolved ? directoryPaths.has(resolved) : false;
 
   const relPath = (p: string) =>
     cwd && p.startsWith(cwd + "/") ? p.slice(cwd.length + 1) : p;
@@ -293,7 +311,7 @@ export function FileEditor() {
         </div>
 
         {/* File path + save bar */}
-        {resolved && (
+        {resolved && !isDirectory && (
           <div className="shrink-0 flex items-center justify-between px-4 py-1.5 bg-cc-card/50 border-b border-cc-border">
             <span className="text-[11px] text-cc-muted font-mono-code truncate">
               {relPath(resolved)}
@@ -317,8 +335,45 @@ export function FileEditor() {
           </div>
         )}
 
+        {/* Directory view */}
+        {resolved && isDirectory && (
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 py-8">
+            <div className="w-14 h-14 rounded-2xl bg-cc-card border border-cc-border flex items-center justify-center">
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-6 h-6 text-cc-warning/70">
+                <path d="M1 3.5A1.5 1.5 0 012.5 2h3.879a1.5 1.5 0 011.06.44l1.122 1.12A1.5 1.5 0 009.62 4H13.5A1.5 1.5 0 0115 5.5v7a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 12.5v-9z" />
+              </svg>
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-cc-fg font-medium mb-1">{resolved.split("/").pop()}</p>
+              <p className="text-xs text-cc-muted font-mono-code mb-4 max-w-xs truncate">{resolved}</p>
+              <button
+                onClick={() => api.revealInFinder(resolved)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cc-card border border-cc-border text-sm text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer mx-auto"
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4 text-cc-muted shrink-0">
+                  <path d="M8 1a7 7 0 100 14A7 7 0 008 1zM2 8a6 6 0 1112 0A6 6 0 012 8z" />
+                  <path d="M8 5a.5.5 0 01.5.5v2.793l1.354 1.353a.5.5 0 01-.708.708l-1.5-1.5A.5.5 0 017.5 8.5v-3A.5.5 0 018 5z" />
+                </svg>
+                Reveal in Finder
+              </button>
+            </div>
+            {directoryTrees.get(resolved)?.length ? (
+              <div className="w-full max-w-sm mt-2 rounded-lg border border-cc-border bg-cc-card overflow-hidden">
+                <div className="px-3 py-1.5 text-[10px] font-semibold text-cc-muted uppercase tracking-wider border-b border-cc-border">
+                  Contents
+                </div>
+                <div className="max-h-56 overflow-y-auto py-1">
+                  {directoryTrees.get(resolved)!.map((node) => (
+                    <FileTreeNode key={node.path} node={node} depth={0} onSelect={openFileInEditor} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
+
         {/* Textarea */}
-        {resolved && (
+        {resolved && !isDirectory && (
           <textarea
             ref={textareaRef}
             value={currentContent}

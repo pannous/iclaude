@@ -177,12 +177,25 @@ export function registerFsRoutes(api: Hono, opts?: { allowedBases?: string[] }):
     const absPath = resolve(filePath);
     try {
       const info = await stat(absPath);
-      return c.json({ path: absPath, size: info.size, isFile: info.isFile() });
+      return c.json({ path: absPath, size: info.size, isFile: info.isFile(), isDirectory: info.isDirectory() });
     } catch (e: unknown) {
       return c.json(
         { error: e instanceof Error ? e.message : "Cannot stat file" },
         404,
       );
+    }
+  });
+
+  api.post("/fs/reveal", async (c) => {
+    const { path: filePath } = await c.req.json<{ path: string }>();
+    if (!filePath) return c.json({ error: "path required" }, 400);
+    const absPath = resolve(filePath);
+    try {
+      // -R reveals the item in Finder (selects it); works for both files and directories
+      execSync(`open -R ${shellEscapeArg(absPath)}`);
+      return c.json({ ok: true });
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : "Cannot reveal" }, 500);
     }
   });
 
