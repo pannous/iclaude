@@ -416,7 +416,7 @@ function MarkdownContent({ text, showCursor = false }: { text: string; showCurso
             }
             const bareMatch = text.match(BARE_FILENAME_RE);
             if (bareMatch) {
-              return <BareFilenameLink filename={bareMatch[1]} line={bareMatch[2]} />;
+              return <BareFilenameLink filename={bareMatch[1]} line={bareMatch[3]} />;
             }
 
             return (
@@ -816,7 +816,7 @@ function BareFilenameLink({ filename, line }: { filename: string; line?: string 
   return (
     <button
       type="button"
-      className="px-1 py-0.5 rounded bg-cc-code-bg/30 text-[13px] font-mono-code text-cc-primary hover:bg-cc-primary/20 cursor-pointer transition-colors underline decoration-cc-primary/30 inline disabled:opacity-50"
+      className="px-1 py-0.5 rounded bg-cc-code-bg/30 text-[13px] font-mono-code text-cc-primary hover:bg-cc-primary/20 cursor-pointer transition-colors underline decoration-cc-primary/30 inline disabled:opacity-50 select-text"
       onClick={handleClick}
       disabled={searching || !cwd}
       title={cwd ? `Search for ${filename} in ${cwd}` : "Session working directory unknown"}
