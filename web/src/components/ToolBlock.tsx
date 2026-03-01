@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useStore } from "../store.js";
 import { BashDisplay, EditDisplay, WriteDisplay, ReadDisplay, GlobDisplay, GrepDisplay } from "./ToolDisplays.js";
 import { execCode, PlayIcon, SpinnerIcon, RunOutput, type ExecResult } from "./RunCodeButton.js";
+import { CopyButton } from "./CopyButton.js";
 
 const TOOL_ICONS: Record<string, string> = {
   Bash: "terminal",
@@ -117,18 +118,21 @@ export function ToolBlock({
           </span>
         ) : null}
         {isBash && (
-          <button
-            onClick={handleRun}
-            disabled={runState === "running"}
-            title="Run"
-            className="ml-auto shrink-0 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:w-5 sm:h-5 flex items-center justify-center rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover active:scale-90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {runState === "running" ? (
-              <SpinnerIcon className="w-3 h-3" />
-            ) : (
-              <PlayIcon className={`w-3 h-3 ${runState === "success" ? "text-cc-success" : runState === "error" ? "text-red-400" : ""}`} />
-            )}
-          </button>
+          <div className="ml-auto flex items-center gap-0.5 shrink-0">
+            <CopyButton getText={() => String(input.command || "")} title="Copy command" />
+            <button
+              onClick={handleRun}
+              disabled={runState === "running"}
+              title="Run"
+              className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:w-5 sm:h-5 flex items-center justify-center rounded-md text-cc-muted hover:text-cc-fg hover:bg-cc-hover active:scale-90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {runState === "running" ? (
+                <SpinnerIcon className="w-3 h-3" />
+              ) : (
+                <PlayIcon className={`w-3 h-3 ${runState === "success" ? "text-cc-success" : runState === "error" ? "text-red-400" : ""}`} />
+              )}
+            </button>
+          </div>
         )}
       </div>
 

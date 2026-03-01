@@ -531,14 +531,17 @@ function BashResultBlock({ text, isError }: { text: string; isError: boolean }) 
         }`}>
           {hasMore && !showFull ? "Output (last 20 lines)" : "Output"}
         </span>
-        {hasMore && (
-          <button
-            onClick={() => setShowFull(!showFull)}
-            className="text-[10px] text-cc-primary hover:underline cursor-pointer"
-          >
-            {showFull ? "Show tail" : "Show full"}
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {hasMore && (
+            <button
+              onClick={() => setShowFull(!showFull)}
+              className="text-[10px] text-cc-primary hover:underline cursor-pointer"
+            >
+              {showFull ? "Show tail" : "Show full"}
+            </button>
+          )}
+          <CopyButton getText={() => text} title="Copy output" />
+        </div>
       </div>
       {htmlContent != null ? (
         <pre
@@ -621,6 +624,17 @@ function ToolGroupBlock({ name, items }: { name: string; items: ToolGroupItem[] 
         <span className="text-xs font-medium text-cc-fg">{label}</span>
         <span className="text-[10px] text-cc-muted bg-cc-hover rounded-full px-1.5 py-0.5 tabular-nums">
           {items.length}
+        </span>
+        <span className="ml-auto" onClick={(e) => e.stopPropagation()}>
+          <CopyButton
+            getText={() => {
+              if (name === "Bash") {
+                return items.map(item => String(item.input.command || "")).filter(Boolean).join("\n");
+              }
+              return items.map(item => getPreview(item.name, item.input)).filter(Boolean).join("\n");
+            }}
+            title="Copy"
+          />
         </span>
       </button>
 
