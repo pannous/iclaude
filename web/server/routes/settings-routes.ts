@@ -8,6 +8,7 @@ export function registerSettingsRoutes(api: Hono): void {
     return c.json({
       anthropicApiKeyConfigured: !!settings.anthropicApiKey.trim(),
       anthropicModel: settings.anthropicModel || DEFAULT_ANTHROPIC_MODEL,
+      openaiApiKeyConfigured: !!settings.openaiApiKey.trim(),
       linearApiKeyConfigured: !!settings.linearApiKey.trim(),
       linearAutoTransition: settings.linearAutoTransition,
       linearAutoTransitionStateName: settings.linearAutoTransitionStateName,
@@ -27,6 +28,9 @@ export function registerSettingsRoutes(api: Hono): void {
     }
     if (body.anthropicModel !== undefined && typeof body.anthropicModel !== "string") {
       return c.json({ error: "anthropicModel must be a string" }, 400);
+    }
+    if (body.openaiApiKey !== undefined && typeof body.openaiApiKey !== "string") {
+      return c.json({ error: "openaiApiKey must be a string" }, 400);
     }
     if (body.linearApiKey !== undefined && typeof body.linearApiKey !== "string") {
       return c.json({ error: "linearApiKey must be a string" }, 400);
@@ -62,7 +66,7 @@ export function registerSettingsRoutes(api: Hono): void {
       return c.json({ error: "aiValidationAutoDeny must be a boolean" }, 400);
     }
     const hasAnyField = body.anthropicApiKey !== undefined || body.anthropicModel !== undefined
-      || body.linearApiKey !== undefined || body.linearAutoTransition !== undefined
+      || body.openaiApiKey !== undefined || body.linearApiKey !== undefined || body.linearAutoTransition !== undefined
       || body.linearAutoTransitionStateId !== undefined || body.linearAutoTransitionStateName !== undefined
       || body.linearArchiveTransition !== undefined || body.linearArchiveTransitionStateId !== undefined
       || body.linearArchiveTransitionStateName !== undefined
@@ -85,6 +89,10 @@ export function registerSettingsRoutes(api: Hono): void {
       anthropicModel:
         typeof body.anthropicModel === "string"
           ? (body.anthropicModel.trim() || DEFAULT_ANTHROPIC_MODEL)
+          : undefined,
+      openaiApiKey:
+        typeof body.openaiApiKey === "string"
+          ? body.openaiApiKey.trim()
           : undefined,
       linearApiKey:
         typeof body.linearApiKey === "string"
@@ -135,6 +143,7 @@ export function registerSettingsRoutes(api: Hono): void {
     return c.json({
       anthropicApiKeyConfigured: !!settings.anthropicApiKey.trim(),
       anthropicModel: settings.anthropicModel || DEFAULT_ANTHROPIC_MODEL,
+      openaiApiKeyConfigured: !!settings.openaiApiKey.trim(),
       linearApiKeyConfigured: !!settings.linearApiKey.trim(),
       linearAutoTransition: settings.linearAutoTransition,
       linearAutoTransitionStateName: settings.linearAutoTransitionStateName,

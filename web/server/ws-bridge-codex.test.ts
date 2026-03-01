@@ -113,6 +113,7 @@ describe("attachCodexAdapterHandlers", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
+      openaiApiKey: "",
       linearApiKey: "",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
@@ -867,6 +868,7 @@ describe("attachCodexAdapterHandlers", () => {
       vi.mocked(settingsManager.getSettings).mockReturnValue({
         anthropicApiKey: "test-api-key",
         anthropicModel: "claude-sonnet-4.6",
+        openaiApiKey: "",
         linearApiKey: "",
         linearAutoTransition: false,
         linearAutoTransitionStateId: "",
@@ -1033,6 +1035,7 @@ describe("attachCodexAdapterHandlers", () => {
       vi.mocked(settingsManager.getSettings).mockReturnValue({
         anthropicApiKey: "test-api-key",
         anthropicModel: "claude-sonnet-4.6",
+        openaiApiKey: "",
         linearApiKey: "",
         linearAutoTransition: false,
         linearAutoTransitionStateId: "",
@@ -1069,6 +1072,7 @@ describe("attachCodexAdapterHandlers", () => {
       vi.mocked(settingsManager.getSettings).mockReturnValue({
         anthropicApiKey: "",  // empty
         anthropicModel: "claude-sonnet-4.6",
+        openaiApiKey: "",
         linearApiKey: "",
         linearAutoTransition: false,
         linearAutoTransitionStateId: "",
@@ -1170,6 +1174,7 @@ describe("attachCodexAdapterHandlers", () => {
       vi.mocked(settingsManager.getSettings).mockReturnValue({
         anthropicApiKey: "test-api-key",
         anthropicModel: "claude-sonnet-4.6",
+        openaiApiKey: "",
         linearApiKey: "",
         linearAutoTransition: false,
         linearAutoTransitionStateId: "",
@@ -1216,6 +1221,7 @@ describe("attachCodexAdapterHandlers", () => {
       vi.mocked(settingsManager.getSettings).mockReturnValue({
         anthropicApiKey: "test-api-key",
         anthropicModel: "claude-sonnet-4.6",
+        openaiApiKey: "",
         linearApiKey: "",
         linearAutoTransition: false,
         linearAutoTransitionStateId: "",

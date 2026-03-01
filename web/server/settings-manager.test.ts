@@ -27,6 +27,7 @@ describe("settings-manager", () => {
     expect(getSettings()).toEqual({
       anthropicApiKey: "",
       anthropicModel: DEFAULT_ANTHROPIC_MODEL,
+      openaiApiKey: "",
       linearApiKey: "",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
@@ -72,6 +73,7 @@ describe("settings-manager", () => {
     expect(getSettings()).toEqual({
       anthropicApiKey: "existing",
       anthropicModel: "claude-haiku-3",
+      openaiApiKey: "",
       linearApiKey: "lin_api_abc",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
@@ -124,6 +126,7 @@ describe("settings-manager", () => {
     expect(getSettings()).toEqual({
       anthropicApiKey: "",
       anthropicModel: DEFAULT_ANTHROPIC_MODEL,
+      openaiApiKey: "",
       linearApiKey: "",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",

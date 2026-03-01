@@ -1,6 +1,9 @@
 import { DEFAULT_ANTHROPIC_MODEL, getSettings } from "./settings-manager.js";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const OPENAI_MODEL = "gpt-4o-mini";
+const TITLE_PROMPT = "Generate a concise 3-5 word session title for this user request. Output only the title.";
 
 function sanitizeTitle(raw: string): string | null {
   const title = raw.replace(/^"|"$/g, "").replace(/^'|'$/g, "").trim();
@@ -8,9 +11,80 @@ function sanitizeTitle(raw: string): string | null {
   return title;
 }
 
+function buildPrompt(firstUserMessage: string): string {
+  const truncated = firstUserMessage.slice(0, 500);
+  return `${TITLE_PROMPT}\n\nRequest: ${truncated}`;
+}
+
+async function generateViaAnthropic(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  signal: AbortSignal,
+): Promise<string | null> {
+  const res = await fetch(ANTHROPIC_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 256,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+    }),
+    signal,
+  });
+
+  if (!res.ok) {
+    console.warn(`[auto-namer] Anthropic request failed: ${res.status} ${res.statusText}`);
+    return null;
+  }
+
+  const data = await res.json() as {
+    content?: Array<{ type: string; text?: string }>;
+  };
+  const raw = data.content?.[0]?.type === "text" ? (data.content[0].text ?? "") : "";
+  return sanitizeTitle(raw);
+}
+
+async function generateViaOpenAI(
+  apiKey: string,
+  prompt: string,
+  signal: AbortSignal,
+): Promise<string | null> {
+  const res = await fetch(OPENAI_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      max_tokens: 256,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+    }),
+    signal,
+  });
+
+  if (!res.ok) {
+    console.warn(`[auto-namer] OpenAI request failed: ${res.status} ${res.statusText}`);
+    return null;
+  }
+
+  const data = await res.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const raw = data.choices?.[0]?.message?.content ?? "";
+  return sanitizeTitle(raw);
+}
+
 /**
- * Generates a short session title using the Anthropic Messages API.
- * Returns null if Anthropic isn't configured or if generation fails.
+ * Generates a short session title using Anthropic API, falling back to OpenAI.
+ * Returns null if no provider is configured or all attempts fail.
  */
 export async function generateSessionTitle(
   firstUserMessage: string,
@@ -21,56 +95,33 @@ export async function generateSessionTitle(
 ): Promise<string | null> {
   const timeout = options?.timeoutMs || 15_000;
   const settings = getSettings();
-  const apiKey = settings.anthropicApiKey.trim();
+  const anthropicKey = settings.anthropicApiKey.trim();
+  const openaiKey = settings.openaiApiKey.trim();
 
-  if (!apiKey) {
+  if (!anthropicKey && !openaiKey) {
     return null;
   }
 
-  const model = settings.anthropicModel?.trim() || DEFAULT_ANTHROPIC_MODEL;
-  const truncated = firstUserMessage.slice(0, 500);
-  const userPrompt = `Generate a concise 3-5 word session title for this user request. Output only the title.\n\nRequest: ${truncated}`;
-
+  const prompt = buildPrompt(firstUserMessage);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const res = await fetch(ANTHROPIC_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 256,
-        messages: [
-          {
-            role: "user",
-            content: userPrompt,
-          },
-        ],
-        temperature: 0.2,
-      }),
-      signal: controller.signal,
-    });
-
-    if (!res.ok) {
-      console.warn(`[auto-namer] Anthropic request failed: ${res.status} ${res.statusText}`);
-      return null;
+    if (anthropicKey) {
+      const model = settings.anthropicModel?.trim() || DEFAULT_ANTHROPIC_MODEL;
+      const title = await generateViaAnthropic(anthropicKey, model, prompt, controller.signal);
+      if (title) return title;
+      // Anthropic failed — fall through to OpenAI if available
     }
 
-    const data = await res.json() as {
-      content?: Array<{ type: string; text?: string }>;
-    };
+    if (openaiKey) {
+      console.log("[auto-namer] Falling back to OpenAI for title generation");
+      return await generateViaOpenAI(openaiKey, prompt, controller.signal);
+    }
 
-    const raw = data.content?.[0]?.type === "text"
-      ? (data.content[0].text ?? "")
-      : "";
-    return sanitizeTitle(raw);
+    return null;
   } catch (err) {
-    console.warn("[auto-namer] Failed to generate session title via Anthropic:", err);
+    console.warn("[auto-namer] Failed to generate session title:", err);
     return null;
   } finally {
     clearTimeout(timer);

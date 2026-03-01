@@ -19,6 +19,7 @@ beforeEach(() => {
   vi.mocked(settingsManager.getSettings).mockReturnValue({
     anthropicApiKey: "sk-ant-key",
     anthropicModel: "claude-sonnet-4.6",
+    openaiApiKey: "",
     linearApiKey: "",
     linearAutoTransition: false,
     linearAutoTransitionStateId: "",
@@ -52,6 +53,7 @@ describe("generateSessionTitle", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
+      openaiApiKey: "",
       linearApiKey: "",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
@@ -95,6 +97,7 @@ describe("generateSessionTitle", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       anthropicApiKey: "sk-ant-key",
       anthropicModel: "claude-haiku-3",
+      openaiApiKey: "",
       linearApiKey: "",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
@@ -164,6 +167,7 @@ describe("generateSessionTitle", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       anthropicApiKey: "sk-ant-key",
       anthropicModel: "",
+      openaiApiKey: "",
       linearApiKey: "",
       linearAutoTransition: false,
       linearAutoTransitionStateId: "",
@@ -214,5 +218,96 @@ describe("generateSessionTitle", () => {
     const [, req] = mockFetch.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(req.body)) as { max_tokens: number };
     expect(body.max_tokens).toBe(256);
+  });
+
+  it("falls back to OpenAI when Anthropic key is empty but OpenAI key is set", async () => {
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
+      openaiApiKey: "sk-openai-key",
+      linearApiKey: "",
+      linearAutoTransition: false,
+      linearAutoTransitionStateId: "",
+      linearAutoTransitionStateName: "",
+      linearArchiveTransition: false,
+      linearArchiveTransitionStateId: "",
+      linearArchiveTransitionStateName: "",
+      editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
+      updatedAt: 0,
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "OpenAI Title" } }],
+      }),
+    });
+
+    const title = await generateSessionTitle("Fix login", "ignored");
+
+    expect(title).toBe("OpenAI Title");
+    const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.openai.com/v1/chat/completions");
+  });
+
+  it("falls back to OpenAI when Anthropic request fails", async () => {
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      anthropicApiKey: "sk-ant-key",
+      anthropicModel: "claude-sonnet-4.6",
+      openaiApiKey: "sk-openai-key",
+      linearApiKey: "",
+      linearAutoTransition: false,
+      linearAutoTransitionStateId: "",
+      linearAutoTransitionStateName: "",
+      linearArchiveTransition: false,
+      linearArchiveTransitionStateId: "",
+      linearArchiveTransitionStateName: "",
+      editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
+      updatedAt: 0,
+    });
+    // Anthropic fails
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 402, statusText: "Payment Required" });
+    // OpenAI succeeds
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "Fallback Title" } }],
+      }),
+    });
+
+    const title = await generateSessionTitle("Fix login", "ignored");
+
+    expect(title).toBe("Fallback Title");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns null when both Anthropic and OpenAI keys are empty", async () => {
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4.6",
+      openaiApiKey: "",
+      linearApiKey: "",
+      linearAutoTransition: false,
+      linearAutoTransitionStateId: "",
+      linearAutoTransitionStateName: "",
+      linearArchiveTransition: false,
+      linearArchiveTransitionStateId: "",
+      linearArchiveTransitionStateName: "",
+      editorTabEnabled: false,
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
+      updatedAt: 0,
+    });
+
+    const title = await generateSessionTitle("Fix login", "ignored");
+
+    expect(title).toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
