@@ -34,7 +34,7 @@ import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
 import { imagePullManager } from "./image-pull-manager.js";
 import { isRunningAsService } from "./service.js";
 import { getToken, verifyToken, isAuthEnabled } from "./auth-manager.js";
-import { getCookie } from "hono/cookie";
+import { getCookie, setCookie } from "hono/cookie";
 import type { SocketData } from "./ws-bridge.js";
 import type { ServerWebSocket } from "bun";
 
@@ -178,9 +178,11 @@ app.use("/*", async (c, next) => {
   if (!isAuthEnabled()) return next();
   if (!c.req.header("X-Companion-Tunnel")) return next();
 
-  // Auth endpoints must be reachable to complete login
+  // Auth endpoints and well-known must be reachable without login
   const path = new URL(c.req.url).pathname;
   if (path === "/api/auth/verify" || path === "/api/auth/status") return next();
+  if (path.startsWith("/.well-known/")) return next();
+  if (path === "/auth") return next();
 
   // Accept token from cookie, query param (?token=...), or Authorization header
   const cookieToken = getCookie(c, "companion_auth");
@@ -243,6 +245,23 @@ app.use("/*", async (c, next) => {
 
 app.use("/api/*", cors());
 app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, agentExecutor));
+
+// Universal Link handler: /auth?token=xxx
+// If Listen app is installed, iOS opens it directly (app reads the token from the URL).
+// If not installed, browser lands here and we verify + set cookie + redirect to home.
+app.get("/auth", (c) => {
+  const token = new URL(c.req.url).searchParams.get("token");
+  if (token && verifyToken(token)) {
+    setCookie(c, "companion_auth", token, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "Strict",
+      maxAge: 365 * 24 * 60 * 60,
+    });
+    return c.redirect("/");
+  }
+  return c.redirect("/"); // invalid token → show login page
+});
 
 // Dynamic manifest — embeds auth token in start_url so PWA auto-authenticates
 // on first launch. iOS gives standalone PWAs isolated storage from Safari,

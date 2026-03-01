@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "B325LM52BE.pannous.Listen",
+        "paths": ["/auth*"]
+      }
+    ]
+  }
+}

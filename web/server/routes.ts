@@ -221,6 +221,10 @@ export function createRoutes(
         return { label: a.label, url: `http://${a.ip}:${port}`, qrDataUrl };
       }),
     );
+    // Add Universal Link QR for Listen app (opens app if installed, browser fallback otherwise)
+    const universalUrl = `https://claude.pannous.com/auth?token=${authToken}`;
+    const universalQr = await QRCode.toDataURL(universalUrl, { width: 256, margin: 2 });
+    qrCodes.unshift({ label: "Listen App / Browser", url: "https://claude.pannous.com", qrDataUrl: universalQr });
     return { qrCodes };
   }
 
