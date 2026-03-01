@@ -735,6 +735,7 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isNearBottom = useRef(true);
+  const userScrolledUp = useRef(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
@@ -898,6 +899,7 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
     if (!el) return;
     isNearBottom.current =
       el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (isNearBottom.current) userScrolledUp.current = false;
     setShowScrollToBottom(!isNearBottom.current);
     const distanceFromBottom = Math.max(0, el.scrollHeight - el.clientHeight - el.scrollTop);
     savedDistanceFromBottomBySession.set(sessionId, distanceFromBottom);
@@ -910,6 +912,15 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
       && el.scrollTop <= SCROLL_TOP_PREFETCH_PX
     ) {
       void loadResumeHistoryPage({ preserveScroll: true });
+    }
+  }
+
+  // Track user-initiated scroll-up (wheel/touch) separately from programmatic scrolls
+  function handleWheel() {
+    const el = containerRef.current;
+    if (!el) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight > 120) {
+      userScrolledUp.current = true;
     }
   }
 
@@ -968,7 +979,7 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
   }, [sessionId]);
 
   useEffect(() => {
-    if (isNearBottom.current) {
+    if (!userScrolledUp.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
@@ -1024,7 +1035,7 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
       {/* Scroll to bottom button */}
       {showScrollToBottom && (
         <button
-          onClick={() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }}
+          onClick={() => { userScrolledUp.current = false; bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }}
           className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-cc-fg bg-cc-card border border-cc-border rounded-full shadow-md hover:bg-cc-hover transition-colors cursor-pointer"
           title="Scroll to bottom"
         >
@@ -1037,6 +1048,7 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
       <div
         ref={containerRef}
         onScroll={handleScroll}
+        onWheel={handleWheel}
         className="h-full overflow-y-auto overscroll-y-contain px-4 sm:px-6 py-5 sm:py-8"
       >
         <div className="max-w-3xl mx-auto space-y-5 sm:space-y-7">

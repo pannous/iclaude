@@ -105,7 +105,10 @@ export function ProjectGroup({
 
         {/* Folder label — opens context panel (chevron handles collapse) */}
         <button
-          onClick={() => onFolderClick?.(group.key)}
+          onClick={() => {
+            onFolderClick?.(group.key);
+            if (isCollapsed) onToggleCollapse(group.key);
+          }}
           className="min-w-0 py-1.5 pr-1 text-[12px] font-semibold text-cc-fg/80 truncate hover:bg-cc-hover rounded-md transition-colors cursor-pointer"
         >
           {group.label}
