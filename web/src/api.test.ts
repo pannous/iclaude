@@ -1763,6 +1763,26 @@ describe("saved prompts API", () => {
     });
   });
 
+  it("createPrompt includes projectPaths for multi-folder targeting", async () => {
+    // Validates projectPaths array is sent in the POST body.
+    mockFetch.mockResolvedValueOnce(mockResponse({ ...mockPrompt, scope: "project", projectPaths: ["/repo-a", "/repo-b"] }));
+
+    await api.createPrompt({
+      name: "Fix tests",
+      content: "Please fix the failing tests",
+      scope: "project",
+      projectPaths: ["/repo-a", "/repo-b"],
+    });
+
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(JSON.parse(opts.body)).toEqual({
+      name: "Fix tests",
+      content: "Please fix the failing tests",
+      scope: "project",
+      projectPaths: ["/repo-a", "/repo-b"],
+    });
+  });
+
   it("updatePrompt sends PUT to /api/prompts/:id with content+scope+cwd", async () => {
     // Validates file-based update forwards content, scope, and cwd in the request body.
     const updated = { ...mockPrompt, content: "Updated content" };

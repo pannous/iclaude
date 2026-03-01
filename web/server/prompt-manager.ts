@@ -13,6 +13,15 @@ export interface SavedPrompt {
   name: string;
   content: string;
   scope: PromptScope;
+  projectPath?: string;
+  projectPaths?: string[];
+}
+
+export interface PromptUpdateFields {
+  name?: string;
+  content?: string;
+  scope?: PromptScope;
+  projectPaths?: string[];
 }
 
 const globalPromptsDir = () => join(homedir(), ".claude", "prompts");
@@ -22,14 +31,22 @@ function promptDir(scope: PromptScope, cwd?: string): string {
   return scope === "global" ? globalPromptsDir() : projectCommandsDir(cwd!);
 }
 
-function readPromptsFromDir(dir: string, scope: PromptScope): SavedPrompt[] {
+function readPromptsFromDir(dir: string, scope: PromptScope, cwd?: string): SavedPrompt[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .filter((f) => f.endsWith(".md"))
     .map((f) => {
       const name = basename(f, ".md");
       const content = readFileSync(join(dir, f), "utf-8").trim();
-      return { id: name, name, content, scope };
+      const resolvedCwd = cwd ? resolve(cwd) : undefined;
+      return {
+        id: name,
+        name,
+        content,
+        scope,
+        projectPath: scope === "project" ? resolvedCwd : undefined,
+        projectPaths: scope === "project" && resolvedCwd ? [resolvedCwd] : undefined,
+      };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -38,7 +55,7 @@ export function listPrompts(opts?: { cwd?: string; scope?: "global" | "project" 
   const scope = opts?.scope ?? "all";
   const results: SavedPrompt[] = [];
   if (scope !== "project") results.push(...readPromptsFromDir(globalPromptsDir(), "global"));
-  if (scope !== "global" && opts?.cwd) results.push(...readPromptsFromDir(projectCommandsDir(opts.cwd), "project"));
+  if (scope !== "global" && opts?.cwd) results.push(...readPromptsFromDir(projectCommandsDir(opts.cwd), "project", opts.cwd));
   return results;
 }
 
@@ -46,20 +63,43 @@ export function getPrompt(name: string, scope: PromptScope, cwd?: string): Saved
   const filePath = join(promptDir(scope, cwd), `${name}.md`);
   if (!existsSync(filePath)) return null;
   const content = readFileSync(filePath, "utf-8").trim();
-  return { id: name, name, content, scope };
+  const resolvedCwd = cwd ? resolve(cwd) : undefined;
+  return {
+    id: name,
+    name,
+    content,
+    scope,
+    projectPath: scope === "project" ? resolvedCwd : undefined,
+    projectPaths: scope === "project" && resolvedCwd ? [resolvedCwd] : undefined,
+  };
 }
 
-export function createPrompt(name: string, content: string, scope: PromptScope, cwd?: string): SavedPrompt {
+export function createPrompt(
+  name: string,
+  content: string,
+  scope: PromptScope,
+  cwd?: string,
+  _projectPaths?: string[],
+): SavedPrompt {
   const cleanName = name?.trim();
   const cleanContent = content?.trim();
   if (!cleanName) throw new Error("Prompt name is required");
   if (!cleanContent) throw new Error("Prompt content is required");
+  if (scope !== "global" && scope !== "project") throw new Error("Invalid prompt scope");
   if (scope === "project" && !cwd?.trim()) throw new Error("Project path is required for project prompts");
 
   const dir = promptDir(scope, cwd);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${cleanName}.md`), cleanContent, "utf-8");
-  return { id: cleanName, name: cleanName, content: cleanContent, scope };
+  const resolvedCwd = cwd ? resolve(cwd) : undefined;
+  return {
+    id: cleanName,
+    name: cleanName,
+    content: cleanContent,
+    scope,
+    projectPath: scope === "project" ? resolvedCwd : undefined,
+    projectPaths: scope === "project" && resolvedCwd ? [resolvedCwd] : undefined,
+  };
 }
 
 export function updatePrompt(name: string, content: string, scope: PromptScope, cwd?: string): SavedPrompt | null {
@@ -68,7 +108,15 @@ export function updatePrompt(name: string, content: string, scope: PromptScope, 
   const cleanContent = content?.trim();
   if (!cleanContent) throw new Error("Prompt content cannot be empty");
   writeFileSync(filePath, cleanContent, "utf-8");
-  return { id: name, name, content: cleanContent, scope };
+  const resolvedCwd = cwd ? resolve(cwd) : undefined;
+  return {
+    id: name,
+    name,
+    content: cleanContent,
+    scope,
+    projectPath: scope === "project" ? resolvedCwd : undefined,
+    projectPaths: scope === "project" && resolvedCwd ? [resolvedCwd] : undefined,
+  };
 }
 
 export function deletePrompt(name: string, scope: PromptScope, cwd?: string): boolean {

@@ -39,6 +39,7 @@ describe("settings-manager", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
   });
@@ -85,6 +86,7 @@ describe("settings-manager", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 123,
     });
   });
@@ -138,6 +140,7 @@ describe("settings-manager", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
   });
@@ -167,5 +170,26 @@ describe("settings-manager", () => {
   it("updates editorTabEnabled", () => {
     const updated = updateSettings({ editorTabEnabled: true });
     expect(updated.editorTabEnabled).toBe(true);
+  });
+
+  it("updates updateChannel to prerelease", () => {
+    const updated = updateSettings({ updateChannel: "prerelease" });
+    expect(updated.updateChannel).toBe("prerelease");
+  });
+
+  it("defaults updateChannel to stable for invalid values", () => {
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({ updateChannel: "invalid" }),
+      "utf-8",
+    );
+    _resetForTest(settingsPath);
+    expect(getSettings().updateChannel).toBe("stable");
+  });
+
+  it("preserves updateChannel when updating other settings", () => {
+    updateSettings({ updateChannel: "prerelease" });
+    const updated = updateSettings({ anthropicModel: "claude-haiku-3" });
+    expect(updated.updateChannel).toBe("prerelease");
   });
 });

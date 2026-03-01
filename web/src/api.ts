@@ -242,6 +242,7 @@ export interface UpdateInfo {
   isServiceMode: boolean;
   updateInProgress: boolean;
   lastChecked: number;
+  channel: "stable" | "prerelease";
 }
 
 export interface UsageLimits {
@@ -275,6 +276,7 @@ export interface AppSettings {
   aiValidationEnabled: boolean;
   aiValidationAutoApprove: boolean;
   aiValidationAutoDeny: boolean;
+  updateChannel: "stable" | "prerelease";
   // LOCAL: aiProvider toggles between openrouter and direct claude API
   aiProvider?: "openrouter" | "claude";
 }
@@ -501,6 +503,8 @@ export interface SavedPrompt {
   name: string;
   content: string;
   scope: "global" | "project";
+  projectPath?: string;
+  projectPaths?: string[];
 }
 
 // ─── Claude Config Browser ──────────────────────────────────────────────────
@@ -800,6 +804,7 @@ export const api = {
     aiValidationEnabled?: boolean;
     aiValidationAutoApprove?: boolean;
     aiValidationAutoDeny?: boolean;
+    updateChannel?: "stable" | "prerelease";
     // LOCAL: aiProvider toggles between openrouter and direct claude API
     aiProvider?: "openrouter" | "claude";
   }) => put<AppSettings>("/settings", data),
@@ -1051,7 +1056,7 @@ export const api = {
     const query = params.toString();
     return get<SavedPrompt[]>(`/prompts${query ? `?${query}` : ""}`);
   },
-  createPrompt: (data: { name: string; content: string; scope?: "global" | "project"; cwd?: string }) =>
+  createPrompt: (data: { name: string; content: string; scope?: "global" | "project"; cwd?: string; projectPaths?: string[] }) =>
     post<SavedPrompt>("/prompts", data),
   updatePrompt: (name: string, content: string, scope: "global" | "project", cwd?: string) =>
     put<SavedPrompt>(`/prompts/${encodeURIComponent(name)}`, { content, scope, cwd }),

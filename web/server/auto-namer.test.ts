@@ -31,6 +31,7 @@ beforeEach(() => {
     aiValidationEnabled: false,
     aiValidationAutoApprove: true,
     aiValidationAutoDeny: true,
+    updateChannel: "stable",
     updatedAt: 0,
   });
 });
@@ -65,6 +66,7 @@ describe("generateSessionTitle", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -109,6 +111,7 @@ describe("generateSessionTitle", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
     mockFetch.mockResolvedValueOnce({
@@ -179,6 +182,7 @@ describe("generateSessionTitle", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
     mockFetch.mockResolvedValueOnce({
@@ -236,6 +240,7 @@ describe("generateSessionTitle", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
     mockFetch.mockResolvedValueOnce({
@@ -268,6 +273,7 @@ describe("generateSessionTitle", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
     // Anthropic fails
@@ -302,6 +308,7 @@ describe("generateSessionTitle", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 

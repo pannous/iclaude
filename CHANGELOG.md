@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.68.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.67.0...the-companion-v0.68.0) (2026-02-28)
+
+
+### Features
+
+* **web:** add Docker Builder page and refactor Environment UI ([#454](https://github.com/The-Vibe-Company/companion/issues/454)) ([c97dc9e](https://github.com/The-Vibe-Company/companion/commit/c97dc9e52a49528b5e7a64bbf518c33f630d2853))
+
+
+### Bug Fixes
+
+* **docs:** update mintlify docs.json schema ([265c89e](https://github.com/The-Vibe-Company/companion/commit/265c89eb3480974458dc7e0ad135a1fbb5b306b3))
+
+## [0.67.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.66.0...the-companion-v0.67.0) (2026-02-28)
+
+
+### Features
+
+* **multi-agent:** enable codex by default and improve subagent UI ([#444](https://github.com/The-Vibe-Company/companion/issues/444)) ([973ca5f](https://github.com/The-Vibe-Company/companion/commit/973ca5facc9f9c1b36b3b48f0d7183c8fa54da47))
+* **web:** add prerelease update channel and preview CI pipeline ([#451](https://github.com/The-Vibe-Company/companion/issues/451)) ([6799c6f](https://github.com/The-Vibe-Company/companion/commit/6799c6f46124ff2da61d7612f344fbd23da9ec69))
+* **web:** make saved prompts targetable by project scope or global ([#448](https://github.com/The-Vibe-Company/companion/issues/448)) ([805eb73](https://github.com/The-Vibe-Company/companion/commit/805eb73c7f3138a6feb5ad33a485dc60d9364a0a))
+
+
+### Bug Fixes
+
+* **ci:** use bun run test instead of bun test in preview workflow ([#452](https://github.com/The-Vibe-Company/companion/issues/452)) ([f2e2f10](https://github.com/The-Vibe-Company/companion/commit/f2e2f10b7f74c9fb3126c9c9d2be1c74b43a3bf9))
+* **codex:** preserve parent id in task tool-use backfill ([#447](https://github.com/The-Vibe-Company/companion/issues/447)) ([a208ee4](https://github.com/The-Vibe-Company/companion/commit/a208ee42e09209866be39940c6fb2d480d9ecc5a))
+* **web:** decouple Saved Prompts page from session cwd and add grouped view ([#450](https://github.com/The-Vibe-Company/companion/issues/450)) ([c87cd27](https://github.com/The-Vibe-Company/companion/commit/c87cd2799c341ec44e760721df6a2721f0a3c1d0))
+* **web:** prevent Codex Docker sessions from becoming zombie/unreachable ([#449](https://github.com/The-Vibe-Company/companion/issues/449)) ([db947f5](https://github.com/The-Vibe-Company/companion/commit/db947f57989d676e1b40f44a7c7014cffb5fed19))
+
 ## [0.66.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.65.0...the-companion-v0.66.0) (2026-02-28)
 
 

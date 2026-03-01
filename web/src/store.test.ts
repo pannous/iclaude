@@ -1261,6 +1261,7 @@ describe("Update info", () => {
       isServiceMode: false,
       updateInProgress: false,
       lastChecked: Date.now(),
+      channel: "stable" as const,
     };
     useStore.getState().setUpdateInfo(info);
     expect(useStore.getState().updateInfo).toEqual(info);
@@ -1274,6 +1275,7 @@ describe("Update info", () => {
       isServiceMode: false,
       updateInProgress: false,
       lastChecked: Date.now(),
+      channel: "stable",
     });
     useStore.getState().setUpdateInfo(null);
     expect(useStore.getState().updateInfo).toBeNull();

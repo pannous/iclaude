@@ -29,6 +29,7 @@ const IntegrationsPage = lazyNamed(() => import("./components/IntegrationsPage.j
 const LinearSettingsPage = lazyNamed(() => import("./components/LinearSettingsPage.js"), "LinearSettingsPage");
 const PromptsPage = lazyNamed(() => import("./components/PromptsPage.js"), "PromptsPage");
 const EnvManager = lazyNamed(() => import("./components/EnvManager.js"), "EnvManager");
+const DockerBuilderPage = lazyNamed(() => import("./components/DockerBuilderPage.js"), "DockerBuilderPage");
 const CronManager = lazyNamed(() => import("./components/CronManager.js"), "CronManager");
 const AgentsPage = lazyNamed(() => import("./components/AgentsPage.js"), "AgentsPage");
 const TerminalPage = lazyNamed(() => import("./components/TerminalPage.js"), "TerminalPage");
@@ -45,6 +46,7 @@ const PAGE_MAP: Partial<Record<Route["page"], { component: ComponentType<any>; p
   "integration-linear": { component: LinearSettingsPage, props: { embedded: true } },
   terminal: { component: TerminalPage },
   environments: { component: EnvManager, props: { embedded: true } },
+  "docker-builder": { component: DockerBuilderPage },
   scheduled: { component: CronManager, props: { embedded: true } },
   panels: { component: PanelsPage },
 };

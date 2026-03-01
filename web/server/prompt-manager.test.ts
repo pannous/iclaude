@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -39,6 +39,8 @@ describe("createPrompt", () => {
     expect(prompt.scope).toBe("global");
     expect(prompt.id).toBe("Review PR");
     expect(prompt.content).toBe("Review this PR and summarize risks");
+    expect(prompt.projectPath).toBeUndefined();
+    expect(prompt.projectPaths).toBeUndefined();
   });
 
   it("creates a project prompt as a .md file in {cwd}/.claude/commands/", () => {
@@ -46,6 +48,22 @@ describe("createPrompt", () => {
     const prompt = promptManager.createPrompt("Plan", "Plan this feature", "project", projectTempDir);
     expect(prompt.scope).toBe("project");
     expect(prompt.id).toBe("Plan");
+    expect(prompt.projectPath).toBe(projectTempDir);
+    expect(prompt.projectPaths).toEqual([projectTempDir]);
+  });
+
+  it("creates a project prompt with projectPaths parameter (uses cwd for storage)", () => {
+    // Validates that projectPaths param is accepted but cwd is used for actual file storage.
+    const prompt = promptManager.createPrompt(
+      "Multi",
+      "Multi-project prompt",
+      "project",
+      projectTempDir,
+      ["/tmp/repo-a/", "/tmp/repo-b"],
+    );
+    expect(prompt.scope).toBe("project");
+    // File is stored in cwd, projectPath reflects actual storage location
+    expect(prompt.projectPath).toBe(projectTempDir);
   });
 
   it("overwrites an existing file (upsert behaviour)", () => {
@@ -57,6 +75,13 @@ describe("createPrompt", () => {
 
   it("rejects project prompts without a cwd", () => {
     expect(() => promptManager.createPrompt("Plan", "x", "project")).toThrow(
+      "Project path is required for project prompts",
+    );
+  });
+
+  it("rejects project prompts with empty projectPaths array", () => {
+    // An empty array is not valid for project scope when no cwd provided.
+    expect(() => promptManager.createPrompt("Plan", "x", "project", undefined, [])).toThrow(
       "Project path is required for project prompts",
     );
   });

@@ -95,6 +95,7 @@ vi.mock("./settings-manager.js", () => ({
     aiValidationEnabled: false,
     aiValidationAutoApprove: true,
     aiValidationAutoDeny: true,
+    updateChannel: "stable",
     updatedAt: 0,
   })),
   updateSettings: vi.fn((patch) => ({
@@ -111,6 +112,7 @@ vi.mock("./settings-manager.js", () => ({
     aiValidationEnabled: patch.aiValidationEnabled ?? false,
     aiValidationAutoApprove: patch.aiValidationAutoApprove ?? true,
     aiValidationAutoDeny: patch.aiValidationAutoDeny ?? true,
+    updateChannel: patch.updateChannel ?? "stable",
     updatedAt: Date.now(),
   })),
 }));
@@ -1743,6 +1745,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
     const res = await app.request("/api/sessions/s1/archive", {
@@ -1779,6 +1782,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
     const res = await app.request("/api/sessions/s1/archive", {
@@ -1808,6 +1812,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
     const res = await app.request("/api/sessions/s1/archive", {
@@ -1885,6 +1890,7 @@ describe("GET /api/sessions/:id/archive-info", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
     const res = await app.request("/api/sessions/s1/archive-info", { method: "GET" });
@@ -2049,7 +2055,7 @@ describe("Saved prompts API", () => {
     expect(promptManager.listPrompts).toHaveBeenCalledWith({ cwd: "/repo", scope: undefined });
   });
 
-  it("creates a prompt", async () => {
+  it("creates a prompt with legacy cwd", async () => {
     // Confirms payload mapping for prompt creation including project cwd.
     const created = {
       id: "p1",
@@ -2057,6 +2063,7 @@ describe("Saved prompts API", () => {
       content: "Review this PR",
       scope: "project" as const,
       projectPath: "/repo",
+      projectPaths: ["/repo"],
       createdAt: 1,
       updatedAt: 1,
     };
@@ -2079,6 +2086,42 @@ describe("Saved prompts API", () => {
       "Review this PR",
       "project",
       "/repo",
+      undefined,
+    );
+  });
+
+  it("creates a prompt with projectPaths", async () => {
+    // Confirms projectPaths array is forwarded to prompt manager.
+    const created = {
+      id: "p2",
+      name: "Multi",
+      content: "Multi-project prompt",
+      scope: "project" as const,
+      projectPath: "/repo-a",
+      projectPaths: ["/repo-a", "/repo-b"],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    vi.mocked(promptManager.createPrompt).mockReturnValue(created);
+
+    const res = await app.request("/api/prompts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Multi",
+        content: "Multi-project prompt",
+        scope: "project",
+        projectPaths: ["/repo-a", "/repo-b"],
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    expect(promptManager.createPrompt).toHaveBeenCalledWith(
+      "Multi",
+      "Multi-project prompt",
+      "project",
+      undefined,
+      ["/repo-a", "/repo-b"],
     );
   });
 
@@ -2180,6 +2223,7 @@ describe("GET /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 123,
     });
 
@@ -2200,6 +2244,7 @@ describe("GET /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
     });
   });
 
@@ -2219,6 +2264,7 @@ describe("GET /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 123,
     });
 
@@ -2239,6 +2285,7 @@ describe("GET /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
     });
   });
 });
@@ -2260,6 +2307,7 @@ describe("PUT /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 456,
     });
 
@@ -2285,6 +2333,7 @@ describe("PUT /api/settings", () => {
       aiValidationEnabled: undefined,
       aiValidationAutoApprove: undefined,
       aiValidationAutoDeny: undefined,
+      updateChannel: undefined,
     });
     const json = await res.json();
     expect(json).toEqual({
@@ -2300,6 +2349,7 @@ describe("PUT /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
     });
   });
 
@@ -2319,6 +2369,7 @@ describe("PUT /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 789,
     });
 
@@ -2357,6 +2408,7 @@ describe("PUT /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 999,
     });
 
@@ -2425,6 +2477,19 @@ describe("PUT /api/settings", () => {
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json).toEqual({ error: "editorTabEnabled must be a boolean" });
+  });
+
+  // Rejects invalid updateChannel values that aren't "stable" or "prerelease"
+  it("returns 400 for invalid updateChannel value", async () => {
+    const res = await app.request("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ updateChannel: "nightly" }),
+    });
+
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json).toEqual({ error: "updateChannel must be 'stable' or 'prerelease'" });
   });
 
   it("returns 400 when no settings fields are provided", async () => {
@@ -2550,6 +2615,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -2575,6 +2641,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -2654,6 +2721,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -2740,6 +2808,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -2791,6 +2860,7 @@ describe("GET /api/linear/connection", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -2816,6 +2886,7 @@ describe("GET /api/linear/connection", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -2864,6 +2935,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -2894,6 +2966,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -2923,6 +2996,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -2953,6 +3027,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -3018,6 +3093,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -3062,6 +3138,7 @@ describe("GET /api/linear/projects", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -3087,6 +3164,7 @@ describe("GET /api/linear/projects", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -3143,6 +3221,7 @@ describe("GET /api/linear/project-issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -3168,6 +3247,7 @@ describe("GET /api/linear/project-issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 
@@ -3239,6 +3319,7 @@ describe("GET /api/linear/project-issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      updateChannel: "stable",
       updatedAt: 0,
     });
 

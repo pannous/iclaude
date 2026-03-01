@@ -34,6 +34,7 @@ export function registerPromptRoutes(api: Hono): void {
         String(body.content || ""),
         scope,
         body.cwd,
+        Array.isArray(body.projectPaths) ? body.projectPaths.filter((p: unknown): p is string => typeof p === "string") : undefined,
       );
       return c.json(prompt, 201);
     } catch (e: unknown) {
