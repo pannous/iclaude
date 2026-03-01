@@ -139,7 +139,7 @@ export function ToolBlock({
           </div>
         </div>
       )}
-      {runResult && (
+      {open && runResult && (
         <RunOutput result={runResult} onDismiss={() => { setRunResult(null); setRunState("idle"); }} />
       )}
     </div>

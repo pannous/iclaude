@@ -44,7 +44,7 @@ describe("generateSessionTitle", () => {
       }),
     });
 
-    const title = await generateSessionTitle("Fix login", "claude-sonnet-4-6");
+    const title = await generateSessionTitle("Fix login");
 
     expect(title).toBe("Fix Auth Flow");
   });
@@ -68,7 +68,7 @@ describe("generateSessionTitle", () => {
       updatedAt: 0,
     });
 
-    const title = await generateSessionTitle("Fix login", "claude-sonnet-4-6");
+    const title = await generateSessionTitle("Fix login");
 
     expect(title).toBeNull();
     expect(mockFetch).not.toHaveBeenCalled();
@@ -83,7 +83,7 @@ describe("generateSessionTitle", () => {
       json: async () => ({ content: [{ type: "text", text: "Short Title" }] }),
     });
 
-    await generateSessionTitle("X".repeat(1000), "claude-sonnet-4-6");
+    await generateSessionTitle("X".repeat(1000));
 
     const [, req] = mockFetch.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(req.body)) as { messages: Array<{ role: string; content: string }> };
@@ -116,7 +116,7 @@ describe("generateSessionTitle", () => {
       json: async () => ({ content: [{ type: "text", text: "Title" }] }),
     });
 
-    await generateSessionTitle("Fix login", "ignored");
+    await generateSessionTitle("Fix login");
 
     const [, req] = mockFetch.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(req.body)) as { model: string };
@@ -126,7 +126,7 @@ describe("generateSessionTitle", () => {
   it("returns null when response is non-ok", async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 401, statusText: "Unauthorized" });
 
-    const title = await generateSessionTitle("Fix login", "claude-sonnet-4-6");
+    const title = await generateSessionTitle("Fix login");
 
     expect(title).toBeNull();
   });
@@ -134,7 +134,7 @@ describe("generateSessionTitle", () => {
   it("returns null when fetch throws", async () => {
     mockFetch.mockRejectedValueOnce(new Error("network"));
 
-    const title = await generateSessionTitle("Fix login", "claude-sonnet-4-6");
+    const title = await generateSessionTitle("Fix login");
 
     expect(title).toBeNull();
   });
@@ -147,7 +147,7 @@ describe("generateSessionTitle", () => {
       }),
     });
 
-    const title = await generateSessionTitle("Refactor API", "ignored");
+    const title = await generateSessionTitle("Refactor API");
     expect(title).toBe("Refactor API Layer");
   });
 
@@ -159,7 +159,7 @@ describe("generateSessionTitle", () => {
       }),
     });
 
-    const title = await generateSessionTitle("Do a thing", "ignored");
+    const title = await generateSessionTitle("Do a thing");
     expect(title).toBeNull();
   });
 
@@ -186,7 +186,7 @@ describe("generateSessionTitle", () => {
       json: async () => ({ content: [{ type: "text", text: "Title" }] }),
     });
 
-    await generateSessionTitle("Fix login", "ignored");
+    await generateSessionTitle("Fix login");
 
     const [, req] = mockFetch.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(req.body)) as { model: string };
@@ -199,7 +199,7 @@ describe("generateSessionTitle", () => {
       json: async () => ({ content: [{ type: "text", text: "Title" }] }),
     });
 
-    await generateSessionTitle("Fix login", "ignored");
+    await generateSessionTitle("Fix login");
 
     const [url, req] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://api.anthropic.com/v1/messages");
@@ -213,7 +213,7 @@ describe("generateSessionTitle", () => {
       json: async () => ({ content: [{ type: "text", text: "Title" }] }),
     });
 
-    await generateSessionTitle("Fix login", "ignored");
+    await generateSessionTitle("Fix login");
 
     const [, req] = mockFetch.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(req.body)) as { max_tokens: number };
@@ -245,7 +245,7 @@ describe("generateSessionTitle", () => {
       }),
     });
 
-    const title = await generateSessionTitle("Fix login", "ignored");
+    const title = await generateSessionTitle("Fix login");
 
     expect(title).toBe("OpenAI Title");
     const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
@@ -280,7 +280,7 @@ describe("generateSessionTitle", () => {
       }),
     });
 
-    const title = await generateSessionTitle("Fix login", "ignored");
+    const title = await generateSessionTitle("Fix login");
 
     expect(title).toBe("Fallback Title");
     expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -305,7 +305,7 @@ describe("generateSessionTitle", () => {
       updatedAt: 0,
     });
 
-    const title = await generateSessionTitle("Fix login", "ignored");
+    const title = await generateSessionTitle("Fix login");
 
     expect(title).toBeNull();
     expect(mockFetch).not.toHaveBeenCalled();

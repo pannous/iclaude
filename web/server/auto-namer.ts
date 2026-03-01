@@ -88,7 +88,6 @@ async function generateViaOpenAI(
  */
 export async function generateSessionTitle(
   firstUserMessage: string,
-  _model: string,
   options?: {
     timeoutMs?: number;
   },

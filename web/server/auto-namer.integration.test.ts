@@ -122,7 +122,6 @@ describe.skipIf(!hasAnyKey)("auto-namer integration (real API calls)", () => {
       try {
         const title = await generateSessionTitle(
           "Help me set up a CI/CD pipeline for my Node.js app",
-          "ignored",
           { timeoutMs: 15_000 },
         );
 

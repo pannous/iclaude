@@ -149,11 +149,10 @@ wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
 wsBridge.onFirstTurnCompletedCallback(async (sessionId, firstUserMessage) => {
   // Don't overwrite a name that was already set via manual rename
   if (sessionNames.getName(sessionId)) return;
-  if (!getSettings().anthropicApiKey.trim()) return;
-  const info = launcher.getSession(sessionId);
-  const model = info?.model || "claude-sonnet-4-6";
-  console.log(`[server] Auto-naming session ${sessionId} via Anthropic with model ${model}...`);
-  const title = await generateSessionTitle(firstUserMessage, model);
+  const s = getSettings();
+  if (!s.anthropicApiKey.trim() && !s.openaiApiKey.trim()) return;
+  console.log(`[server] Auto-naming session ${sessionId}...`);
+  const title = await generateSessionTitle(firstUserMessage);
   // Re-check: a manual rename may have occurred while we were generating
   if (title && !sessionNames.getName(sessionId)) {
     console.log(`[server] Auto-named session ${sessionId}: "${title}"`);
