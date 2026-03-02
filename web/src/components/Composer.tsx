@@ -359,9 +359,18 @@ export function Composer({ sessionId }: { sessionId: string }) {
     }
   }, [mention]);
 
+  function autoCorrectSlashCommand(input: string): string {
+    const match = input.match(/^\/(\S+)([\s\S]*)$/);
+    if (!match) return input;
+    const typed = match[1];
+    const rest = match[2];
+    const canonical = allCommands.find((c) => c.name.toLowerCase() === typed.toLowerCase());
+    return canonical ? `/${canonical.name}${rest}` : input;
+  }
+
   function handleSend() {
     if (isListening) recognitionRef.current?.stop();
-    const msg = text.trim();
+    const msg = autoCorrectSlashCommand(text.trim());
     if (!msg || !isConnected) return;
 
     const store = useStore.getState();

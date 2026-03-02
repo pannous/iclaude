@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { SessionState } from "../../server/session-types.js";
 
@@ -933,5 +933,50 @@ describe("Composer image attachment", () => {
     // Remove the image
     fireEvent.click(screen.getByLabelText("Remove image"));
     expect(screen.queryByAltText("test.png")).toBeFalsy();
+  });
+});
+
+describe("Composer slash command auto-correct", () => {
+  // When the user types a slash command with wrong casing (e.g. /HELP instead of /help),
+  // it should be auto-corrected to match the canonical command name before sending.
+
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    mockListPrompts.mockResolvedValue([]);
+  });
+
+  it("auto-corrects command casing when sent with arguments", async () => {
+    // With args, the slash menu doesn't open (regex ^/\S*$ won't match "/HELP foo")
+    setupMockStore({ session: { slash_commands: ["help"], skills: ["beautify"] } });
+    const user = userEvent.setup();
+    render(<Composer sessionId="s1" />);
+    const textarea = screen.getByPlaceholderText(/message/i);
+
+    await user.clear(textarea);
+    await user.type(textarea, "/BEAUTIFY some args");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(mockSendToSession).toHaveBeenCalled();
+    });
+    expect(mockSendToSession.mock.calls[0][1].content).toBe("/beautify some args");
+  });
+
+  it("preserves arguments after auto-corrected command", async () => {
+    setupMockStore({ session: { slash_commands: ["help"], skills: [] } });
+    const user = userEvent.setup();
+    render(<Composer sessionId="s1" />);
+    const textarea = screen.getByPlaceholderText(/message/i);
+
+    await user.clear(textarea);
+    // "/HELP topic" has a space so the slash menu won't open (regex requires ^/\S*$)
+    await user.type(textarea, "/HELP topic");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(mockSendToSession).toHaveBeenCalled();
+    });
+    expect(mockSendToSession.mock.calls[0][1].content).toBe("/help topic");
   });
 });
