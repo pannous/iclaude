@@ -2,6 +2,15 @@
 
 echo "🔍 Running pre-push checks (typecheck + tests)..."
 
+# Guard: refuse to push if HEAD has fewer than 100 tracked files (catastrophic deletion detection)
+tracked_count=$(git ls-tree -r HEAD --name-only | wc -l | tr -d ' ')
+if [ "$tracked_count" -lt 100 ]; then
+  echo "🚨 PRE-PUSH BLOCKED: HEAD only tracks $tracked_count files."
+  echo "   Expected 400+. A mass-deletion commit likely snuck in."
+  echo "   Inspect with: git log --stat -5"
+  exit 1
+fi
+
 cd web || exit 1
 
 # Ensure dependencies are installed
