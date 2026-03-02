@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { setCookie } from "hono/cookie";
+import { setCookie, getCookie } from "hono/cookie";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
 import { execSync } from "node:child_process";
 import { resolveBinary } from "./path-resolver.js";
@@ -271,6 +271,12 @@ export function createRoutes(
         maxAge: 365 * 24 * 60 * 60,
       });
       return c.json({ ok: true, token });
+    }
+    // Tunnel requests with a valid cookie: return the token so the React app
+    // can store it in localStorage (httpOnly cookies aren't readable by JS)
+    const cookieToken = getCookie(c, "companion_auth");
+    if (cookieToken && verifyToken(cookieToken)) {
+      return c.json({ ok: true, token: cookieToken });
     }
     return c.json({ ok: false });
   });

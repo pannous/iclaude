@@ -180,7 +180,7 @@ app.use("/*", async (c, next) => {
 
   // Auth endpoints and well-known must be reachable without login
   const path = new URL(c.req.url).pathname;
-  if (path === "/api/auth/verify" || path === "/api/auth/status") return next();
+  if (path === "/api/auth/verify" || path === "/api/auth/status" || path === "/api/auth/auto") return next();
   if (path.startsWith("/.well-known/")) return next();
   if (path === "/auth") return next();
 
