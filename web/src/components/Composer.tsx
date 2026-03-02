@@ -102,8 +102,10 @@ function handleMenuKeyDown<T>(
 
 
 
+const DRAFT_KEY_PREFIX = "composer-draft:";
+
 export function Composer({ sessionId }: { sessionId: string }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => sessionStorage.getItem(`${DRAFT_KEY_PREFIX}${sessionId}`) || "");
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashMenuIndex, setSlashMenuIndex] = useState(0);
@@ -140,6 +142,12 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const [isForking, setIsForking] = useState(false);
   const canFork = !isCodex && !!sdkSession?.cliSessionId && !isRunning && !isForking;
 
+  // Persist draft input to sessionStorage so it survives HMR / server restarts
+  useEffect(() => {
+    const key = `${DRAFT_KEY_PREFIX}${sessionId}`;
+    if (text) sessionStorage.setItem(key, text);
+    else sessionStorage.removeItem(key);
+  }, [text, sessionId]);
 
   // LOCAL: Fork current session — creates a new independent session seeded with this conversation's history
   const handleFork = useCallback(async () => {
