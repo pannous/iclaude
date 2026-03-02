@@ -56,6 +56,7 @@ interface MockStoreState {
   pendingPermissions: Map<string, Map<string, unknown>>;
   sessionTasks: Map<string, unknown[]>;
   linkedLinearIssues: Map<string, unknown>;
+  messages: Map<string, unknown[]>;
   collapsedProjects: Set<string>;
   setCurrentSession: ReturnType<typeof vi.fn>;
   toggleProjectCollapse: ReturnType<typeof vi.fn>;
@@ -126,6 +127,7 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     pendingPermissions: new Map(),
     sessionTasks: new Map(),
     linkedLinearIssues: new Map(),
+    messages: new Map(),
     collapsedProjects: new Set(),
     setCurrentSession: vi.fn(),
     toggleProjectCollapse: vi.fn(),

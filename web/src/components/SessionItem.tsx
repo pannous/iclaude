@@ -1,5 +1,6 @@
-import type { RefObject } from "react";
+import { type RefObject, useMemo } from "react";
 import type { SessionItem as SessionItemType } from "../utils/project-grouping.js";
+import { useStore } from "../store.js";
 
 interface SessionItemProps {
   session: SessionItemType;
@@ -88,6 +89,20 @@ export function SessionItem({
 
   // LOCAL: folder path removed — sessions are already grouped by project in sidebar
 
+  const messages = useStore((st) => st.messages.get(s.id));
+  const dateTooltip = useMemo(() => {
+    const fmt = (ts: number) => new Date(ts).toLocaleString();
+    const parts: string[] = [];
+    if (s.createdAt) parts.push(`Created: ${fmt(s.createdAt)}`);
+    if (messages && messages.length > 0) {
+      const first = messages[0].timestamp;
+      const last = messages[messages.length - 1].timestamp;
+      if (first) parts.push(`First message: ${fmt(first)}`);
+      if (last && last !== first) parts.push(`Last message: ${fmt(last)}`);
+    }
+    return parts.join("\n") || undefined;
+  }, [s.createdAt, messages]);
+
   return (
     <div className="relative group">
       <button
@@ -96,6 +111,7 @@ export function SessionItem({
           e.preventDefault();
           onStartRename(s.id, label);
         }}
+        title={dateTooltip}
         className={`w-full flex items-center gap-1.5 py-2 pl-1 pr-12 min-h-[44px] rounded-lg transition-colors duration-100 cursor-pointer ${
           isActive
             ? "bg-cc-active"
