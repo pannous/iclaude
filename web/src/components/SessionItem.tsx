@@ -93,7 +93,6 @@ export function SessionItem({
   const dateTooltip = useMemo(() => {
     const fmt = (ts: number) => new Date(ts).toLocaleString();
     const parts: string[] = [];
-    if (s.createdAt) parts.push(`Created: ${fmt(s.createdAt)}`);
     if (messages && messages.length > 0) {
       const first = messages[0].timestamp;
       const last = messages[messages.length - 1].timestamp;
@@ -101,7 +100,7 @@ export function SessionItem({
       if (last && last !== first) parts.push(`Last message: ${fmt(last)}`);
     }
     return parts.join("\n") || undefined;
-  }, [s.createdAt, messages]);
+  }, [messages]);
 
   return (
     <div className="relative group">
