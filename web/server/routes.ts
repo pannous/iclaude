@@ -345,6 +345,12 @@ export function createRoutes(
         return c.json({ error: wtResult.error }, 400);
       }
       let cwd: string = (wtResult.cwd ?? body.cwd) as string;
+      // Validate cwd exists — Bun.spawn throws a misleading ENOENT on the
+      // binary when the cwd directory is missing.
+      if (cwd && !existsSync(cwd)) {
+        console.warn(`[routes] cwd "${cwd}" does not exist, falling back to $HOME`);
+        cwd = process.env.HOME || "/tmp";
+      }
       const worktreeInfo = wtResult.worktreeInfo;
 
 
@@ -590,6 +596,10 @@ export function createRoutes(
         await emitProgress(stream, "resolving_env", "Environment resolved", "done");
 
         let cwd = body.cwd;
+        if (cwd && !existsSync(cwd)) {
+          console.warn(`[routes] cwd "${cwd}" does not exist, falling back to $HOME`);
+          cwd = process.env.HOME || "/tmp";
+        }
         let worktreeInfo: { isWorktree: boolean; repoRoot: string; branch: string; actualBranch: string; worktreePath: string } | undefined;
 
         if (body.branch && !/^[a-zA-Z0-9/_.\-]+$/.test(body.branch)) {

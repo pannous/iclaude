@@ -347,6 +347,16 @@ beforeEach(() => {
   app = new Hono();
   app.route("/api", createRoutes(launcher, bridge, sessionStore, tracker, terminalManager as any));
 
+  // Default: cwd paths "exist" so routes' cwd validation passes.
+  // Use implementation so specific tests can still override with mockReturnValue/Once.
+  mockedExistsSync.mockImplementation((p: any) => {
+    const s = String(p);
+    // Return true for test cwd paths; false for auth/config file checks
+    if (s.includes("/.codex/") || s.includes("/.claude/") || s.includes("/.config/")) return false;
+    if (s.startsWith(homedir()) || s === "/test" || s === "/tmp" || s.startsWith("/home")) return true;
+    return false;
+  });
+
   // Default no-op mocks for container workspace isolation (called during container session creation)
   vi.spyOn(containerManager, "copyWorkspaceToContainer").mockResolvedValue(undefined);
   vi.spyOn(containerManager, "reseedGitAuth").mockImplementation(() => {});
