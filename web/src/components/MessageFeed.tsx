@@ -979,10 +979,10 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
   }, [sessionId]);
 
   useEffect(() => {
-    if (!userScrolledUp.current) {
+    if (!userScrolledUp.current && !showScrollToBottom) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages]);
+  }, [messages, showScrollToBottom]);
 
   if (mergedMessages.length === 0) {
     return (
