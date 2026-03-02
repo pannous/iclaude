@@ -5,11 +5,11 @@ import { getSettings, type UpdateChannel } from "./settings-manager.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Read current version from package.json
+// Read current version from package.json (re-read on each call so session-start bumps are picked up)
 const packageJsonPath = resolve(__dirname, "..", "package.json");
-const currentVersion: string = JSON.parse(
-  readFileSync(packageJsonPath, "utf-8"),
-).version;
+function readCurrentVersion(): string {
+  return JSON.parse(readFileSync(packageJsonPath, "utf-8")).version;
+}
 
 const NPM_REGISTRY_BASE = "https://registry.npmjs.org/the-companion";
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
@@ -26,7 +26,7 @@ interface UpdateState {
 }
 
 const state: UpdateState = {
-  currentVersion,
+  currentVersion: readCurrentVersion(),
   latestVersion: null,
   lastChecked: 0,
   isServiceMode: false,
@@ -36,11 +36,11 @@ const state: UpdateState = {
 };
 
 export function getUpdateState(): Readonly<UpdateState> {
-  return { ...state };
+  return { ...state, currentVersion: readCurrentVersion() };
 }
 
 export function getCurrentVersion(): string {
-  return currentVersion;
+  return readCurrentVersion();
 }
 
 /** Returns the npm registry URL for the given dist-tag. */
@@ -71,7 +71,7 @@ export async function checkForUpdate(): Promise<void> {
       state.lastChecked = Date.now();
       if (isUpdateAvailable()) {
         console.log(
-          `[update-checker] Update available (${channel}): ${currentVersion} -> ${state.latestVersion}`,
+          `[update-checker] Update available (${channel}): ${readCurrentVersion()} -> ${state.latestVersion}`,
         );
       }
     }
@@ -95,7 +95,7 @@ export function setUpdateInProgress(inProgress: boolean): void {
 
 export function isUpdateAvailable(): boolean {
   if (!state.latestVersion) return false;
-  return isNewerVersion(state.latestVersion, currentVersion);
+  return isNewerVersion(state.latestVersion, readCurrentVersion());
 }
 
 /**

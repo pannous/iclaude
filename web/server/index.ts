@@ -192,55 +192,17 @@ app.use("/*", async (c, next) => {
 
   if (verifyToken(candidate)) return next();
 
-  // Unauthenticated tunnel request — show minimal login page (no-store so reload after login works)
-  c.header("Cache-Control", "no-store");
-  return c.html(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Companion — Login</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{background:#1a1917;color:#e8e6e0;font-family:system-ui,sans-serif;
-         display:flex;align-items:center;justify-content:center;min-height:100vh}
-    form{background:#262624;border:1px solid #3a3835;border-radius:12px;
-         padding:2rem;width:min(360px,90vw);display:flex;flex-direction:column;gap:1rem}
-    h1{font-size:1.1rem;font-weight:600;color:#d97757}
-    input{background:#1a1917;border:1px solid #3a3835;border-radius:6px;
-          color:#e8e6e0;font-size:1rem;padding:.6rem .8rem;width:100%}
-    input:focus{outline:2px solid #d97757;border-color:transparent}
-    button{background:#d97757;border:none;border-radius:6px;color:#fff;
-           cursor:pointer;font-size:1rem;font-weight:600;padding:.7rem}
-    button:hover{background:#c4663e}
-    #err{color:#e05c5c;font-size:.85rem;display:none}
-    .hint{font-size:.8rem;color:#666;text-align:center}
-    .hint a{color:#d97757;text-decoration:none}
-    .hint a:hover{text-decoration:underline}
-  </style>
-</head>
-<body>
-  <form id="f">
-    <h1>The Companion</h1>
-    <input id="t" type="password" placeholder="Auth token" autocomplete="current-password" autofocus>
-    <button type="submit">Sign in</button>
-    <div id="err">Invalid token</div>
-    <p class="hint"><a href="http://localhost:3456/api/auth/token-page" target="_blank">Get token →</a></p>
-  </form>
-  <script>
-    document.getElementById('f').onsubmit = async e => {
-      e.preventDefault();
-      const token = document.getElementById('t').value.trim();
-      const r = await fetch('/api/auth/verify', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({token})
-      });
-      if (r.ok) location.reload();
-      else { document.getElementById('err').style.display='block'; }
-    };
-  </script>
-</body>
-</html>`, 401);
+  // For API requests, return 401 so the SPA can handle auth via its own LoginPage.
+  // For page loads (HTML), let them through — the SPA has its own auth gate and
+  // returning an inline login page here causes reload loops on iOS WKWebView
+  // (cookie loss on process termination → server returns different HTML → WKWebView
+  // recreates view → cookie re-set → reload → loop).
+  const accept = c.req.header("Accept") || "";
+  if (path.startsWith("/api/")) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  // Non-API requests (SPA HTML, assets) — let through, the React app handles auth display
+  return next();
 });
 
 app.use("/api/*", cors());
