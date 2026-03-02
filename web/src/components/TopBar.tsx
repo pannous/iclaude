@@ -197,7 +197,7 @@ export function TopBar() {
                           ? "bg-cc-warning"
                           : "bg-cc-success"
                   }`} />
-                  Session
+                  <span className="truncate max-w-[160px]">{sessionName || "Session"}</span>
               </button>
               <button
                 onClick={() => activateWorkspaceTab("diff")}
