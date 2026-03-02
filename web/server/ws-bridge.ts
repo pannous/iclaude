@@ -23,7 +23,7 @@ import type {
 import type { SessionStore } from "./session-store.js";
 import type { CodexAdapter } from "./codex-adapter.js";
 import type { RecorderManager } from "./recorder.js";
-import { listProjectRootScripts } from "./panel-manager.js";
+import { listProjectRootScripts, getRootScriptTemplate } from "./panel-manager.js";
 import { resolveSessionGitInfo } from "./session-git-info.js";
 import type {
   Session,
@@ -1646,6 +1646,19 @@ export class WsBridge {
       this.onTitleGenerated(session.id, title);
     }
 
+    // Expand root-script slash commands server-side (CLI only knows about .claude/commands)
+    let expandedContent = msg.content;
+    const slashMatch = expandedContent.match(/^\/([A-Za-z0-9._/-]+)(?:\s+([\s\S]*))?$/);
+    if (slashMatch) {
+      const template = getRootScriptTemplate(session.state.cwd, slashMatch[1]);
+      if (template) {
+        const args = (slashMatch[2] || "").trim();
+        expandedContent = args
+          ? template.replaceAll("$ARGUMENTS", args)
+          : template.replace(" $ARGUMENTS", "");
+      }
+    }
+
     // Build content: if images are present, use content block array; otherwise plain string
     let content: string | unknown[];
     if (msg.images?.length) {
@@ -1656,10 +1669,10 @@ export class WsBridge {
           source: { type: "base64", media_type: img.media_type, data: img.data },
         });
       }
-      blocks.push({ type: "text", text: msg.content });
+      blocks.push({ type: "text", text: expandedContent });
       content = blocks;
     } else {
-      content = msg.content;
+      content = expandedContent;
     }
 
     const ndjson = JSON.stringify({
