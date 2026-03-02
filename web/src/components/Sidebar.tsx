@@ -515,11 +515,13 @@ export function Sidebar() {
     [activeSessions],
   );
 
-  // Per-group resumable sessions: match by project key, up to 16 (no filtering)
+  // Per-group resumable sessions: exact match or subdirectory (path boundary)
   const resumableByGroup = useMemo(() => {
     return new Map(projectGroups.map((g) => [
       g.key,
-      allResumable.filter((rs) => rs.project.startsWith(g.key)).slice(0, 16),
+      allResumable.filter((rs) =>
+        rs.project === g.key || rs.project.startsWith(g.key + "/")
+      ).slice(0, 16),
     ]));
   }, [allResumable, projectGroups]);
 
