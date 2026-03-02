@@ -33,5 +33,26 @@ export default defineConfig({
     // Without this, jsdom tests load react.production.js which breaks
     // @testing-library/react's act() calls.
     env: { NODE_ENV: "test" },
+    // Suppress noisy console output that vitest captures from test workers.
+    // Return false to discard, true to print. Keeps genuinely unexpected output.
+    onConsoleLog(log: string) {
+      // Suppress known noisy output from server code, git subprocesses, and jsdom gaps
+      if (/^\[[\w-]+\]/.test(log)) return false;               // any [bracket-prefixed] log
+      if (log.startsWith("fatal:")) return false;               // git errors in test dirs
+      if (log.includes("Not implemented:")) return false;       // jsdom stubs
+      if (log.includes("not wrapped in act")) return false;     // React act() noise
+      if (log.includes("hydration error")) return false;        // React SSR noise in jsdom
+      if (log.includes("error boundary")) return false;         // React error boundary logs
+      if (log.includes("recreate this component")) return false;
+      if (log.includes("getClientRects")) return false;         // CodeMirror in jsdom
+      if (log.includes("textRange(")) return false;             // CodeMirror in jsdom
+      if (log.includes("coordsIn")) return false;               // CodeMirror in jsdom
+      if (log.includes("the-companion")) return false;           // service installer output
+      if (log.includes("launchctl")) return false;               // macOS service tests
+      if (log.includes("systemctl")) return false;               // Linux service tests
+      if (log.includes("Logs are preserved")) return false;      // service test cleanup
+      if (log.includes("Run '")) return false;                   // CLI help text in tests
+      if (log.includes("Then retry")) return false;              // CLI help text in tests
+    },
   },
 });

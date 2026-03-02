@@ -33,7 +33,7 @@
     "start": "NODE_ENV=production bun server/index.ts",
     "prepublishOnly": "bun run build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "NODE_NO_WARNINGS=1 vitest run",
     "test:watch": "vitest",
     "test:a11y": "vitest run --testNamePattern='axe accessibility|accessible names|aria-expanded'",
     "test:codex-contract": "vitest run server/codex-protocol-*.test.ts",

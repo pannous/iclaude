@@ -1,6 +1,47 @@
 // Setup file for jsdom-based tests
 // Polyfills that must be available before any module import
 
+// ---------------------------------------------------------------------------
+// Suppress noisy console output during tests
+// ---------------------------------------------------------------------------
+
+// Known server-side log prefixes that clutter test output
+const noisyPrefixes = [
+  "[cli-launcher]", "[codex-adapter]", "[routes]", "[app]", "[ws-bridge]",
+  "[session-store]", "[env-manager]", "[recorder]", "[panel-manager]",
+];
+
+// Suppress React act() warnings — these are informational in testing-library
+// and not actionable at the setup level.
+const suppressedPatterns = [
+  "An update to",
+  "inside a test was not wrapped in act",
+  "fatal: not a git repository",
+  "Not implemented: HTMLCanvasElement",
+];
+
+function shouldSuppress(args: unknown[]): boolean {
+  const msg = String(args[0] ?? "");
+  return noisyPrefixes.some((p) => msg.startsWith(p))
+    || suppressedPatterns.some((p) => msg.includes(p));
+}
+
+for (const method of ["log", "warn", "error", "debug"] as const) {
+  const original = console[method];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  console[method] = (...args: any[]) => {
+    if (shouldSuppress(args)) return;
+    original.apply(console, args);
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Mock HTMLCanvasElement.getContext (jsdom doesn't implement canvas)
+// ---------------------------------------------------------------------------
+if (typeof HTMLCanvasElement !== "undefined") {
+  HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElement.prototype.getContext;
+}
+
 // Register vitest-axe matchers (toHaveNoViolations) in jsdom environments.
 // The vitest-axe/extend-expect entry is an empty file in some builds, so we
 // manually import the matcher and extend expect ourselves.
