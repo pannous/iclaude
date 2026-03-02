@@ -1132,6 +1132,7 @@ function AgentEditor({
           {/* ── Triggers ── */}
           <section>
             <h2 className="text-xs text-cc-muted mb-2">Triggers</h2>
+            <p className="text-[10px] text-cc-muted mb-2">Tip: prefer built-in commands and cron jobs for simple automation.</p>
             <div className="flex items-center gap-2 flex-wrap">
               {/* Webhook toggle pill */}
               <button
