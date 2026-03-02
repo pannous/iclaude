@@ -223,6 +223,17 @@ body {
   overscroll-behavior: none;
 }
 
+/* Enable text selection on iOS — overflow:hidden on html/body can suppress
+   the long-press selection cursor in Safari; explicitly opting in fixes it. */
+.markdown-body,
+pre,
+code,
+[class*="MessageFeed"] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 /* Eliminate 300ms tap delay on interactive elements */
 button,
 [role="button"],
