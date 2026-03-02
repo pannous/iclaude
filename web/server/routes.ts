@@ -100,6 +100,12 @@ function setupWorktree(
   if (body.useWorktree && body.branch && cwd) {
     const repoInfo = gitUtils.getRepoInfo(cwd);
     if (repoInfo) {
+      // Fetch latest remote refs so ensureWorktree bases new branches on up-to-date origin/{defaultBranch}
+      const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
+      if (!fetchResult.success) {
+        console.warn(`[routes] git fetch failed (non-fatal): ${fetchResult.output}`);
+      }
+
       const result = gitUtils.ensureWorktree(repoInfo.repoRoot, body.branch as string, {
         baseBranch: repoInfo.defaultBranch,
         createBranch: body.createBranch as boolean | undefined,
@@ -596,9 +602,17 @@ export function createRoutes(
 
         // --- Step: Git operations (host only — Docker sessions do this inside the container) ---
         if (!isDockerSession && body.useWorktree && body.branch && cwd) {
-          await emitProgress(stream, "creating_worktree", "Creating worktree...", "in_progress");
           const repoInfo = gitUtils.getRepoInfo(cwd);
           if (repoInfo) {
+            // Fetch latest remote refs so ensureWorktree bases new branches on up-to-date origin/{defaultBranch}
+            await emitProgress(stream, "fetching_git", "Fetching from remote...", "in_progress");
+            const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
+            if (!fetchResult.success) {
+              console.warn(`[routes] git fetch failed (non-fatal): ${fetchResult.output}`);
+            }
+            await emitProgress(stream, "fetching_git", fetchResult.success ? "Fetch complete" : "Fetch skipped (offline?)", "done");
+
+            await emitProgress(stream, "creating_worktree", "Creating worktree...", "in_progress");
             const result = gitUtils.ensureWorktree(repoInfo.repoRoot, body.branch, {
               baseBranch: repoInfo.defaultBranch,
               createBranch: body.createBranch,
