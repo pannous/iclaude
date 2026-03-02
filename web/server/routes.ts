@@ -319,6 +319,7 @@ export function createRoutes(
 
   api.post("/sessions/create", async (c) => {
     const body = await c.req.json().catch(() => ({}));
+    console.log(`[routes] sessions/create: cwd="${body.cwd}" backend="${body.backend}"`);
     try {
       const resumeSessionAt = typeof body.resumeSessionAt === "string" && body.resumeSessionAt.trim()
         ? body.resumeSessionAt.trim()
@@ -347,7 +348,10 @@ export function createRoutes(
       let cwd: string = (wtResult.cwd ?? body.cwd) as string;
       // Validate cwd exists — Bun.spawn throws a misleading ENOENT on the
       // binary when the cwd directory is missing.
-      if (cwd && !existsSync(cwd)) {
+      if (!cwd) {
+        console.warn(`[routes] No cwd provided (body.cwd=${body.cwd}), falling back to $HOME`);
+        cwd = process.env.HOME || "/tmp";
+      } else if (!existsSync(cwd)) {
         console.warn(`[routes] cwd "${cwd}" does not exist, falling back to $HOME`);
         cwd = process.env.HOME || "/tmp";
       }
@@ -596,7 +600,10 @@ export function createRoutes(
         await emitProgress(stream, "resolving_env", "Environment resolved", "done");
 
         let cwd = body.cwd;
-        if (cwd && !existsSync(cwd)) {
+        if (!cwd) {
+          console.warn(`[routes] No cwd provided (body.cwd=${body.cwd}), falling back to $HOME`);
+          cwd = process.env.HOME || "/tmp";
+        } else if (!existsSync(cwd)) {
           console.warn(`[routes] cwd "${cwd}" does not exist, falling back to $HOME`);
           cwd = process.env.HOME || "/tmp";
         }
