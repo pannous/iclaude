@@ -561,11 +561,6 @@ export function Sidebar() {
     }
   }, [projectGroups]);
 
-  function handleFolderClick(cwd: string) {
-    useStore.getState().setFocusedFolder(cwd);
-    useStore.getState().setTaskPanelOpen(true);
-  }
-
   function handleNewSessionInFolder(cwd: string) {
     useStore.getState().closeTerminal();
     navigateHome();
@@ -734,7 +729,7 @@ export function Sidebar() {
                 group={group}
                 isCollapsed={collapsedProjects.has(group.key)}
                 onToggleCollapse={toggleProjectCollapse}
-                onFolderClick={handleFolderClick}
+                onFolderClick={handleNewSessionInFolder}
                 currentSessionId={currentSessionId}
                 sessionNames={sessionNames}
                 pendingPermissions={pendingPermissions}

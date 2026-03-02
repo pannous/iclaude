@@ -103,7 +103,7 @@ export function ProjectGroup({
           </svg>
         </button>
 
-        {/* Folder label — opens context panel (chevron handles collapse) */}
+        {/* Folder label — opens new session in this folder */}
         <button
           onClick={() => {
             onFolderClick?.(group.key);
