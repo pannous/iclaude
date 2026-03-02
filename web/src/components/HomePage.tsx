@@ -28,6 +28,8 @@ import { MentionMenu } from "./MentionMenu.js";
 import { useMentionMenu } from "../utils/use-mention-menu.js";
 import type { SavedPrompt } from "../api.js";
 import type { SdkSessionInfo } from "../types.js";
+import { useSlashMenu, useCachedSlashCommands } from "../utils/use-slash-menu.js";
+import { SlashCommandMenu } from "./SlashCommandMenu.js";
 
 let idCounter = 0;
 
@@ -166,6 +168,9 @@ export function HomePage() {
   const [caretPos, setCaretPos] = useState(0);
   const pendingSelectionRef = useRef<number | null>(null);
   const [pendingAutoSend, setPendingAutoSend] = useState(false);
+
+  const cachedCommands = useCachedSlashCommands();
+  const slash = useSlashMenu(text, cachedCommands);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
@@ -529,7 +534,24 @@ export function HomePage() {
     }
   }
 
+  function handleSlashSelect(cmd: { name: string; type: string }) {
+    setText(slash.selectCommand(cmd as import("../utils/use-slash-menu.js").CommandItem));
+    textareaRef.current?.focus();
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
+    // Slash command menu navigation
+    if (slash.slashMenuOpen && slash.filteredCommands.length > 0) {
+      if (e.key === "Escape") { e.preventDefault(); slash.close(); return; }
+      if (e.key === "ArrowDown") { e.preventDefault(); slash.setSlashMenuIndex((i) => (i + 1) % slash.filteredCommands.length); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); slash.setSlashMenuIndex((i) => (i - 1 + slash.filteredCommands.length) % slash.filteredCommands.length); return; }
+      if ((e.key === "Tab" && !e.shiftKey) || (e.key === "Enter" && !e.shiftKey)) {
+        e.preventDefault();
+        handleSlashSelect(slash.filteredCommands[slash.slashMenuIndex]);
+        return;
+      }
+    }
+
     // @ mention menu navigation
     if (mention.mentionMenuOpen) {
       if (e.key === "Escape") {
@@ -888,6 +910,13 @@ export function HomePage() {
           <div>
             {/* Input card */}
             <div className="relative bg-cc-card border border-cc-border rounded-[14px] shadow-sm">
+              <SlashCommandMenu
+                open={slash.slashMenuOpen}
+                commands={slash.filteredCommands}
+                selectedIndex={slash.slashMenuIndex}
+                menuRef={slash.menuRef}
+                onSelect={handleSlashSelect}
+              />
               <MentionMenu
                 open={mention.mentionMenuOpen}
                 loading={mention.promptsLoading}
