@@ -492,13 +492,15 @@ export function Sidebar() {
   }).sort((a, b) => b.createdAt - a.createdAt);
 
   // LOCAL: filter out ghost sessions and spam — upstream has no such filter
-  const SPAM_PATTERNS = [/secret\.txt/i, /tell me the secret code/i];
+  const SPAM_LABEL_PATTERNS = [/secret\.txt/i, /tell me the secret code/i];
+  const SPAM_CWD_PATTERNS = [/test_project/i];
   const validSessions = allSessionList.filter((s) => {
     if (!s.cwd && !s.title) return false;
     const name = sessionNames.get(s.id);
     const label = (s.title?.replace(/<[^>]*>/g, "").trim() || undefined) || name;
     if (!label || label === s.model) return false;
-    if (SPAM_PATTERNS.some((re) => re.test(label))) return false;
+    if (SPAM_LABEL_PATTERNS.some((re) => re.test(label))) return false;
+    if (s.cwd && SPAM_CWD_PATTERNS.some((re) => re.test(s.cwd))) return false;
     return true;
   });
   const activeSessions = validSessions.filter((s) => !s.archived && !s.cronJobId && !s.agentId);
