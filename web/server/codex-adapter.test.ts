@@ -5,11 +5,13 @@ import type { BrowserIncomingMessage, BrowserOutgoingMessage } from "./session-t
 
 const mockListProjectSlashCommands = vi.hoisted(() => vi.fn(() => []));
 const mockGetProjectSlashCommandTemplate = vi.hoisted(() => vi.fn(() => null));
+const mockListProjectRootScripts = vi.hoisted(() => vi.fn(() => []));
 const mockListPanels = vi.hoisted(() => vi.fn(() => []));
 
 vi.mock("./panel-manager.js", () => ({
   listProjectSlashCommands: mockListProjectSlashCommands,
   getProjectSlashCommandTemplate: mockGetProjectSlashCommandTemplate,
+  listProjectRootScripts: mockListProjectRootScripts,
   listPanels: mockListPanels,
 }));
 

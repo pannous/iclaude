@@ -23,6 +23,7 @@ import type {
 import type { SessionStore } from "./session-store.js";
 import type { CodexAdapter } from "./codex-adapter.js";
 import type { RecorderManager } from "./recorder.js";
+import { listProjectRootScripts } from "./panel-manager.js";
 import { resolveSessionGitInfo } from "./session-git-info.js";
 import type {
   Session,
@@ -1047,7 +1048,9 @@ export class WsBridge {
       session.state.claude_code_version = msg.claude_code_version;
       session.state.mcp_servers = msg.mcp_servers;
       session.state.agents = msg.agents ?? [];
-      session.state.slash_commands = msg.slash_commands ?? [];
+      const cliCommands = msg.slash_commands ?? [];
+      const rootScripts = listProjectRootScripts(session.state.cwd);
+      session.state.slash_commands = [...new Set([...cliCommands, ...rootScripts])];
       session.state.skills = msg.skills ?? [];
 
       // Resolve and publish git info

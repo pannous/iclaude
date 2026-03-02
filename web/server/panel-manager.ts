@@ -233,8 +233,42 @@ export function getProjectSlashCommandTemplate(cwd: string | undefined, command:
   try {
     return readFileSync(filePath, "utf-8");
   } catch {
-    return null;
+    // Fall back to auto-generated template for root scripts
+    return getRootScriptTemplate(cwd, command);
   }
+}
+
+// ─── Root Script Discovery ──────────────────────────────────────────────────
+
+const SCRIPT_EXTENSIONS = [".sh"];
+
+/** List executable scripts at the project root (depth 0 only) as slash command names. */
+export function listProjectRootScripts(cwd?: string): string[] {
+  if (!cwd) return [];
+  try {
+    return readdirSync(cwd, { withFileTypes: true })
+      .filter((e) => e.isFile() && SCRIPT_EXTENSIONS.some((ext) => e.name.endsWith(ext)))
+      .map((e) => e.name.replace(/\.[^.]+$/, ""))
+      .filter(isValidCommandName)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/** Generate a synthetic template for a root script (used when no .md command file exists). */
+export function getRootScriptTemplate(cwd: string, command: string): string | null {
+  for (const ext of SCRIPT_EXTENSIONS) {
+    const scriptPath = join(cwd, `${command}${ext}`);
+    try {
+      if (statSync(scriptPath).isFile()) {
+        return `Run the script: \`bash ./${command}${ext} $ARGUMENTS\`\nReport the output to the user.`;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 // ─── Vibe API Injection ─────────────────────────────────────────────────────
