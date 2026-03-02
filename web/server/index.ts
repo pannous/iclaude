@@ -255,7 +255,7 @@ app.get("/auth", (c) => {
     setCookie(c, "companion_auth", token, {
       path: "/",
       httpOnly: true,
-      sameSite: "Strict",
+      sameSite: "Lax",
       maxAge: 365 * 24 * 60 * 60,
     });
     return c.redirect("/");

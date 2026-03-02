@@ -170,7 +170,7 @@ export function createRoutes(
       setCookie(c, "companion_auth", body.token!, {
         path: "/",
         httpOnly: true,
-        sameSite: "Strict",
+        sameSite: "Lax",
         maxAge: 365 * 24 * 60 * 60,
       });
       return c.json({ ok: true });
@@ -267,7 +267,7 @@ export function createRoutes(
       setCookie(c, "companion_auth", token, {
         path: "/",
         httpOnly: true,
-        sameSite: "Strict",
+        sameSite: "Lax",
         maxAge: 365 * 24 * 60 * 60,
       });
       return c.json({ ok: true, token });
