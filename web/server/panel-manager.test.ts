@@ -247,6 +247,120 @@ describe("slash command discovery", () => {
 });
 
 // ===========================================================================
+// root script discovery (listProjectRootScripts)
+// ===========================================================================
+describe("root script discovery", () => {
+  function createScript(name: string): void {
+    const projDir = projectDir();
+    mkdirSync(projDir, { recursive: true });
+    writeFileSync(join(projDir, name), "#!/bin/bash\necho hello", "utf-8");
+  }
+
+  it("discovers .sh files at project root", () => {
+    createScript("install.sh");
+    createScript("test.sh");
+    createScript("start.sh");
+
+    const result = panelManager.listProjectRootScripts(projectDir());
+    expect(result).toEqual(["install", "start", "test"]);
+  });
+
+  it("ignores non-.sh files", () => {
+    createScript("deploy.sh");
+    const projDir = projectDir();
+    writeFileSync(join(projDir, "README.md"), "# hi", "utf-8");
+    writeFileSync(join(projDir, "app.ts"), "console.log(1)", "utf-8");
+
+    const result = panelManager.listProjectRootScripts(projectDir());
+    expect(result).toEqual(["deploy"]);
+  });
+
+  it("recurses into subdirectories", () => {
+    createScript("root.sh");
+    const subDir = join(projectDir(), "scripts");
+    mkdirSync(subDir, { recursive: true });
+    writeFileSync(join(subDir, "nested.sh"), "#!/bin/bash", "utf-8");
+
+    const result = panelManager.listProjectRootScripts(projectDir());
+    expect(result).toEqual(["nested", "root"]);
+  });
+
+  it("skips node_modules and dot-directories", () => {
+    createScript("good.sh");
+    for (const skip of ["node_modules", ".git", ".hidden"]) {
+      const dir = join(projectDir(), skip);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "bad.sh"), "#!/bin/bash", "utf-8");
+    }
+
+    const result = panelManager.listProjectRootScripts(projectDir());
+    expect(result).toEqual(["good"]);
+  });
+
+  it("deduplicates scripts with same name in different directories", () => {
+    createScript("deploy.sh");
+    const subDir = join(projectDir(), "scripts");
+    mkdirSync(subDir, { recursive: true });
+    writeFileSync(join(subDir, "deploy.sh"), "#!/bin/bash", "utf-8");
+
+    const result = panelManager.listProjectRootScripts(projectDir());
+    expect(result).toEqual(["deploy"]);
+  });
+
+  it("returns [] for missing directory", () => {
+    expect(panelManager.listProjectRootScripts("/nonexistent/path")).toEqual([]);
+  });
+
+  it("returns [] when cwd is undefined", () => {
+    expect(panelManager.listProjectRootScripts(undefined)).toEqual([]);
+  });
+});
+
+// ===========================================================================
+// root script template fallback
+// ===========================================================================
+describe("root script template fallback", () => {
+  function createScript(name: string): void {
+    const projDir = projectDir();
+    mkdirSync(projDir, { recursive: true });
+    writeFileSync(join(projDir, name), "#!/bin/bash\necho hello", "utf-8");
+  }
+
+  it("getProjectSlashCommandTemplate falls back to root script when no .md exists", () => {
+    createScript("install.sh");
+
+    const template = panelManager.getProjectSlashCommandTemplate(projectDir(), "install");
+    expect(template).toContain("install.sh");
+    expect(template).toContain("$ARGUMENTS");
+  });
+
+  it("prefers .md command file over root script", () => {
+    createScript("test.sh");
+    createCommandOnDisk("test", "---\nname: test\n---\nCustom test command");
+
+    const template = panelManager.getProjectSlashCommandTemplate(projectDir(), "test");
+    expect(template).toContain("Custom test command");
+    expect(template).not.toContain("test.sh");
+  });
+
+  it("returns null when neither .md nor script exists", () => {
+    mkdirSync(projectDir(), { recursive: true });
+    const template = panelManager.getProjectSlashCommandTemplate(projectDir(), "nonexistent");
+    expect(template).toBeNull();
+  });
+
+  it("generates correct relative path for scripts in subdirectories", () => {
+    const subDir = join(projectDir(), "scripts");
+    mkdirSync(subDir, { recursive: true });
+    writeFileSync(join(subDir, "tunnel.sh"), "#!/bin/bash\necho tunnel", "utf-8");
+
+    const template = panelManager.getProjectSlashCommandTemplate(projectDir(), "tunnel");
+    expect(template).toContain("scripts/tunnel.sh");
+    expect(template).toContain("$ARGUMENTS");
+  });
+});
+
+// ===========================================================================
 // wrapWithVibeApi
 // ===========================================================================
 describe("wrapWithVibeApi", () => {

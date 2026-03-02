@@ -238,35 +238,56 @@ export function getProjectSlashCommandTemplate(cwd: string | undefined, command:
   }
 }
 
-// ─── Root Script Discovery ──────────────────────────────────────────────────
+// ─── Project Script Discovery ───────────────────────────────────────────────
 
 const SCRIPT_EXTENSIONS = [".sh"];
+const SKIP_DIRS = new Set(["node_modules", ".git", ".next", "dist", "build", ".claude", "vendor", ".venv", "__pycache__"]);
 
-/** List executable scripts at the project root (depth 0 only) as slash command names. */
-export function listProjectRootScripts(cwd?: string): string[] {
-  if (!cwd) return [];
-  try {
-    return readdirSync(cwd, { withFileTypes: true })
-      .filter((e) => e.isFile() && SCRIPT_EXTENSIONS.some((ext) => e.name.endsWith(ext)))
-      .map((e) => e.name.replace(/\.[^.]+$/, ""))
-      .filter(isValidCommandName)
-      .sort();
-  } catch {
-    return [];
-  }
-}
+/** Recursively find all .sh scripts in the project, returning {name, relativePath} pairs. */
+function findProjectScripts(cwd: string): { name: string; relPath: string }[] {
+  const results: { name: string; relPath: string }[] = [];
+  const seen = new Set<string>();
+  const stack = [cwd];
 
-/** Generate a synthetic template for a root script (used when no .md command file exists). */
-export function getRootScriptTemplate(cwd: string, command: string): string | null {
-  for (const ext of SCRIPT_EXTENSIONS) {
-    const scriptPath = join(cwd, `${command}${ext}`);
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
+    let entries;
     try {
-      if (statSync(scriptPath).isFile()) {
-        return `Run the script: \`bash ./${command}${ext} $ARGUMENTS\`\nReport the output to the user.`;
-      }
+      entries = readdirSync(dir, { withFileTypes: true });
     } catch {
       continue;
     }
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith(".")) {
+          stack.push(join(dir, entry.name));
+        }
+        continue;
+      }
+      if (!entry.isFile() || !SCRIPT_EXTENSIONS.some((ext) => entry.name.endsWith(ext))) continue;
+      const name = entry.name.replace(/\.[^.]+$/, "");
+      if (!isValidCommandName(name) || seen.has(name)) continue;
+      seen.add(name);
+      const full = join(dir, entry.name);
+      results.push({ name, relPath: full.slice(cwd.length + 1) });
+    }
+  }
+
+  return results.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** List executable scripts anywhere in the project as slash command names. */
+export function listProjectRootScripts(cwd?: string): string[] {
+  if (!cwd) return [];
+  return findProjectScripts(cwd).map((s) => s.name);
+}
+
+/** Generate a synthetic template for a project script (used when no .md command file exists). */
+export function getRootScriptTemplate(cwd: string, command: string): string | null {
+  const scripts = findProjectScripts(cwd);
+  const match = scripts.find((s) => s.name === command);
+  if (match) {
+    return `Run the script: \`bash ./${match.relPath} $ARGUMENTS\`\nReport the output to the user.`;
   }
   return null;
 }
