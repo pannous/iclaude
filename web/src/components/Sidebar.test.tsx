@@ -69,6 +69,7 @@ interface MockStoreState {
   closeTerminal: ReturnType<typeof vi.fn>;
   setActiveTab: ReturnType<typeof vi.fn>;
   setAllProjectsCollapsed: ReturnType<typeof vi.fn>;
+  setFocusedFolder: ReturnType<typeof vi.fn>;
 }
 
 function makeSession(id: string, overrides: Partial<SessionState> = {}): SessionState {
@@ -138,6 +139,7 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     closeTerminal: vi.fn(),
     setActiveTab: vi.fn(),
     setAllProjectsCollapsed: vi.fn(),
+    setFocusedFolder: vi.fn(),
     ...overrides,
   };
 }

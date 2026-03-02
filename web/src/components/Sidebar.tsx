@@ -177,6 +177,11 @@ export function Sidebar() {
   function handleSelectSession(sessionId: string) {
     useStore.getState().closeTerminal();
     useStore.getState().setActiveTab("chat");
+    // Sync focusedFolder so panels (e.g. git-log) update to show this session's project
+    const bridgeState = sessions.get(sessionId);
+    const sdkInfo = sdkSessions.find((s) => s.sessionId === sessionId);
+    const cwd = bridgeState?.cwd || sdkInfo?.cwd || "";
+    if (cwd) useStore.getState().setFocusedFolder(cwd);
     // Navigate to session hash — App.tsx hash effect handles setCurrentSession + connectSession
     navigateToSession(sessionId);
     // Close sidebar on mobile
