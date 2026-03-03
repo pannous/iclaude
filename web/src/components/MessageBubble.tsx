@@ -13,8 +13,9 @@ import { ansiToHtml, hasAnsi } from "../utils/ansi.js";
 
 export function MessageBubble({ message }: { message: ChatMessage }) {
   if (message.role === "system") {
+    const isHook = typeof message.content === "string" && message.content.startsWith("Hook ");
     return (
-      <div className="flex items-center gap-3 py-1">
+      <div className={`flex items-center gap-3 ${isHook ? "-my-4 sm:-my-6" : "py-1"}`}>
         <div className="flex-1 h-px bg-cc-border" />
         <span className="text-[11px] text-cc-muted italic font-mono-code shrink-0 px-1">
           {message.content}

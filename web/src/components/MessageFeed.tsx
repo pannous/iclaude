@@ -2,7 +2,13 @@ import { useContext, useEffect, useRef, useMemo, useState, useCallback } from "r
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { MessageBubble } from "./MessageBubble.js";
-import { ToolBlock, getToolIcon, getToolLabel, getPreview, ToolIcon } from "./ToolBlock.js";
+import {
+  ToolBlock,
+  getToolIcon,
+  getToolLabel,
+  getPreview,
+  ToolIcon,
+} from "./ToolBlock.js";
 import type { ChatMessage, ContentBlock, SdkSessionInfo } from "../types.js";
 import { formatElapsed, formatTokenCount } from "../utils/format.js";
 import { FeedSessionIdContext } from "./feed-context.js";
@@ -23,7 +29,11 @@ function formatResumeSourcePath(path: string): string {
 
 // ─── Message-level grouping ─────────────────────────────────────────────────
 
-interface ToolItem { id: string; name: string; input: Record<string, unknown> }
+interface ToolItem {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+}
 
 interface ToolMsgGroup {
   kind: "tool_msg_group";
@@ -105,7 +115,16 @@ function getToolOnlyName(msg: ChatMessage): string | null {
 function extractToolItems(msg: ChatMessage): ToolItem[] {
   const blocks = msg.contentBlocks || [];
   return blocks
-    .filter((b): b is ContentBlock & { type: "tool_use"; id: string; name: string; input: Record<string, unknown> } => b.type === "tool_use")
+    .filter(
+      (
+        b,
+      ): b is ContentBlock & {
+        type: "tool_use";
+        id: string;
+        name: string;
+        input: Record<string, unknown>;
+      } => b.type === "tool_use",
+    )
     .map((b) => ({ id: b.id, name: b.name, input: b.input }));
 }
 
@@ -114,12 +133,15 @@ function getTaskIdsFromEntry(entry: FeedEntry): string[] {
   if (entry.kind === "message") {
     const blocks = entry.msg.contentBlocks || [];
     return blocks
-      .filter((b): b is Extract<ContentBlock, { type: "tool_use" }> => b.type === "tool_use")
-      .filter(b => b.name === "Task")
-      .map(b => b.id);
+      .filter(
+        (b): b is Extract<ContentBlock, { type: "tool_use" }> =>
+          b.type === "tool_use",
+      )
+      .filter((b) => b.name === "Task")
+      .map((b) => b.id);
   }
   if (entry.kind === "tool_msg_group" && entry.toolName === "Task") {
-    return entry.items.map(item => item.id);
+    return entry.items.map((item) => item.id);
   }
   return [];
 }
@@ -154,15 +176,18 @@ function groupToolMessages(messages: ChatMessage[]): FeedEntry[] {
 /** Build feed entries with subagent nesting */
 function buildEntries(
   messages: ChatMessage[],
-  taskInfo: Map<string, {
-    description: string;
-    agentType: string;
-    backend?: "claude" | "codex";
-    status?: string;
-    receiverCount?: number;
-    senderThreadId?: string;
-    receiverThreadIds?: string[];
-  }>,
+  taskInfo: Map<
+    string,
+    {
+      description: string;
+      agentType: string;
+      backend?: "claude" | "codex";
+      status?: string;
+      receiverCount?: number;
+      senderThreadId?: string;
+      receiverThreadIds?: string[];
+    }
+  >,
   childrenByParent: Map<string, ChatMessage[]>,
 ): FeedEntry[] {
   const grouped = groupToolMessages(messages);
@@ -176,7 +201,10 @@ function buildEntries(
     for (const taskId of taskIds) {
       const children = childrenByParent.get(taskId);
       if (children && children.length > 0) {
-        const info = taskInfo.get(taskId) || { description: "Subagent", agentType: "" };
+        const info = taskInfo.get(taskId) || {
+          description: "Subagent",
+          agentType: "",
+        };
         const childEntries = buildEntries(children, taskInfo, childrenByParent);
         result.push({
           kind: "subagent",
@@ -199,37 +227,50 @@ function buildEntries(
 
 function groupMessages(messages: ChatMessage[]): FeedEntry[] {
   // Phase 1: Find all Task tool_use IDs across all messages
-  const taskInfo = new Map<string, {
-    description: string;
-    agentType: string;
-    backend?: "claude" | "codex";
-    status?: string;
-    receiverCount?: number;
-    senderThreadId?: string;
-    receiverThreadIds?: string[];
-  }>();
+  const taskInfo = new Map<
+    string,
+    {
+      description: string;
+      agentType: string;
+      backend?: "claude" | "codex";
+      status?: string;
+      receiverCount?: number;
+      senderThreadId?: string;
+      receiverThreadIds?: string[];
+    }
+  >();
   for (const msg of messages) {
     if (!msg.contentBlocks) continue;
     for (const b of msg.contentBlocks) {
       if (b.type === "tool_use" && b.name === "Task") {
         const { input, id } = b;
         const receiverThreadIds = Array.isArray(input?.receiver_thread_ids)
-          ? input.receiver_thread_ids.filter((threadId): threadId is string => typeof threadId === "string" && threadId.length > 0)
+          ? input.receiver_thread_ids.filter(
+              (threadId): threadId is string =>
+                typeof threadId === "string" && threadId.length > 0,
+            )
           : undefined;
-        const receiverCount = receiverThreadIds && receiverThreadIds.length > 0
-          ? receiverThreadIds.length
-          : undefined;
-        const senderThreadId = typeof input?.sender_thread_id === "string" && input.sender_thread_id.length > 0
-          ? input.sender_thread_id
-          : undefined;
-        const hasCodexMetadata = typeof input?.codex_status === "string"
-          || senderThreadId !== undefined
-          || receiverCount !== undefined;
+        const receiverCount =
+          receiverThreadIds && receiverThreadIds.length > 0
+            ? receiverThreadIds.length
+            : undefined;
+        const senderThreadId =
+          typeof input?.sender_thread_id === "string" &&
+          input.sender_thread_id.length > 0
+            ? input.sender_thread_id
+            : undefined;
+        const hasCodexMetadata =
+          typeof input?.codex_status === "string" ||
+          senderThreadId !== undefined ||
+          receiverCount !== undefined;
         taskInfo.set(id, {
           description: String(input?.description || "Subagent"),
           agentType: String(input?.subagent_type || ""),
           backend: hasCodexMetadata ? "codex" : "claude",
-          status: typeof input?.codex_status === "string" ? input.codex_status : undefined,
+          status:
+            typeof input?.codex_status === "string"
+              ? input.codex_status
+              : undefined,
           receiverCount,
           senderThreadId,
           receiverThreadIds,
@@ -250,7 +291,10 @@ function groupMessages(messages: ChatMessage[]): FeedEntry[] {
   for (const msg of messages) {
     if (msg.parentToolUseId && taskInfo.has(msg.parentToolUseId)) {
       let arr = childrenByParent.get(msg.parentToolUseId);
-      if (!arr) { arr = []; childrenByParent.set(msg.parentToolUseId, arr); }
+      if (!arr) {
+        arr = [];
+        childrenByParent.set(msg.parentToolUseId, arr);
+      }
       arr.push(msg);
     } else {
       topLevel.push(msg);
@@ -295,7 +339,11 @@ function ToolMessageGroup({ group }: { group: ToolMsgGroup }) {
               onClick={() => setOpen(!open)}
               className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-cc-hover transition-colors cursor-pointer"
             >
-              <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 text-cc-muted transition-transform shrink-0 ${open ? "rotate-90" : ""}`}>
+              <svg
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                className={`w-3 h-3 text-cc-muted transition-transform shrink-0 ${open ? "rotate-90" : ""}`}
+              >
                 <path d="M6 4l4 4-4 4" />
               </svg>
               <ToolIcon type={iconType} />
@@ -555,21 +603,34 @@ function normalizeSubagentStatus(status?: string): {
       className: "text-green-600 bg-green-500/15",
     };
   }
-  if (normalized === "failed" || normalized === "error" || normalized === "errored") {
+  if (
+    normalized === "failed" ||
+    normalized === "error" ||
+    normalized === "errored"
+  ) {
     return {
       label: "failed",
       summaryLabel: "failed",
       className: "text-cc-error bg-cc-error/10",
     };
   }
-  if (normalized === "pending" || normalized === "pendinginit" || normalized === "pending_init") {
+  if (
+    normalized === "pending" ||
+    normalized === "pendinginit" ||
+    normalized === "pending_init"
+  ) {
     return {
       label: "pending",
       summaryLabel: "pending",
       className: "text-amber-700 bg-amber-500/15",
     };
   }
-  if (normalized === "running" || normalized === "inprogress" || normalized === "in_progress" || normalized === "started") {
+  if (
+    normalized === "running" ||
+    normalized === "inprogress" ||
+    normalized === "in_progress" ||
+    normalized === "started"
+  ) {
     return {
       label: "running",
       summaryLabel: "running",
@@ -594,7 +655,8 @@ function SubagentContainer({ group }: { group: SubagentGroup }) {
   const senderThreadId = group.senderThreadId;
   const receiverThreadIds = group.receiverThreadIds || [];
   const backend = group.backend || "claude";
-  const statusSummaryCount = receiverCount !== undefined ? receiverCount : childCount;
+  const statusSummaryCount =
+    receiverCount !== undefined ? receiverCount : childCount;
 
   // Extract all tool operations from children
   const activities = useMemo(() => extractToolActivity(group.children), [group.children]);
@@ -608,14 +670,26 @@ function SubagentContainer({ group }: { group: SubagentGroup }) {
           onClick={() => setOpen(!open)}
           className="group w-full flex items-center gap-2 py-1.5 text-left cursor-pointer mb-1"
         >
-          <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 text-cc-muted transition-transform shrink-0 ${open ? "rotate-90" : ""}`}>
+          <svg
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            className={`w-3 h-3 text-cc-muted transition-transform shrink-0 ${open ? "rotate-90" : ""}`}
+          >
             <path d="M6 4l4 4-4 4" />
           </svg>
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5 text-cc-primary shrink-0">
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            className="w-3.5 h-3.5 text-cc-primary shrink-0"
+          >
             <circle cx="8" cy="8" r="5" />
             <path d="M8 5v3l2 1" strokeLinecap="round" />
           </svg>
-          <span className="text-xs font-medium text-cc-fg truncate">{label}</span>
+          <span className="text-xs font-medium text-cc-fg truncate">
+            {label}
+          </span>
           {agentType && (
             <span className="text-[10px] text-cc-muted bg-cc-hover rounded-full px-1.5 py-0.5 shrink-0">
               {agentType}
@@ -625,7 +699,9 @@ function SubagentContainer({ group }: { group: SubagentGroup }) {
             {backend === "codex" ? "Codex" : "Claude"}
           </span>
           {status && (
-            <span className={`text-[10px] rounded-full px-1.5 py-0.5 shrink-0 ${status.className}`}>
+            <span
+              className={`text-[10px] rounded-full px-1.5 py-0.5 shrink-0 ${status.className}`}
+            >
               {status.label}
             </span>
           )}
@@ -676,7 +752,9 @@ function SubagentContainer({ group }: { group: SubagentGroup }) {
               <div className="rounded-lg border border-cc-border bg-cc-card px-2.5 py-2 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
                   {status && (
-                    <span className={`rounded-full px-1.5 py-0.5 ${status.className}`}>
+                    <span
+                      className={`rounded-full px-1.5 py-0.5 ${status.className}`}
+                    >
                       {statusSummaryCount} {status.summaryLabel}
                     </span>
                   )}
@@ -716,7 +794,11 @@ function SubagentContainer({ group }: { group: SubagentGroup }) {
 function AssistantAvatar() {
   return (
     <div className="w-7 h-7 rounded-full bg-cc-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-cc-primary">
+      <svg
+        viewBox="0 0 16 16"
+        fill="currentColor"
+        className="w-3.5 h-3.5 text-cc-primary"
+      >
         <circle cx="8" cy="8" r="3" />
       </svg>
     </div>
@@ -727,9 +809,17 @@ function AssistantAvatar() {
 
 export function MessageFeed({ sessionId }: { sessionId: string }) {
   const messages = useStore((s) => s.messages.get(sessionId) ?? EMPTY_MESSAGES);
-  const sdkSession = useStore((s) => (s.sdkSessions || EMPTY_SDK_SESSIONS).find((session) => session.sessionId === sessionId));
-  const streamingStartedAt = useStore((s) => s.streamingStartedAt.get(sessionId));
-  const streamingOutputTokens = useStore((s) => s.streamingOutputTokens.get(sessionId));
+  const sdkSession = useStore((s) =>
+    (s.sdkSessions || EMPTY_SDK_SESSIONS).find(
+      (session) => session.sessionId === sessionId,
+    ),
+  );
+  const streamingStartedAt = useStore((s) =>
+    s.streamingStartedAt.get(sessionId),
+  );
+  const streamingOutputTokens = useStore((s) =>
+    s.streamingOutputTokens.get(sessionId),
+  );
   const sessionStatus = useStore((s) => s.sessionStatus.get(sessionId));
   const toolProgress = useStore((s) => s.toolProgress.get(sessionId));
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -739,7 +829,9 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
-  const [resumeHistoryMessages, setResumeHistoryMessages] = useState<ChatMessage[]>([]);
+  const [resumeHistoryMessages, setResumeHistoryMessages] = useState<
+    ChatMessage[]
+  >([]);
   const [resumeHistoryCursor, setResumeHistoryCursor] = useState(0);
   const [resumeHistoryHasMore, setResumeHistoryHasMore] = useState(false);
   const [resumeHistoryLoaded, setResumeHistoryLoaded] = useState(false);
@@ -748,7 +840,9 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
   const resumeHistoryMessageIdsRef = useRef<Set<string>>(new Set());
   // LOCAL: Tracks whether a fork session's auto-load has been attempted for the current session.
   const forkAutoLoadAttemptedRef = useRef<string>("");
-  const chatTabReentryTick = useStore((s) => s.chatTabReentryTickBySession.get(sessionId) ?? 0);
+  const chatTabReentryTick = useStore(
+    (s) => s.chatTabReentryTickBySession.get(sessionId) ?? 0,
+  );
   const hasStreamingAssistant = useMemo(
     () => messages.some((m) => m.role === "assistant" && m.isStreaming),
     [messages],
@@ -765,7 +859,10 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
     return dedupeMessagesById([...resumeHistoryMessages, ...messages]);
   }, [resumeHistoryMessages, messages]);
 
-  const grouped = useMemo(() => groupMessages(mergedMessages), [mergedMessages]);
+  const grouped = useMemo(
+    () => groupMessages(mergedMessages),
+    [mergedMessages],
+  );
 
   // Reset paging/transcript state when switching sessions.
   useEffect(() => {
@@ -782,7 +879,9 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
 
   const totalEntries = grouped.length;
   const hasMore = totalEntries > visibleCount;
-  const visibleEntries = hasMore ? grouped.slice(totalEntries - visibleCount) : grouped;
+  const visibleEntries = hasMore
+    ? grouped.slice(totalEntries - visibleCount)
+    : grouped;
   const hiddenCount = totalEntries - visibleEntries.length;
 
   const handleLoadMore = useCallback(() => {
@@ -798,73 +897,82 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
     });
   }, []);
 
-  const loadResumeHistoryPage = useCallback(async (
-    options: { preserveScroll?: boolean } = {},
-  ) => {
-    if (!canLoadResumeHistory || !resumeSourceSessionId || resumeHistoryLoading) return;
+  const loadResumeHistoryPage = useCallback(
+    async (options: { preserveScroll?: boolean } = {}) => {
+      if (
+        !canLoadResumeHistory ||
+        !resumeSourceSessionId ||
+        resumeHistoryLoading
+      )
+        return;
 
-    const container = containerRef.current;
-    const previousHeight = container?.scrollHeight ?? 0;
-    const cursor = resumeHistoryLoaded ? resumeHistoryCursor : 0;
+      const container = containerRef.current;
+      const previousHeight = container?.scrollHeight ?? 0;
+      const cursor = resumeHistoryLoaded ? resumeHistoryCursor : 0;
 
-    setResumeHistoryLoading(true);
-    setResumeHistoryError("");
-    try {
-      const page = await api.getClaudeSessionHistory(resumeSourceSessionId, {
-        cursor,
-        limit: RESUME_HISTORY_PAGE_SIZE,
-      });
-
-      const incoming = page.messages.map((msg): ChatMessage => ({
-        id: msg.id,
-        role: msg.role,
-        content: msg.content,
-        contentBlocks: msg.role === "assistant" ? msg.contentBlocks : undefined,
-        timestamp: msg.timestamp || Date.now(),
-        model: msg.role === "assistant" ? msg.model : undefined,
-        stopReason: msg.role === "assistant" ? msg.stopReason : undefined,
-      }));
-
-      const uniqueIncoming: ChatMessage[] = [];
-      for (const msg of incoming) {
-        if (resumeHistoryMessageIdsRef.current.has(msg.id)) continue;
-        resumeHistoryMessageIdsRef.current.add(msg.id);
-        uniqueIncoming.push(msg);
-      }
-
-      setResumeHistoryMessages((prev) => [...uniqueIncoming, ...prev]);
-      setResumeHistoryCursor(page.nextCursor);
-      setResumeHistoryHasMore(page.hasMore);
-      setResumeHistoryLoaded(true);
-
-      if (uniqueIncoming.length > 0) {
-        setVisibleCount((count) => count + uniqueIncoming.length);
-      }
-
-      if (options.preserveScroll !== false && container) {
-        requestAnimationFrame(() => {
-          const newHeight = container.scrollHeight;
-          container.scrollTop += newHeight - previousHeight;
+      setResumeHistoryLoading(true);
+      setResumeHistoryError("");
+      try {
+        const page = await api.getClaudeSessionHistory(resumeSourceSessionId, {
+          cursor,
+          limit: RESUME_HISTORY_PAGE_SIZE,
         });
+
+        const incoming = page.messages.map(
+          (msg): ChatMessage => ({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            contentBlocks:
+              msg.role === "assistant" ? msg.contentBlocks : undefined,
+            timestamp: msg.timestamp || Date.now(),
+            model: msg.role === "assistant" ? msg.model : undefined,
+            stopReason: msg.role === "assistant" ? msg.stopReason : undefined,
+          }),
+        );
+
+        const uniqueIncoming: ChatMessage[] = [];
+        for (const msg of incoming) {
+          if (resumeHistoryMessageIdsRef.current.has(msg.id)) continue;
+          resumeHistoryMessageIdsRef.current.add(msg.id);
+          uniqueIncoming.push(msg);
+        }
+
+        setResumeHistoryMessages((prev) => [...uniqueIncoming, ...prev]);
+        setResumeHistoryCursor(page.nextCursor);
+        setResumeHistoryHasMore(page.hasMore);
+        setResumeHistoryLoaded(true);
+
+        if (uniqueIncoming.length > 0) {
+          setVisibleCount((count) => count + uniqueIncoming.length);
+        }
+
+        if (options.preserveScroll !== false && container) {
+          requestAnimationFrame(() => {
+            const newHeight = container.scrollHeight;
+            container.scrollTop += newHeight - previousHeight;
+          });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setResumeHistoryError(message || "Failed to load previous history");
+        if (!resumeHistoryLoaded) {
+          setResumeHistoryMessages([]);
+          setResumeHistoryCursor(0);
+          setResumeHistoryHasMore(false);
+        }
+      } finally {
+        setResumeHistoryLoading(false);
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setResumeHistoryError(message || "Failed to load previous history");
-      if (!resumeHistoryLoaded) {
-        setResumeHistoryMessages([]);
-        setResumeHistoryCursor(0);
-        setResumeHistoryHasMore(false);
-      }
-    } finally {
-      setResumeHistoryLoading(false);
-    }
-  }, [
-    canLoadResumeHistory,
-    resumeSourceSessionId,
-    resumeHistoryLoading,
-    resumeHistoryLoaded,
-    resumeHistoryCursor,
-  ]);
+    },
+    [
+      canLoadResumeHistory,
+      resumeSourceSessionId,
+      resumeHistoryLoading,
+      resumeHistoryLoaded,
+      resumeHistoryCursor,
+    ],
+  );
 
   // LOCAL: For fork sessions, auto-load prior history when messages haven't been pre-populated
   // via message_history. Waits briefly for message_history to arrive before falling back to REST.
@@ -901,15 +1009,18 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
       el.scrollHeight - el.scrollTop - el.clientHeight < 120;
     if (isNearBottom.current) userScrolledUp.current = false;
     setShowScrollToBottom(!isNearBottom.current);
-    const distanceFromBottom = Math.max(0, el.scrollHeight - el.clientHeight - el.scrollTop);
+    const distanceFromBottom = Math.max(
+      0,
+      el.scrollHeight - el.clientHeight - el.scrollTop,
+    );
     savedDistanceFromBottomBySession.set(sessionId, distanceFromBottom);
 
     if (
-      canLoadResumeHistory
-      && resumeHistoryLoaded
-      && resumeHistoryHasMore
-      && !resumeHistoryLoading
-      && el.scrollTop <= SCROLL_TOP_PREFETCH_PX
+      canLoadResumeHistory &&
+      resumeHistoryLoaded &&
+      resumeHistoryHasMore &&
+      !resumeHistoryLoading &&
+      el.scrollTop <= SCROLL_TOP_PREFETCH_PX
     ) {
       void loadResumeHistoryPage({ preserveScroll: true });
     }
@@ -940,7 +1051,10 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
     el.style.scrollBehavior = "auto";
     const savedDistance = savedDistanceFromBottomBySession.get(sessionId);
     if (typeof savedDistance === "number") {
-      el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight - savedDistance);
+      el.scrollTop = Math.max(
+        0,
+        el.scrollHeight - el.clientHeight - savedDistance,
+      );
     } else {
       el.scrollTop = el.scrollHeight;
     }
@@ -957,7 +1071,10 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
     return () => {
       const el = containerRef.current;
       if (!el) return;
-      const distanceFromBottom = Math.max(0, el.scrollHeight - el.clientHeight - el.scrollTop);
+      const distanceFromBottom = Math.max(
+        0,
+        el.scrollHeight - el.clientHeight - el.scrollTop,
+      );
       savedDistanceFromBottomBySession.set(sessionId, distanceFromBottom);
     };
   }, [sessionId]);
@@ -988,7 +1105,13 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-4 select-none px-6">
         <div className="w-14 h-14 rounded-2xl bg-cc-card border border-cc-border flex items-center justify-center">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-7 h-7 text-cc-muted">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            className="w-7 h-7 text-cc-muted"
+          >
             <polyline points="4 17 10 11 4 5" />
             <line x1="12" y1="19" x2="20" y2="19" />
           </svg>
@@ -1012,12 +1135,16 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
                 </button>
               )}
               {resumeHistoryError && (
-                <p className="text-xs text-cc-error mt-2">{resumeHistoryError}</p>
+                <p className="text-xs text-cc-error mt-2">
+                  {resumeHistoryError}
+                </p>
               )}
             </>
           ) : (
             <>
-              <p className="text-sm text-cc-fg font-medium mb-1">Start a conversation</p>
+              <p className="text-sm text-cc-fg font-medium mb-1">
+                Start a conversation
+              </p>
               <p className="text-xs text-cc-muted leading-relaxed">
                 Send a message to begin working with The Companion.
               </p>
@@ -1059,21 +1186,32 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
             <div className="rounded-xl border border-cc-border bg-cc-card p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-medium text-cc-fg">{resumeModeLabel} existing Claude thread</p>
+                  <p className="text-xs font-medium text-cc-fg">
+                    {resumeModeLabel} existing Claude thread
+                  </p>
                   <p className="text-[11px] text-cc-muted mt-1">
-                    {resumeSourceSessionId} {sdkSession?.cwd ? `· ${formatResumeSourcePath(sdkSession.cwd)}` : ""}
+                    {resumeSourceSessionId}{" "}
+                    {sdkSession?.cwd
+                      ? `· ${formatResumeSourcePath(sdkSession.cwd)}`
+                      : ""}
                   </p>
                 </div>
                 <button
-                  onClick={() => void loadResumeHistoryPage({ preserveScroll: true })}
+                  onClick={() =>
+                    void loadResumeHistoryPage({ preserveScroll: true })
+                  }
                   disabled={resumeHistoryLoading}
                   className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-cc-fg bg-cc-card border border-cc-border rounded-lg hover:bg-cc-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
                 >
-                  {resumeHistoryLoading ? "Loading..." : "Load previous history"}
+                  {resumeHistoryLoading
+                    ? "Loading..."
+                    : "Load previous history"}
                 </button>
               </div>
               {resumeHistoryError && (
-                <p className="text-xs text-cc-error mt-2">{resumeHistoryError}</p>
+                <p className="text-xs text-cc-error mt-2">
+                  {resumeHistoryError}
+                </p>
               )}
             </div>
           )}
@@ -1082,9 +1220,9 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
             <div className="flex justify-center">
               <p className="text-[11px] text-cc-muted">
                 {resumeHistoryHasMore
-                  ? (resumeHistoryLoading
+                  ? resumeHistoryLoading
                     ? "Loading older transcript..."
-                    : "Scroll to top to load older transcript")
+                    : "Scroll to top to load older transcript"
                   : "Loaded all available prior transcript"}
               </p>
             </div>
@@ -1096,10 +1234,15 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
                 onClick={handleLoadMore}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-cc-muted hover:text-cc-fg bg-cc-card border border-cc-border rounded-lg hover:bg-cc-hover transition-colors cursor-pointer"
               >
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  className="w-3 h-3"
+                >
                   <path d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z" />
                 </svg>
-                Load {Math.min(FEED_PAGE_SIZE, hiddenCount)} more ({hiddenCount} hidden)
+                Load {Math.min(FEED_PAGE_SIZE, hiddenCount)} more ({hiddenCount}{" "}
+                hidden)
               </button>
             </div>
           )}
@@ -1118,6 +1261,23 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
                   <span className="text-cc-muted/60">{p.elapsedSeconds}s</span>
                 </span>
               ))}
+            </div>
+          )}
+
+          {/* Compacting context indicator */}
+          {sessionStatus === "compacting" && (
+            <div className="flex items-center gap-1.5 text-[11px] text-cc-warning font-mono-code pl-10">
+              <svg
+                className="w-3 h-3 animate-spin shrink-0"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="8" cy="8" r="6" opacity="0.25" />
+                <path d="M8 2a6 6 0 0 1 6 6" strokeLinecap="round" />
+              </svg>
+              <span>Compacting context...</span>
             </div>
           )}
 
