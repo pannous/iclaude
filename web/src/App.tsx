@@ -129,10 +129,11 @@ export default function App() {
       setActiveTab("editor");
       return;
     }
+    if (!isAuthenticated) return;
     api.getSettings().then((settings) => {
       setEditorTabEnabled(settings.editorTabEnabled);
     }).catch((e) => console.warn("[app] getSettings", e));
-  }, [setEditorTabEnabled, activeTab, setActiveTab]);
+  }, [isAuthenticated, setEditorTabEnabled, activeTab, setActiveTab]);
 
   useEffect(() => {
     if (!editorTabEnabled && activeTab === "editor") {
@@ -211,8 +212,9 @@ export default function App() {
     return () => { cancelled = true; };
   }, [currentSessionId, sessionCwd, diffBase, changedFilesTick, setGitChangedFilesCount]);
 
-  // Poll for updates
+  // Poll for updates (only after auth)
   useEffect(() => {
+    if (!isAuthenticated) return;
     const check = () => {
       api.checkForUpdate().then((info) => {
         useStore.getState().setUpdateInfo(info);
@@ -221,7 +223,7 @@ export default function App() {
     check();
     const interval = setInterval(check, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isAuthenticated]);
 
   // Listen for postMessage from HTML fragment iframes and panels
   useEffect(() => {
