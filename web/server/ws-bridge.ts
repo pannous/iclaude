@@ -947,7 +947,7 @@ export class WsBridge {
 
     session.browserSockets.delete(ws);
     this.globalBrowserSockets.delete(ws);
-    console.log(`[ws-bridge] Browser disconnected for session ${sessionId} (${session.browserSockets.size} browsers)`);
+    // Suppressed: too noisy for normal operation (browser tab close/refresh)
 
     // If nobody is watching anymore, cancel any pending relaunch — pointless to relaunch
     // only to immediately go idle with no browser. The next browser connect will re-arm it.

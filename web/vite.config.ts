@@ -61,7 +61,8 @@ export default defineConfig({
         target: "http://localhost:3456",
         configure: (proxy) => {
           proxy.on("error", (err) => {
-            if ((err as NodeJS.ErrnoException).code === "ECONNRESET" || err.message === "socket hang up") return;
+            const code = (err as NodeJS.ErrnoException).code;
+            if (code === "ECONNRESET" || code === "EPIPE" || err.message === "socket hang up") return;
             console.error("[api proxy]", err.message);
           });
         },
@@ -74,7 +75,8 @@ export default defineConfig({
         configure: (proxy) => {
           proxy.on("error", (err) => {
             // Suppress noisy connection-reset errors from normal browser disconnects
-            if ((err as NodeJS.ErrnoException).code === "ECONNRESET" || err.message === "socket hang up") return;
+            const code = (err as NodeJS.ErrnoException).code;
+            if (code === "ECONNRESET" || code === "EPIPE" || err.message === "socket hang up") return;
             console.error("[ws proxy]", err.message);
           });
         },
