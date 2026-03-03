@@ -11,7 +11,7 @@ import { ThemeToggle } from "./TopBar.js";
 import { groupSessionsByProject, type SessionItem as SessionItemType } from "../utils/project-grouping.js";
 
 // LOCAL: spam filter patterns shared across active and resumable session lists
-const SPAM_LABEL_PATTERNS = [/secret\.txt/i, /tell me the secret code/i, /whats the secret/i];
+const SPAM_LABEL_PATTERNS = [/secret/i, /tell me the secret/i, /whats the secret/i];
 const SPAM_CWD_PATTERNS = [/test_project/i];
 
 function isSpamSession(label: string | undefined, cwd: string | undefined): boolean {
@@ -513,6 +513,7 @@ export function Sidebar() {
     const label = (s.title?.replace(/<[^>]*>/g, "").trim() || undefined) || name;
     if (!label || label === s.model) return false;
     if (isSpamSession(label, s.cwd)) return false;
+    if (name && isSpamSession(name, undefined)) return false;
     return true;
   });
   const activeSessions = validSessions.filter((s) => !s.archived && !s.cronJobId && !s.agentId);
