@@ -10,6 +10,16 @@ import { SessionItem } from "./SessionItem.js";
 import { ThemeToggle } from "./TopBar.js";
 import { groupSessionsByProject, type SessionItem as SessionItemType } from "../utils/project-grouping.js";
 
+// LOCAL: spam filter patterns shared across active and resumable session lists
+const SPAM_LABEL_PATTERNS = [/secret\.txt/i, /tell me the secret code/i, /whats the secret/i];
+const SPAM_CWD_PATTERNS = [/test_project/i];
+
+function isSpamSession(label: string | undefined, cwd: string | undefined): boolean {
+  if (label && SPAM_LABEL_PATTERNS.some((re) => re.test(label))) return true;
+  if (cwd && SPAM_CWD_PATTERNS.some((re) => re.test(cwd))) return true;
+  return false;
+}
+
 function formatTimeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
   if (seconds < 60) return "just now";
@@ -217,6 +227,7 @@ export function Sidebar() {
         list
           .filter((rs) => !activeCliIds.has(rs.sessionId))
           .map((rs) => ({ ...rs, title: cleanTag(rs.title || "") || rs.title }))
+          .filter((rs) => !isSpamSession(rs.title, rs.project))
       );
     } catch {
       setResumableSessions([]);
@@ -262,7 +273,11 @@ export function Sidebar() {
   useEffect(() => {
     const cleanTag = (t: string) => t.replace(/<[^>]*>/g, "").trim();
     api.listResumableSessions()
-      .then((list) => setAllResumable(list.map((rs) => ({ ...rs, title: cleanTag(rs.title || "") || rs.title }))))
+      .then((list) => setAllResumable(
+        list
+          .map((rs) => ({ ...rs, title: cleanTag(rs.title || "") || rs.title }))
+          .filter((rs) => !isSpamSession(rs.title, rs.project))
+      ))
       .catch(() => {});
   }, []);
 
@@ -492,15 +507,12 @@ export function Sidebar() {
   }).sort((a, b) => b.createdAt - a.createdAt);
 
   // LOCAL: filter out ghost sessions and spam — upstream has no such filter
-  const SPAM_LABEL_PATTERNS = [/secret\.txt/i, /tell me the secret code/i];
-  const SPAM_CWD_PATTERNS = [/test_project/i];
   const validSessions = allSessionList.filter((s) => {
     if (!s.cwd && !s.title) return false;
     const name = sessionNames.get(s.id);
     const label = (s.title?.replace(/<[^>]*>/g, "").trim() || undefined) || name;
     if (!label || label === s.model) return false;
-    if (SPAM_LABEL_PATTERNS.some((re) => re.test(label))) return false;
-    if (s.cwd && SPAM_CWD_PATTERNS.some((re) => re.test(s.cwd))) return false;
+    if (isSpamSession(label, s.cwd)) return false;
     return true;
   });
   const activeSessions = validSessions.filter((s) => !s.archived && !s.cronJobId && !s.agentId);
