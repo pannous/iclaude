@@ -1,11 +1,16 @@
 import { useState, useCallback, useEffect } from "react";
 import { useStore } from "../store.js";
-import { verifyAuthToken, autoAuth } from "../api.js";
+import { verifyAuthToken, autoAuth, api } from "../api.js";
+
+type QrEntry = { label: string; url: string; qrDataUrl: string };
 
 export function LoginPage() {
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isLocal, setIsLocal] = useState(false);
+  const [qrCodes, setQrCodes] = useState<QrEntry[] | null>(null);
+  const [selectedQrIndex, setSelectedQrIndex] = useState(0);
   const setAuthToken = useStore((s) => s.setAuthToken);
 
   const handleSubmit = useCallback(
@@ -31,14 +36,16 @@ export function LoginPage() {
 
   // Auto-login: try localhost auto-auth first, then ?token= URL param
   useEffect(() => {
-    // 1. Try localhost auto-auth — server returns the token for same-machine requests
     autoAuth().then((localhostToken) => {
       if (localhostToken) {
+        // Localhost detected — show QR codes for mobile access, then auto-auth
+        setIsLocal(true);
+        api.getAuthQr().then((data) => setQrCodes(data.qrCodes)).catch(() => {});
         setAuthToken(localhostToken);
         return;
       }
 
-      // 2. Fall back to ?token= URL param (used by QR codes scanned with native camera)
+      // Fall back to ?token= URL param (used by QR codes scanned with native camera)
       const params = new URLSearchParams(window.location.search);
       const urlToken = params.get("token");
       if (urlToken) {
@@ -46,7 +53,6 @@ export function LoginPage() {
         verifyAuthToken(urlToken).then((valid) => {
           if (valid) {
             setAuthToken(urlToken);
-            // Strip token from URL to avoid leaking it in history
             const url = new URL(window.location.href);
             url.searchParams.delete("token");
             window.history.replaceState({}, "", url.toString());
@@ -60,6 +66,58 @@ export function LoginPage() {
   }, [setAuthToken]);
 
   const [showToken, setShowToken] = useState(false);
+
+  // Localhost view: show QR codes for mobile access
+  if (isLocal && qrCodes) {
+    return (
+      <div className="h-[100dvh] flex items-center justify-center bg-cc-bg text-cc-fg font-sans-ui antialiased">
+        <div className="w-full max-w-sm px-6 text-center">
+          <h1 className="text-xl font-semibold text-cc-fg mb-2">The Companion</h1>
+          <p className="text-sm text-cc-muted mb-6">Scan to connect from another device</p>
+
+          {qrCodes.length > 0 ? (
+            <div className="space-y-3">
+              {qrCodes.length > 1 && (
+                <div className="flex justify-center gap-1">
+                  {qrCodes.map((qr, i) => (
+                    <button
+                      key={qr.label}
+                      type="button"
+                      onClick={() => setSelectedQrIndex(i)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                        i === selectedQrIndex
+                          ? "bg-cc-primary text-white"
+                          : "bg-cc-hover text-cc-muted hover:text-cc-fg"
+                      }`}
+                    >
+                      {qr.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="inline-block rounded-lg bg-white p-2">
+                <img
+                  src={qrCodes[selectedQrIndex].qrDataUrl}
+                  alt={`QR code for ${qrCodes[selectedQrIndex].label} login`}
+                  className="w-48 h-48"
+                />
+              </div>
+              <div className="px-3 py-2 rounded-lg bg-cc-hover text-sm font-mono text-cc-fg break-all select-all">
+                {qrCodes[selectedQrIndex].url}
+              </div>
+              <p className="text-[11px] text-cc-muted leading-relaxed">
+                Scan with your phone&apos;s camera app to auto-authenticate.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-cc-muted">
+              No remote addresses detected. Connect to a network to generate a QR code.
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-[100dvh] flex items-center justify-center bg-cc-bg text-cc-fg font-sans-ui antialiased">

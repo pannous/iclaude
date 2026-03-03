@@ -5,10 +5,12 @@ import "@testing-library/jest-dom";
 // ---- Mock API ----
 const mockVerifyAuthToken = vi.fn().mockResolvedValue(true);
 const mockAutoAuth = vi.fn().mockResolvedValue(null);
+const mockGetAuthQr = vi.fn().mockResolvedValue({ qrCodes: [] });
 
 vi.mock("../api.js", () => ({
   verifyAuthToken: (...args: unknown[]) => mockVerifyAuthToken(...args),
   autoAuth: () => mockAutoAuth(),
+  api: { getAuthQr: () => mockGetAuthQr() },
 }));
 
 // ---- Mock Store ----

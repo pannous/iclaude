@@ -178,45 +178,7 @@ export function createRoutes(
     return c.json({ error: "Invalid token" }, 401);
   });
 
-  // Localhost-only page: shows token as text + QR for any known external URL
-  api.get("/auth/token-page", async (c) => {
-    if (!isLocalhostRequest(c)) return c.json({ error: "unauthorized" }, 401);
-    const token = getToken();
-    const { qrCodes } = await buildQrCodes(Number(process.env.PORT) || 3456, token);
-    const qrHtml = qrCodes.map(q => `
-      <div class="qr">
-        <img src="${q.qrDataUrl}" alt="QR code for ${q.label}">
-        <p>${q.label}: <a href="${q.url}">${q.url}</a></p>
-      </div>`).join("");
-    return c.html(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Companion — Token</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{background:#1a1917;color:#e8e6e0;font-family:system-ui,sans-serif;
-         padding:2rem;display:flex;flex-direction:column;align-items:center;gap:1.5rem}
-    h1{color:#d97757;font-size:1.1rem}
-    .token{background:#262624;border:1px solid #3a3835;border-radius:8px;
-           padding:1rem 1.5rem;font-family:monospace;font-size:.85rem;
-           word-break:break-all;max-width:480px;cursor:pointer;position:relative}
-    .token:hover::after{content:'click to copy';position:absolute;bottom:-1.4rem;
-                        left:0;font-size:.75rem;color:#888}
-    .qr{text-align:center;display:flex;flex-direction:column;align-items:center;gap:.5rem}
-    .qr img{border-radius:8px;background:#fff;padding:8px}
-    p,a{font-size:.85rem;color:#aaa} a{color:#d97757}
-  </style>
-</head>
-<body>
-  <h1>Auth Token</h1>
-  <div class="token" id="tok" onclick="navigator.clipboard.writeText(this.dataset.t);this.style.outline='2px solid #d97757'"
-       data-t="${token}">${token}</div>
-  ${qrHtml || "<p>No network addresses found. Copy the token above.</p>"}
-</body>
-</html>`);
-  });
+  // DONE: /auth/token-page removed — unified into LoginPage.tsx (shows QR on localhost)
 
   async function buildQrCodes(port: number, authToken: string) {
     const addresses = getAllAddresses().filter((a) => a.ip !== "localhost");
