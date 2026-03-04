@@ -766,15 +766,33 @@ describe("Sidebar", () => {
     expect(screen.queryByText("1h ago")).not.toBeInTheDocument();
   });
 
-  it("footer nav uses a 3x2 grid layout with short labels", () => {
-    const { container } = render(<Sidebar />);
-    // The grid container should exist
-    const gridElement = container.querySelector(".grid.grid-cols-3");
-    expect(gridElement).toBeTruthy();
-    // Short labels should be visible
-    expect(screen.getByText("Envs")).toBeInTheDocument();
-    expect(screen.getByText("Integr.")).toBeInTheDocument();
+  it("footer nav uses a vertical list layout with full labels", () => {
+    // The footer navigation uses a single-column vertical list where each
+    // item is a horizontal row with icon + full label (one line per item).
+    render(<Sidebar />);
+    // Full labels should be visible (not short labels)
+    expect(screen.getByText("Environments")).toBeInTheDocument();
+    expect(screen.getByText("Integrations")).toBeInTheDocument();
     expect(screen.getByText("Agents")).toBeInTheDocument();
+    expect(screen.getByText("Prompts")).toBeInTheDocument();
+    expect(screen.getByText("Terminal")).toBeInTheDocument();
+    expect(screen.getByText("Settings")).toBeInTheDocument();
+  });
+
+  it("footer navigation is grouped into clear sections", () => {
+    // Verifies that the redesigned menu exposes explicit grouping labels
+    // to improve scanability and information architecture.
+    render(<Sidebar />);
+    expect(screen.getByText("Workbench")).toBeInTheDocument();
+    expect(screen.getByText("Workspace")).toBeInTheDocument();
+    expect(screen.getByText("Resources")).toBeInTheDocument();
+  });
+
+  it("compact nav does not render helper subtitle lines", () => {
+    // Verifies compact density mode: only primary labels are shown in nav items.
+    render(<Sidebar />);
+    expect(screen.queryByText("Templates and prompt library")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connected tools and services")).not.toBeInTheDocument();
   });
 
   it("session item has minimum touch target height", () => {
@@ -1559,6 +1577,16 @@ describe("Sidebar", () => {
     expect(integrationsBtn).toHaveClass("bg-cc-active");
   });
 
+  it("agents nav button is active on agent detail routes with aria-current", () => {
+    // Verifies active state semantics for nested agent pages.
+    window.location.hash = "#/agents/agent-123";
+    render(<Sidebar />);
+
+    const agentsBtn = screen.getByTitle("Agents");
+    expect(agentsBtn).toHaveClass("bg-cc-active");
+    expect(agentsBtn).toHaveAttribute("aria-current", "page");
+  });
+
   // ─── Close sidebar button (mobile) ─────────────────────────────────────────
 
   it("renders a close sidebar button for mobile", () => {
@@ -1600,6 +1628,67 @@ describe("Sidebar", () => {
     const { container } = render(<Sidebar />);
     const logo = container.querySelector("img[src='/logo.svg']");
     expect(logo).toBeTruthy();
+  });
+
+  // ─── External links in footer ──────────────────────────────────────────────
+
+  it("renders external links for Documentation, GitHub, and Website", () => {
+    // Verifies that all three external icon-only links are rendered in the
+    // sidebar footer with correct href values.
+    render(<Sidebar />);
+
+    const docsLink = screen.getByLabelText("Open documentation");
+    const githubLink = screen.getByLabelText("Open github");
+    const websiteLink = screen.getByLabelText("Open website");
+
+    expect(docsLink).toBeInTheDocument();
+    expect(githubLink).toBeInTheDocument();
+    expect(websiteLink).toBeInTheDocument();
+
+    expect(docsLink).toHaveAttribute("href", "https://docs.thecompanion.sh");
+    expect(githubLink).toHaveAttribute("href", "https://github.com/The-Vibe-Company/companion");
+    expect(websiteLink).toHaveAttribute("href", "https://thecompanion.sh");
+  });
+
+  it("external links open in new tab with secure attributes", () => {
+    // Verifies that all external links use target="_blank" and
+    // rel="noopener noreferrer" to prevent reverse-tabnabbing.
+    render(<Sidebar />);
+
+    const links = [
+      screen.getByLabelText("Open documentation"),
+      screen.getByLabelText("Open github"),
+      screen.getByLabelText("Open website"),
+    ];
+
+    for (const link of links) {
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    }
+  });
+
+  it("external links have title attributes for tooltip accessibility", () => {
+    // Verifies that each external link has a title attribute for tooltips
+    // and screen reader support.
+    render(<Sidebar />);
+
+    expect(screen.getByTitle("Documentation")).toBeInTheDocument();
+    expect(screen.getByTitle("GitHub")).toBeInTheDocument();
+    expect(screen.getByTitle("Website")).toBeInTheDocument();
+  });
+
+  it("external links are rendered as anchor elements (not buttons)", () => {
+    // Verifies that external links use <a> tags for proper semantic HTML,
+    // distinguishing them from internal nav buttons.
+    render(<Sidebar />);
+
+    const docsLink = screen.getByLabelText("Open documentation");
+    const githubLink = screen.getByLabelText("Open github");
+    const websiteLink = screen.getByLabelText("Open website");
+
+    expect(docsLink.tagName).toBe("A");
+    expect(githubLink.tagName).toBe("A");
+    expect(websiteLink.tagName).toBe("A");
   });
 
   // ─── Delete modal inner click propagation ──────────────────────────────────

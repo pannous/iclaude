@@ -198,6 +198,7 @@ gh pr edit --body-file /tmp/pr_body.md
 - All features must be compatible with both Codex and Claude Code. If a feature is only compatible with one, it must be gated behind a clear UI affordance (e.g. "This feature requires Claude Code") and the incompatible option should be hidden or disabled.
 - When implementing a new feature, always consider how it will work with both models and test with both if possible. If a feature is only implemented for one model, document that clearly in the code and in the UI.
 
+
 ## Tests
 - All new features must include one or more tests where applicable. Tests should be added under `web/server/` for backend code and `web/src/` for frontend code.
 
@@ -256,9 +257,20 @@ The panels system provided:
 - Inline HTML fragments in chat with `window.vibeCommand()` access in YOLO mode
 - Inline HTML fragments shall report back via `window.vibeReportState()` and respond to `window.vibeGetState()` for reactive state queries
 
-
-
-
 See git history (`git log --grep=panel`) for full implementation details.
+
+## Cursor Cloud specific instructions
+
+### Services
+- **Hono backend** (port 3457 in dev): `cd web && bun run dev:api` or via `./scripts/dev-start.sh`
+- **Vite frontend** (port 5174 in dev): `cd web && bun run dev:vite` or via `./scripts/dev-start.sh`
+- Both start together with `cd web && bun run dev` (or `make dev`), but that runs in foreground. Use `./scripts/dev-start.sh` for background mode.
+
+### Caveats
+- `./scripts/dev-start.sh` health-checks the backend on `/` which returns 404. If the script times out, the backend is still running — verify with `curl http://localhost:3457/api/sessions`. You can start the servers manually as background processes instead.
+- The app requires Claude Code CLI or Codex CLI to create functional sessions. Without them, the UI loads but session creation will fail. The component playground at `#/playground` works without any CLI.
+- No external databases or services are needed. Session state persists to `$TMPDIR/vibe-sessions/` as JSON files.
+- The pre-commit hook (`.husky/pre-commit`) runs `cd web && bun run typecheck && bun run test -- --coverage`. Run these before committing.
+- Two blocked postinstalls (`core-js`, `protobufjs`) are harmless and do not affect functionality.
 
 <!-- end of CLAUDE.md -->

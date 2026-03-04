@@ -32,6 +32,7 @@ const EnvManager = lazyNamed(() => import("./components/EnvManager.js"), "EnvMan
 const DockerBuilderPage = lazyNamed(() => import("./components/DockerBuilderPage.js"), "DockerBuilderPage");
 const CronManager = lazyNamed(() => import("./components/CronManager.js"), "CronManager");
 const AgentsPage = lazyNamed(() => import("./components/AgentsPage.js"), "AgentsPage");
+const RunsPage = lazyNamed(() => import("./components/RunsPage.js"), "RunsPage");
 const TerminalPage = lazyNamed(() => import("./components/TerminalPage.js"), "TerminalPage");
 // LOCAL: Panel, panels page, and file editor lazy loads
 const Panel = lazyNamed(() => import("./components/Panel.js"), "Panel");
@@ -92,6 +93,7 @@ export default function App() {
   const updateOverlayActive = useStore((s) => s.updateOverlayActive);
   const hash = useHash();
   const route = useMemo(() => parseHash(hash), [hash]);
+  const isRunsPage = route.page === "runs";
   const isSessionView = route.page === "session" || route.page === "home";
 
   // LOCAL: On startup, attempt autoAuth so the login page never flashes when auth is disabled
@@ -380,6 +382,12 @@ export default function App() {
               Select a session to view its processes.
             </div>
           ))}
+
+          {isRunsPage && (
+            <div className="absolute inset-0">
+              <Suspense fallback={<LazyFallback />}><RunsPage /></Suspense>
+            </div>
+          )}
 
           {isSessionView && (
             <>

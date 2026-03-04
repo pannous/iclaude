@@ -139,6 +139,8 @@ export class WsBridge {
   private userMsgCounter = 0;
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
   private sessionInfoLookup: ((sessionId: string) => { cliSessionId?: string; cwd?: string } | null) | null = null;
+  private assistantMessageListeners = new Map<string, Set<(msg: BrowserIncomingMessage) => void>>();
+  private resultListeners = new Map<string, Set<(msg: BrowserIncomingMessage) => void>>();
   private static readonly GIT_SESSION_KEYS: GitSessionKey[] = [
     "git_branch",
     "is_worktree",
@@ -182,6 +184,24 @@ export class WsBridge {
    *  Used by handleBrowserOpen to load CLI history for sessions that lost their messageHistory. */
   onSessionInfoLookupCallback(cb: (sessionId: string) => { cliSessionId?: string; cwd?: string } | null): void {
     this.sessionInfoLookup = cb;
+  }
+
+  /** Subscribe to assistant messages for a specific session (for chat relay). Returns unsubscribe fn. */
+  onAssistantMessageForSession(sessionId: string, cb: (msg: BrowserIncomingMessage) => void): () => void {
+    if (!this.assistantMessageListeners.has(sessionId)) {
+      this.assistantMessageListeners.set(sessionId, new Set());
+    }
+    this.assistantMessageListeners.get(sessionId)!.add(cb);
+    return () => { this.assistantMessageListeners.get(sessionId)?.delete(cb); };
+  }
+
+  /** Subscribe to result (turn completion) for a specific session. Returns unsubscribe fn. */
+  onResultForSession(sessionId: string, cb: (msg: BrowserIncomingMessage) => void): () => void {
+    if (!this.resultListeners.has(sessionId)) {
+      this.resultListeners.set(sessionId, new Set());
+    }
+    this.resultListeners.get(sessionId)!.add(cb);
+    return () => { this.resultListeners.get(sessionId)?.delete(cb); };
   }
 
   /**
@@ -666,6 +686,8 @@ export class WsBridge {
     }
     this.sessions.delete(sessionId);
     this.autoNamingAttempted.delete(sessionId);
+    this.assistantMessageListeners.delete(sessionId);
+    this.resultListeners.delete(sessionId);
     this.store?.remove(sessionId);
   }
 
@@ -710,6 +732,8 @@ export class WsBridge {
     this.cancelOrphanKill(sessionId);
     this.sessions.delete(sessionId);
     this.autoNamingAttempted.delete(sessionId);
+    this.assistantMessageListeners.delete(sessionId);
+    this.resultListeners.delete(sessionId);
     this.store?.remove(sessionId);
   }
 
@@ -732,6 +756,8 @@ export class WsBridge {
       onCLISessionId: this.onCLISessionId,
       onFirstTurnCompleted: this.onFirstTurnCompleted,
       autoNamingAttempted: this.autoNamingAttempted,
+      assistantMessageListeners: this.assistantMessageListeners,
+      resultListeners: this.resultListeners,
     });
   }
 
@@ -1260,6 +1286,9 @@ export class WsBridge {
     } else {
       this.broadcastToBrowsers(session, browserMsg);
     }
+    this.assistantMessageListeners.get(session.id)?.forEach((cb) => {
+      try { cb(browserMsg); } catch (err) { console.error("[ws-bridge] Assistant listener error:", err); }
+    });
     this.persistSession(session);
   }
 
@@ -1303,6 +1332,11 @@ export class WsBridge {
     };
     session.messageHistory.push(browserMsg);
     this.broadcastToBrowsers(session, browserMsg);
+    this.resultListeners.get(session.id)?.forEach((cb) => {
+      try {
+        Promise.resolve(cb(browserMsg)).catch((err) => console.error("[ws-bridge] Async result listener error:", err));
+      } catch (err) { console.error("[ws-bridge] Result listener error:", err); }
+    });
     // Mark CLI as idle, then flush the next queued user message if any.
     session.cliIsRunning = false;
     this.flushPendingUserInput(session);

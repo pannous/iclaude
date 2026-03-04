@@ -15,6 +15,7 @@ export type Route =
   | { page: "agent-detail"; agentId: string }
   | { page: "panels" }
   | { page: "processes" }
+  | { page: "runs" }
   | { page: "playground" };
 
 const SESSION_PREFIX = "#/session/";
@@ -45,6 +46,7 @@ export function parseHash(hash: string): Route {
   if (hash === "#/agents") return { page: "agents" };
   if (hash === "#/panels") return { page: "panels" };
   if (hash === "#/processes") return { page: "processes" };
+  if (hash === "#/runs") return { page: "runs" };
   if (hash === "#/playground") return { page: "playground" };
 
   if (hash.startsWith(AGENT_PREFIX)) {
