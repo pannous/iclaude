@@ -796,7 +796,11 @@ export class WsBridge {
         console.warn(`[ws-bridge] Failed to parse CLI message: ${line.substring(0, 200)}`);
         continue;
       }
-      this.routeCLIMessage(session, msg);
+      try {
+        this.routeCLIMessage(session, msg);
+      } catch (err) {
+        console.error(`[ws-bridge] Error handling CLI message for session ${sessionId}:`, err);
+      }
     }
   }
 
@@ -928,7 +932,11 @@ export class WsBridge {
       return;
     }
 
-    this.routeBrowserMessage(session, msg, ws);
+    try {
+      this.routeBrowserMessage(session, msg, ws);
+    } catch (err) {
+      console.error(`[ws-bridge] Error handling browser message for session ${sessionId}:`, err);
+    }
   }
 
   /** Send a user message into a session programmatically (no browser required).
