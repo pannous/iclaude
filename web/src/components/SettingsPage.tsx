@@ -668,9 +668,13 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     placeholder={configured ? "Enter a new key to replace" : "sk-ant-api03-..."}
                     className="w-full px-3 py-2.5 min-h-[44px] text-sm bg-cc-bg rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:ring-1 focus:ring-cc-primary/40 transition-shadow"
                   />
-                  <p className="mt-1.5 text-xs text-cc-muted">
-                    Auto-renaming is disabled until this key is configured.
-                  </p>
+                  {!configured && (
+                    <p className="mt-1.5 text-xs text-cc-muted">
+                      {aiProvider === "openrouter"
+                        ? "Optional — enables automatic session renaming."
+                        : "Auto-renaming is disabled until this key is configured."}
+                    </p>
+                  )}
                 </div>
 
                 <div>

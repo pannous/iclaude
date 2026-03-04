@@ -195,10 +195,29 @@ describe("SettingsPage", () => {
     await screen.findByText("Anthropic key not configured");
   });
 
-  it("shows the auto-renaming helper copy under the API key input", async () => {
+  it("shows optional auto-renaming hint when OpenRouter selected and key not configured", async () => {
+    mockApi.getSettings.mockResolvedValueOnce({
+      anthropicApiKeyConfigured: false,
+      anthropicModel: "claude-sonnet-4.6",
+      linearApiKeyConfigured: false,
+      linearAutoTransition: false,
+      linearAutoTransitionStateName: "",
+      editorTabEnabled: false,
+      updateChannel: "stable",
+    });
     render(<SettingsPage />);
 
-    expect(await screen.findByText("Auto-renaming is disabled until this key is configured.")).toBeInTheDocument();
+    // Default provider is OpenRouter — should show the optional hint
+    expect(await screen.findByText("Optional — enables automatic session renaming.")).toBeInTheDocument();
+  });
+
+  it("hides auto-renaming hint when key is already configured", async () => {
+    render(<SettingsPage />);
+
+    // Default mock has anthropicApiKeyConfigured: true — hint should be hidden
+    await screen.findByText("Anthropic key configured");
+    expect(screen.queryByText(/auto-renaming/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/enables automatic session renaming/i)).not.toBeInTheDocument();
   });
 
   it("saves settings with trimmed values", async () => {
