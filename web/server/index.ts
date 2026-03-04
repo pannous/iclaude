@@ -30,7 +30,7 @@ import { CronScheduler } from "./cron-scheduler.js";
 import { AgentExecutor } from "./agent-executor.js";
 import { migrateCronJobsToAgents } from "./agent-cron-migrator.js";
 
-import { TunnelManager } from "./tunnel-manager.js";
+import { TunnelManager, getTunnelPort } from "./tunnel-manager.js";
 import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
 import { imagePullManager } from "./image-pull-manager.js";
 import { isRunningAsService } from "./service.js";
@@ -430,7 +430,7 @@ if (process.env.NODE_ENV !== "production") {
 // ── Auto-tunnel ─────────────────────────────────────────────────────────────
 const tunnelEnv = process.env.COMPANION_TUNNEL;
 if (tunnelEnv === "1" || tunnelEnv === "true") {
-  tunnelManager.start(server.port as number).catch((err) => {
+  tunnelManager.start(getTunnelPort()).catch((err) => {
     console.error(`[tunnel] Failed to start: ${err.message}`);
   });
 }

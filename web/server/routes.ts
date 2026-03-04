@@ -3,6 +3,7 @@ import { setCookie, getCookie } from "hono/cookie";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
 import { execSync } from "node:child_process";
 import { resolveBinary } from "./path-resolver.js";
+import { getTunnelPort } from "./tunnel-manager.js";
 import { readdir, stat } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1921,8 +1922,7 @@ export function createRoutes(
   api.post("/tunnel/start", async (c) => {
     if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
     try {
-      const serverPort = Number(process.env.PORT) || 3456;
-      const result = await tunnelManager.start(serverPort);
+      const result = await tunnelManager.start(getTunnelPort());
       return c.json(result);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);

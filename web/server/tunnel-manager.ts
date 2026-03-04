@@ -1,5 +1,6 @@
 import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { getToken } from "./auth-manager.js";
+import { DEFAULT_PORT_DEV, DEFAULT_PORT_PROD, DEFAULT_FRONTEND_PORT_DEV } from "./constants.js";
 
 export interface TunnelStatus {
   state: "stopped" | "starting" | "running" | "error";
@@ -153,6 +154,17 @@ export class TunnelManager {
  * Detect which tunnel binary is available.
  * Prefers cloudflared (no account needed) over ngrok.
  */
+/**
+ * In dev mode, the tunnel must point to Vite (which proxies API/WS to Hono)
+ * so that HMR works. In production, Hono serves everything directly.
+ */
+export function getTunnelPort(): number {
+  if (process.env.NODE_ENV === "production") {
+    return Number(process.env.PORT) || DEFAULT_PORT_PROD;
+  }
+  return Number(process.env.VITE_PORT) || DEFAULT_FRONTEND_PORT_DEV;
+}
+
 function detectProvider(): "cloudflared" | "ngrok" {
   for (const bin of ["cloudflared", "ngrok"] as const) {
     try {
