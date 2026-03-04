@@ -11,12 +11,12 @@ interface SettingsPageProps {
 const CATEGORIES = [
   { id: "general", label: "General" },
   { id: "authentication", label: "Authentication" },
+  { id: "tunnel", label: "Tunnel" },
   { id: "notifications", label: "Notifications" },
   { id: "anthropic", label: "Anthropic" },
   { id: "ai-validation", label: "AI Validation" },
   { id: "updates", label: "Updates" },
   { id: "telemetry", label: "Telemetry" },
-  { id: "tunnel", label: "Tunnel" },
   { id: "environments", label: "Environments" },
 ] as const;
 
@@ -505,6 +505,78 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
               </div>
             </section>
 
+            {/* Tunnel */}
+            <section id="tunnel" ref={setSectionRef("tunnel")}>
+              <h2 className="text-sm font-semibold text-cc-fg mb-4">Tunnel</h2>
+              <div className="space-y-3">
+                <p className="text-xs text-cc-muted">
+                  Expose this instance to the internet via cloudflared or ngrok. Auth is automatically enabled when a tunnel is active.
+                </p>
+                <button
+                  type="button"
+                  disabled={tunnelLoading}
+                  onClick={async () => {
+                    setTunnelLoading(true);
+                    setTunnelError(null);
+                    try {
+                      if (tunnelState === "running") {
+                        await api.stopTunnel();
+                        setTunnelState("stopped");
+                        setTunnelUrl(null);
+                        setTunnelProvider(null);
+                      } else {
+                        setTunnelState("starting");
+                        const res = await api.startTunnel();
+                        setTunnelState("running");
+                        setTunnelUrl(res.url);
+                        setTunnelProvider(res.provider);
+                      }
+                    } catch (err) {
+                      setTunnelState("error");
+                      setTunnelError(err instanceof Error ? err.message : String(err));
+                    } finally {
+                      setTunnelLoading(false);
+                    }
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <span>Public Tunnel</span>
+                  <span className="text-xs text-cc-muted">
+                    {tunnelLoading ? "..." : tunnelState === "running" ? "On" : "Off"}
+                  </span>
+                </button>
+                {tunnelState === "running" && tunnelUrl && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cc-hover">
+                    <a
+                      href={tunnelUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-cc-primary hover:underline truncate flex-1"
+                    >
+                      {tunnelUrl}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(tunnelUrl);
+                        setTunnelUrlCopied(true);
+                        setTimeout(() => setTunnelUrlCopied(false), 1500);
+                      }}
+                      className="text-xs text-cc-muted hover:text-cc-fg shrink-0 cursor-pointer"
+                    >
+                      {tunnelUrlCopied ? "Copied" : "Copy"}
+                    </button>
+                    {tunnelProvider && (
+                      <span className="text-[10px] text-cc-muted shrink-0">{tunnelProvider}</span>
+                    )}
+                  </div>
+                )}
+                {tunnelError && (
+                  <p className="text-xs text-red-500 px-3">{tunnelError}</p>
+                )}
+              </div>
+            </section>
+
             {/* Notifications */}
             <section id="notifications" ref={setSectionRef("notifications")}>
               <h2 className="text-sm font-semibold text-cc-fg mb-4">Notifications</h2>
@@ -907,78 +979,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 <p className="text-xs text-cc-muted">
                   Browser Do Not Track is respected automatically.
                 </p>
-              </div>
-            </section>
-
-            {/* Environments */}
-            <section id="tunnel" ref={setSectionRef("tunnel")}>
-              <h2 className="text-sm font-semibold text-cc-fg mb-4">Tunnel</h2>
-              <div className="space-y-3">
-                <p className="text-xs text-cc-muted">
-                  Expose this Companion instance to the internet via cloudflared or ngrok. Auth is automatically enabled when a tunnel is active.
-                </p>
-                <button
-                  type="button"
-                  disabled={tunnelLoading}
-                  onClick={async () => {
-                    setTunnelLoading(true);
-                    setTunnelError(null);
-                    try {
-                      if (tunnelState === "running") {
-                        await api.stopTunnel();
-                        setTunnelState("stopped");
-                        setTunnelUrl(null);
-                        setTunnelProvider(null);
-                      } else {
-                        setTunnelState("starting");
-                        const res = await api.startTunnel();
-                        setTunnelState("running");
-                        setTunnelUrl(res.url);
-                        setTunnelProvider(res.provider);
-                      }
-                    } catch (err) {
-                      setTunnelState("error");
-                      setTunnelError(err instanceof Error ? err.message : String(err));
-                    } finally {
-                      setTunnelLoading(false);
-                    }
-                  }}
-                  className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  <span>Public Tunnel</span>
-                  <span className="text-xs text-cc-muted">
-                    {tunnelLoading ? "..." : tunnelState === "running" ? "On" : "Off"}
-                  </span>
-                </button>
-                {tunnelState === "running" && tunnelUrl && (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cc-hover">
-                    <a
-                      href={tunnelUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-cc-primary hover:underline truncate flex-1"
-                    >
-                      {tunnelUrl}
-                    </a>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await navigator.clipboard.writeText(tunnelUrl);
-                        setTunnelUrlCopied(true);
-                        setTimeout(() => setTunnelUrlCopied(false), 1500);
-                      }}
-                      className="text-xs text-cc-muted hover:text-cc-fg shrink-0 cursor-pointer"
-                    >
-                      {tunnelUrlCopied ? "Copied" : "Copy"}
-                    </button>
-                    {tunnelProvider && (
-                      <span className="text-[10px] text-cc-muted shrink-0">{tunnelProvider}</span>
-                    )}
-                  </div>
-                )}
-                {tunnelError && (
-                  <p className="text-xs text-red-500 px-3">{tunnelError}</p>
-                )}
               </div>
             </section>
 

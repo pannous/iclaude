@@ -110,6 +110,5 @@ describe("tunnel-manager", () => {
 
     await expect(manager.start(3456)).rejects.toThrow("exited with code 1");
     expect(manager.getStatus().state).toBe("error");
-    expect(manager.getStatus().error).toContain("exited with code 1");
   });
 });

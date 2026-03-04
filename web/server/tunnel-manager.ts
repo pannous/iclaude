@@ -107,21 +107,23 @@ export class TunnelManager {
   private extractUrl(proc: ChildProcess, pattern: RegExp): Promise<string> {
     return new Promise((resolve, reject) => {
       let resolved = false;
+      let lastOutput = "";
+
       const timeout = setTimeout(() => {
         if (!resolved) {
           resolved = true;
-          reject(new Error(`Timed out waiting for tunnel URL (${URL_TIMEOUT_MS / 1000}s)`));
+          const hint = lastOutput ? `\n${lastOutput.trim().split("\n").slice(-3).join("\n")}` : "";
+          reject(new Error(`Timed out waiting for tunnel URL (${URL_TIMEOUT_MS / 1000}s)${hint}`));
         }
       }, URL_TIMEOUT_MS);
 
       const scan = (stream: NodeJS.ReadableStream | null) => {
         if (!stream) return;
-        let buffer = "";
         stream.setEncoding("utf8");
         stream.on("data", (chunk: string) => {
           if (resolved) return;
-          buffer += chunk;
-          const match = buffer.match(pattern);
+          lastOutput += chunk;
+          const match = lastOutput.match(pattern);
           if (match) {
             resolved = true;
             clearTimeout(timeout);
@@ -137,7 +139,10 @@ export class TunnelManager {
         if (!resolved) {
           resolved = true;
           clearTimeout(timeout);
-          reject(new Error(`Tunnel process exited with code ${code} before URL was found`));
+          // Extract a useful error message from the process output
+          const lines = lastOutput.trim().split("\n").filter(Boolean);
+          const hint = lines.slice(-3).join("\n");
+          reject(new Error(hint || `Tunnel process exited with code ${code}`));
         }
       });
     });
