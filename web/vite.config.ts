@@ -50,7 +50,7 @@ export default defineConfig({
     // LOCAL: custom port and allowed hosts for our dev setup
     port: 2345,
     strictPort: true,
-    allowedHosts: [".trycloudflare.com","mac.fritz.box","companion.pannous.com"],
+    allowedHosts: [".trycloudflare.com","mac.fritz.box","companion.pannous.com","claude.pannous.com"],
     watch: {
       // Vitest writes coverage files here during test runs; exclude them
       // so Vite doesn't trigger spurious HMR reloads.
