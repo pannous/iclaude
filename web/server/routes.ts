@@ -157,6 +157,7 @@ export function createRoutes(
   recorder?: import("./recorder.js").RecorderManager,
   cronScheduler?: import("./cron-scheduler.js").CronScheduler,
   agentExecutor?: import("./agent-executor.js").AgentExecutor,
+  tunnelManager?: import("./tunnel-manager.js").TunnelManager,
 ) {
   const api = new Hono();
 
@@ -1910,6 +1911,29 @@ export function createRoutes(
     }
     return { cleaned: result.removed, path: mapping.worktreePath };
   }
+
+  // ─── Tunnel management ────────────────────────────────────────────────
+  api.get("/tunnel/status", (c) => {
+    if (!tunnelManager) return c.json({ state: "stopped", url: null, provider: null, error: "Tunnel manager not available" });
+    return c.json(tunnelManager.getStatus());
+  });
+
+  api.post("/tunnel/start", async (c) => {
+    if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
+    try {
+      const serverPort = Number(process.env.PORT) || 3456;
+      const result = await tunnelManager.start(serverPort);
+      return c.json(result);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+    }
+  });
+
+  api.post("/tunnel/stop", async (c) => {
+    if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
+    await tunnelManager.stop();
+    return c.json({ ok: true });
+  });
 
   return api;
 }

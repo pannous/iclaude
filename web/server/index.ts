@@ -30,6 +30,7 @@ import { CronScheduler } from "./cron-scheduler.js";
 import { AgentExecutor } from "./agent-executor.js";
 import { migrateCronJobsToAgents } from "./agent-cron-migrator.js";
 
+import { TunnelManager } from "./tunnel-manager.js";
 import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
 import { imagePullManager } from "./image-pull-manager.js";
 import { isRunningAsService } from "./service.js";
@@ -56,6 +57,7 @@ const prPoller = new PRPoller(wsBridge);
 const recorder = new RecorderManager();
 const cronScheduler = new CronScheduler(launcher, wsBridge);
 const agentExecutor = new AgentExecutor(launcher, wsBridge);
+const tunnelManager = new TunnelManager();
 
 // ── Restore persisted sessions from disk ────────────────────────────────────
 wsBridge.setStore(sessionStore);
@@ -171,12 +173,16 @@ if (recorder.isGloballyEnabled()) {
 
 const app = new Hono();
 
-// Global auth gate: block all tunnel traffic that lacks a valid token.
-// Tunnel requests are identified by the X-Companion-Tunnel header injected by Apache.
-// Direct localhost requests are always trusted (no header = not via tunnel).
+// Global auth gate: require a valid token for all non-localhost requests when auth is enabled.
+// Works with any tunnel (built-in cloudflared/ngrok, SSH, Apache proxy, etc.).
 app.use("/*", async (c, next) => {
   if (!isAuthEnabled()) return next();
-  if (!c.req.header("X-Companion-Tunnel")) return next();
+
+  // Localhost requests are always trusted — check actual TCP source IP
+  const bunServer = c.env as { requestIP?: (req: Request) => { address: string } | null };
+  const ip = bunServer?.requestIP?.(c.req.raw);
+  const addr = ip?.address ?? "";
+  if (addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1") return next();
 
   // Auth endpoints and well-known must be reachable without login
   const path = new URL(c.req.url).pathname;
@@ -206,7 +212,7 @@ app.use("/*", async (c, next) => {
 });
 
 app.use("/api/*", cors());
-app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, agentExecutor));
+app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, agentExecutor, tunnelManager));
 
 // Universal Link handler: /auth?token=xxx
 // If Listen app is installed, iOS opens it directly (app reads the token from the URL).
@@ -411,6 +417,14 @@ if (process.env.NODE_ENV !== "production") {
   console.log(`Dev mode: Vite at http://localhost:${vitePort} (proxied through :${server.port})`);
 }
 
+// ── Auto-tunnel ─────────────────────────────────────────────────────────────
+const tunnelEnv = process.env.COMPANION_TUNNEL;
+if (tunnelEnv === "1" || tunnelEnv === "true") {
+  tunnelManager.start(server.port as number).catch((err) => {
+    console.error(`[tunnel] Failed to start: ${err.message}`);
+  });
+}
+
 // ── Cron scheduler ──────────────────────────────────────────────────────────
 cronScheduler.startAll();
 
@@ -430,6 +444,7 @@ if (isRunningAsService()) {
 
 // ── Graceful shutdown — persist container state ──────────────────────────────
 function gracefulShutdown() {
+  tunnelManager.stop().catch(() => {});
   console.log("[server] Persisting container state before shutdown...");
   containerManager.persistState(CONTAINER_STATE_PATH);
   process.exit(0);
