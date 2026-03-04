@@ -64,6 +64,9 @@ const mockApi = {
   regenerateAuthToken: vi.fn(),
   getAuthQr: vi.fn(),
   verifyAnthropicKey: vi.fn(),
+  getTunnelStatus: vi.fn(),
+  startTunnel: vi.fn(),
+  stopTunnel: vi.fn(),
 };
 
 const mockTelemetry = {
@@ -81,6 +84,9 @@ vi.mock("../api.js", () => ({
     regenerateAuthToken: (...args: unknown[]) => mockApi.regenerateAuthToken(...args),
     getAuthQr: (...args: unknown[]) => mockApi.getAuthQr(...args),
     verifyAnthropicKey: (...args: unknown[]) => mockApi.verifyAnthropicKey(...args),
+    getTunnelStatus: (...args: unknown[]) => mockApi.getTunnelStatus(...args),
+    startTunnel: (...args: unknown[]) => mockApi.startTunnel(...args),
+    stopTunnel: (...args: unknown[]) => mockApi.stopTunnel(...args),
   },
 }));
 
@@ -139,6 +145,12 @@ beforeEach(() => {
       { label: "LAN", url: "http://192.168.1.10:3456", qrDataUrl: "data:image/png;base64,LAN_QR" },
       { label: "Tailscale", url: "http://100.118.112.23:3456", qrDataUrl: "data:image/png;base64,TS_QR" },
     ],
+  });
+  mockApi.getTunnelStatus.mockResolvedValue({
+    state: "stopped",
+    url: null,
+    provider: null,
+    error: null,
   });
   mockTelemetry.getTelemetryPreferenceEnabled.mockReturnValue(true);
 });
@@ -981,5 +993,92 @@ describe("SettingsPage", () => {
 
     // Should not have called updateSettings since stable is already selected
     expect(mockApi.updateSettings).not.toHaveBeenCalled();
+  });
+
+  // ── Tunnel section ───────────────────────────────────────────────────
+
+  it("shows tunnel toggle in Off state by default", async () => {
+    render(<SettingsPage />);
+    const tunnelButton = await screen.findByText("Public Tunnel");
+    // The Off label is inside the same button as "Public Tunnel"
+    const button = tunnelButton.closest("button")!;
+    expect(button.textContent).toContain("Off");
+  });
+
+  it("starts a tunnel and displays the URL when toggled on", async () => {
+    mockApi.startTunnel.mockResolvedValue({
+      url: "https://test-tunnel.trycloudflare.com",
+      provider: "cloudflared",
+    });
+
+    render(<SettingsPage />);
+    await screen.findByText("Public Tunnel");
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Public Tunnel").closest("button")!);
+    });
+
+    // URL should be displayed after starting
+    await waitFor(() => {
+      expect(screen.getByText("https://test-tunnel.trycloudflare.com")).toBeInTheDocument();
+    });
+    expect(screen.getByText("cloudflared")).toBeInTheDocument();
+    expect(mockApi.startTunnel).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows tunnel as On when status returns running", async () => {
+    mockApi.getTunnelStatus.mockResolvedValue({
+      state: "running",
+      url: "https://existing-tunnel.trycloudflare.com",
+      provider: "cloudflared",
+      error: null,
+    });
+
+    render(<SettingsPage />);
+    // Wait for the tunnel status to load and show On state
+    await waitFor(() => {
+      expect(screen.getByText("https://existing-tunnel.trycloudflare.com")).toBeInTheDocument();
+    });
+  });
+
+  it("stops a running tunnel when toggled off", async () => {
+    // Start with tunnel running
+    mockApi.getTunnelStatus.mockResolvedValue({
+      state: "running",
+      url: "https://running.trycloudflare.com",
+      provider: "cloudflared",
+      error: null,
+    });
+    mockApi.stopTunnel.mockResolvedValue({ ok: true });
+
+    render(<SettingsPage />);
+    await waitFor(() => {
+      expect(screen.getByText("https://running.trycloudflare.com")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Public Tunnel").closest("button")!);
+    });
+
+    expect(mockApi.stopTunnel).toHaveBeenCalledTimes(1);
+    // URL should be gone after stopping
+    await waitFor(() => {
+      expect(screen.queryByText("https://running.trycloudflare.com")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows error message when tunnel fails to start", async () => {
+    mockApi.startTunnel.mockRejectedValue(new Error("No tunnel tool found"));
+
+    render(<SettingsPage />);
+    await screen.findByText("Public Tunnel");
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Public Tunnel").closest("button")!);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("No tunnel tool found")).toBeInTheDocument();
+    });
   });
 });

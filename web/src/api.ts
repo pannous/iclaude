@@ -1071,4 +1071,12 @@ export const api = {
   // Skills
   listSkills: () =>
     get<{ slug: string; name: string; description: string; path: string }[]>("/skills"),
+
+  // Tunnel
+  getTunnelStatus: () =>
+    get<{ state: string; url: string | null; provider: string | null; error: string | null }>("/tunnel/status"),
+  startTunnel: () =>
+    post<{ url: string; provider: string }>("/tunnel/start"),
+  stopTunnel: () =>
+    post<{ ok: boolean }>("/tunnel/stop"),
 };
