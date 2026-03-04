@@ -131,6 +131,11 @@ export class WsBridge {
   private globalBrowserSockets = new Set<ServerWebSocket<SocketData>>();
   /** Tracks sessions where we already warned about 0-browser broadcasts, to suppress repeats. */
   private warnedNoBrowsers = new Set<string>();
+  /** Per-session timers for orphan kill: fires when CLI is idle + no browsers for too long. */
+  private pendingOrphanKills = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Grace period (ms) before killing an idle CLI with no browsers. Default: 60s. */
+  private static readonly ORPHAN_KILL_MS = Number(process.env.COMPANION_ORPHAN_KILL_MS || "60000");
+  private onSessionOrphaned: ((sessionId: string) => void) | null = null;
   private userMsgCounter = 0;
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
   private sessionInfoLookup: ((sessionId: string) => { cliSessionId?: string; cwd?: string } | null) | null = null;
@@ -166,6 +171,11 @@ export class WsBridge {
   /** Register a callback for when git info is resolved and branch is known. */
   onSessionGitInfoReadyCallback(cb: (sessionId: string, cwd: string, branch: string) => void): void {
     this.onGitInfoReady = cb;
+  }
+
+  /** Register a callback for when a session becomes orphaned (idle CLI, no browsers for ORPHAN_KILL_MS). */
+  onSessionOrphanedCallback(cb: (sessionId: string) => void): void {
+    this.onSessionOrphaned = cb;
   }
 
   /** Register a callback to look up session info (cliSessionId, cwd) from the launcher.
@@ -697,6 +707,7 @@ export class WsBridge {
       clearTimeout(pendingTimer);
       this.pendingRelaunches.delete(sessionId);
     }
+    this.cancelOrphanKill(sessionId);
     this.sessions.delete(sessionId);
     this.autoNamingAttempted.delete(sessionId);
     this.store?.remove(sessionId);
@@ -814,6 +825,8 @@ export class WsBridge {
     browserData.lastAckSeq = 0;
     session.browserSockets.add(ws);
     this.globalBrowserSockets.add(ws);
+    // Cancel orphan kill timer — a browser reconnected
+    this.cancelOrphanKill(sessionId);
     console.log(`[ws-bridge] Browser connected for session ${sessionId} (${session.browserSockets.size} browsers)`);
 
     // Refresh git state on browser connect so branch changes made mid-session are reflected.
@@ -957,6 +970,8 @@ export class WsBridge {
         clearTimeout(timer);
         this.pendingRelaunches.delete(sessionId);
       }
+      // If CLI is also idle, start the orphan kill countdown
+      this.scheduleOrphanKillIfNeeded(session);
     }
   }
 
@@ -1284,6 +1299,9 @@ export class WsBridge {
     session.cliIsRunning = false;
     this.flushPendingUserInput(session);
     this.persistSession(session);
+
+    // Start orphan kill timer if CLI is idle and no browsers are watching.
+    this.scheduleOrphanKillIfNeeded(session);
 
     // Trigger auto-naming after the first successful result for this session.
     // Note: num_turns counts all internal tool-use turns, so it's typically > 1
@@ -1781,6 +1799,31 @@ export class WsBridge {
 
     this.routeBrowserMessage(session, msg);
     return true;
+  }
+
+  /** Start an orphan kill timer if the session is idle with no browsers watching. */
+  private scheduleOrphanKillIfNeeded(session: Session): void {
+    if (session.browserSockets.size > 0 || session.cliIsRunning) return;
+    if (this.pendingOrphanKills.has(session.id)) return; // already scheduled
+    if (!this.onSessionOrphaned) return;
+
+    const timer = setTimeout(() => {
+      this.pendingOrphanKills.delete(session.id);
+      const s = this.sessions.get(session.id);
+      if (s && s.browserSockets.size === 0 && !s.cliIsRunning && this.onSessionOrphaned) {
+        console.log(`[ws-bridge] Session ${session.id} orphaned (idle CLI, no browsers for ${WsBridge.ORPHAN_KILL_MS / 1000}s) — killing`);
+        this.onSessionOrphaned(session.id);
+      }
+    }, WsBridge.ORPHAN_KILL_MS);
+    this.pendingOrphanKills.set(session.id, timer);
+  }
+
+  private cancelOrphanKill(sessionId: string): void {
+    const timer = this.pendingOrphanKills.get(sessionId);
+    if (timer) {
+      clearTimeout(timer);
+      this.pendingOrphanKills.delete(sessionId);
+    }
   }
 
   private broadcastToBrowsers(session: Session, msg: BrowserIncomingMessage) {

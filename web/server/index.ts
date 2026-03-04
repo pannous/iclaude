@@ -147,6 +147,16 @@ wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
   }
 });
 
+// Kill orphaned CLI processes (idle + no browsers for ORPHAN_KILL_MS)
+wsBridge.onSessionOrphanedCallback(async (sessionId) => {
+  const info = launcher.getSession(sessionId);
+  if (info?.archived) return; // already archived
+  console.log(`[server] Killing orphaned session ${sessionId}`);
+  await launcher.kill(sessionId);
+  launcher.setArchived(sessionId, true);
+  sessionStore.setArchived(sessionId, true);
+});
+
 // Auto-generate session title after first turn completes
 wsBridge.onFirstTurnCompletedCallback(async (sessionId, firstUserMessage) => {
   // Don't overwrite a name that was already set via manual rename
