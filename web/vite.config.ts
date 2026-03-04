@@ -3,6 +3,19 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
+import os from "os";
+
+function getLocalIPs(): string[] {
+  const interfaces = os.networkInterfaces();
+  const ips: string[] = [];
+  for (const addrs of Object.values(interfaces)) {
+    if (!addrs) continue;
+    for (const addr of addrs) {
+      if (!addr.internal && addr.family === "IPv4") ips.push(addr.address);
+    }
+  }
+  return ips;
+}
 
 export default defineConfig({
   plugins: [
@@ -50,7 +63,8 @@ export default defineConfig({
     // LOCAL: custom port and allowed hosts for our dev setup
     port: 2345,
     strictPort: true,
-    allowedHosts: [".trycloudflare.com","mac.fritz.box","companion.pannous.com","claude.pannous.com"],
+    // LOCAL: dynamically include all local network IPs so LAN access works
+    allowedHosts: [".trycloudflare.com","mac.fritz.box","companion.pannous.com","claude.pannous.com", ...getLocalIPs()],
     watch: {
       // Vitest writes coverage files here during test runs; exclude them
       // so Vite doesn't trigger spurious HMR reloads.
