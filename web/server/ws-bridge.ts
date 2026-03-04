@@ -1784,23 +1784,26 @@ export class WsBridge {
   }
 
   private broadcastToBrowsers(session: Session, msg: BrowserIncomingMessage) {
-    // Warn once when assistant/stream messages reach 0 browsers; suppress repeats until browsers reconnect
-    if (session.browserSockets.size === 0 && (msg.type === "assistant" || msg.type === "stream_event" || msg.type === "result")) {
+    const noBrowsers = session.browserSockets.size === 0;
+
+    // Always buffer for replay (browser may reconnect and request catchup)
+    const sequenced = sequenceEvent(
+      session,
+      msg,
+      WsBridge.EVENT_BUFFER_LIMIT,
+      this.persistSession.bind(this),
+    );
+
+    if (noBrowsers) {
       if (!this.warnedNoBrowsers.has(session.id)) {
         this.warnedNoBrowsers.add(session.id);
-        console.log(`[ws-bridge] Broadcasting ${msg.type} to 0 browsers for session ${session.id} (further warnings suppressed)`);
+        console.log(`[ws-bridge] Broadcasting to 0 browsers for session ${session.id} (further warnings suppressed)`);
       }
-    } else {
-      this.warnedNoBrowsers.delete(session.id);
+      return;
     }
-    const json = JSON.stringify(
-      sequenceEvent(
-        session,
-        msg,
-        WsBridge.EVENT_BUFFER_LIMIT,
-        this.persistSession.bind(this),
-      ),
-    );
+    this.warnedNoBrowsers.delete(session.id);
+
+    const json = JSON.stringify(sequenced);
 
     this.recorder?.record(session.id, "out", json, "browser", session.backendType, session.state.cwd);
 
