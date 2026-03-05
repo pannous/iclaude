@@ -557,7 +557,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                       }`}
                       title="Regenerate token — invalidates all other devices"
                     >
-                      {regenerating ? "..." : "Regenerate"}
+                      {regenerating ? "..." : "New"}
                     </button>
                   </div>
                 </div>
@@ -640,6 +640,43 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 <p className="text-xs text-cc-muted">
                   Expose this instance to the internet via cloudflared or ngrok. Auth is automatically enabled when a tunnel is active.
                 </p>
+
+                <button
+                  type="button"
+                  disabled={tunnelLoading}
+                  onClick={async () => {
+                    setTunnelLoading(true);
+                    setTunnelError(null);
+                    try {
+                      if (tunnelState === "running") {
+                        await api.stopTunnel();
+                        setTunnelState("stopped");
+                        setTunnelUrl(null);
+                        setTunnelProvider(null);
+                        setTunnelQr(null);
+                      } else {
+                        setTunnelState("starting");
+                        const res = await api.startTunnel();
+                        setTunnelState("running");
+                        setTunnelUrl(res.url);
+                        setTunnelProvider(res.provider);
+                        // Auto-fetch QR code for the tunnel URL
+                        api.getTunnelQr().then(setTunnelQr).catch(() => {});
+                      }
+                    } catch (err) {
+                      setTunnelState("error");
+                      setTunnelError(err instanceof Error ? err.message : String(err));
+                    } finally {
+                      setTunnelLoading(false);
+                    }
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <span>Public Tunnel</span>
+                  <span className="text-xs text-cc-muted">
+                    {tunnelLoading ? "..." : tunnelState === "running" ? "On" : "Off"}
+                  </span>
+                </button>
 
                 {/* Named tunnel config */}
                 {namedInfo && (
@@ -732,42 +769,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  disabled={tunnelLoading}
-                  onClick={async () => {
-                    setTunnelLoading(true);
-                    setTunnelError(null);
-                    try {
-                      if (tunnelState === "running") {
-                        await api.stopTunnel();
-                        setTunnelState("stopped");
-                        setTunnelUrl(null);
-                        setTunnelProvider(null);
-                        setTunnelQr(null);
-                      } else {
-                        setTunnelState("starting");
-                        const res = await api.startTunnel();
-                        setTunnelState("running");
-                        setTunnelUrl(res.url);
-                        setTunnelProvider(res.provider);
-                        // Auto-fetch QR code for the tunnel URL
-                        api.getTunnelQr().then(setTunnelQr).catch(() => {});
-                      }
-                    } catch (err) {
-                      setTunnelState("error");
-                      setTunnelError(err instanceof Error ? err.message : String(err));
-                    } finally {
-                      setTunnelLoading(false);
-                    }
-                  }}
-                  className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  <span>Public Tunnel</span>
-                  <span className="text-xs text-cc-muted">
-                    {tunnelLoading ? "..." : tunnelState === "running" ? "On" : "Off"}
-                  </span>
-                </button>
                 {tunnelState === "running" && tunnelUrl && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cc-hover">
                     <a
