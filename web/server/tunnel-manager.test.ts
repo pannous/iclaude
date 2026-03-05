@@ -1,11 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { EventEmitter } from "node:events";
 
-// Mock child_process.spawn to avoid spawning real tunnel processes
-// Keep execSync real so detectProvider() works with `which`
+// Mock child_process.spawn and execSync to avoid spawning real processes
+// execSync is mocked so detectProvider() doesn't require cloudflared/ngrok on CI
 vi.mock("node:child_process", async () => {
   const actual = await vi.importActual<typeof import("node:child_process")>("node:child_process");
-  return { ...actual, spawn: vi.fn() };
+  return {
+    ...actual,
+    spawn: vi.fn(),
+    execSync: vi.fn((cmd: string, ...args: unknown[]) => {
+      if (typeof cmd === "string" && cmd.startsWith("which ")) {
+        const bin = cmd.split(" ")[1];
+        if (bin === "cloudflared") return Buffer.from("/usr/local/bin/cloudflared\n");
+        throw new Error(`not found: ${bin}`);
+      }
+      return actual.execSync(cmd, ...args as [object]);
+    }),
+  };
 });
 
 import { spawn } from "node:child_process";
