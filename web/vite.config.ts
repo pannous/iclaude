@@ -24,7 +24,7 @@ export default defineConfig({
     VitePWA({
       // Use existing public/manifest.json — do not generate one
       manifest: false,
-      registerType: "autoUpdate",
+      registerType: "prompt",
       strategies: "generateSW",
       workbox: {
         // Precache all build output: JS chunks (incl. lazy-loaded), CSS, HTML,
