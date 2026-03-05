@@ -64,6 +64,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [connStatus, setConnStatus] = useState<"idle" | "testing" | "ok" | "error">("idle");
   const [connLatency, setConnLatency] = useState<number | null>(null);
   const [connError, setConnError] = useState<string | null>(null);
+  const [connTestedAt, setConnTestedAt] = useState<Date | null>(null);
 
   // Auth section state
   const [authEnabled, setAuthEnabled] = useState(true);
@@ -84,6 +85,9 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [tunnelUrlCopied, setTunnelUrlCopied] = useState(false);
   const [tunnelQr, setTunnelQr] = useState<{ url: string; qrDataUrl: string } | null>(null);
   const [tunnelQrLoading, setTunnelQrLoading] = useState(false);
+  const [tunnelTestStatus, setTunnelTestStatus] = useState<"idle" | "testing" | "ok" | "error">("idle");
+  const [tunnelTestLatency, setTunnelTestLatency] = useState<number | null>(null);
+  const [tunnelTestError, setTunnelTestError] = useState<string | null>(null);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -390,9 +394,11 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                         await api.getSettings();
                         setConnLatency(Math.round(performance.now() - start));
                         setConnStatus("ok");
+                        setConnTestedAt(new Date());
                       } catch (err) {
                         setConnError(err instanceof Error ? err.message : String(err));
                         setConnStatus("error");
+                        setConnTestedAt(new Date());
                       }
                     }}
                     className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-cc-hover hover:bg-cc-active text-cc-fg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
@@ -426,6 +432,11 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     {connStatus === "ok" && `Connected${connLatency != null ? ` (${connLatency}ms)` : ""}`}
                     {connStatus === "error" && "Failed"}
                   </span>
+                  {connTestedAt && connStatus !== "testing" && (
+                    <span className="text-xs text-cc-muted">
+                      {connTestedAt.toLocaleTimeString()}
+                    </span>
+                  )}
                 </div>
                 {connError && (
                   <p className="text-xs text-red-500 px-1">{connError}</p>
