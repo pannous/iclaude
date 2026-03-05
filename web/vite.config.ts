@@ -32,8 +32,9 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         // Main bundle exceeds default 2 MiB — raise to 5 MiB
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        skipWaiting: true,
-        clientsClaim: true,
+        // skipWaiting/clientsClaim removed — prompt mode lets the user
+        // decide when to activate the new SW (avoids surprise reloads,
+        // especially through tunnels where cache mismatches are common)
         // Hash routing: all navigations hit "/" → serve index.html from cache
         navigateFallback: "index.html",
         // Never intercept API calls, WebSocket upgrades, or SSE streams
