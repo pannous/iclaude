@@ -81,6 +81,7 @@ vi.mock("./session-names.js", () => ({
 vi.mock("./settings-manager.js", () => ({
   DEFAULT_ANTHROPIC_MODEL: "claude-sonnet-4.6",
   getSettings: vi.fn(() => ({
+    authEnabled: true,
     anthropicApiKey: "",
     anthropicModel: "claude-sonnet-4.6",
     openaiApiKey: "",
@@ -100,6 +101,7 @@ vi.mock("./settings-manager.js", () => ({
     updatedAt: 0,
   })),
   updateSettings: vi.fn((patch) => ({
+    authEnabled: true,
     anthropicApiKey: patch.anthropicApiKey ?? "",
     anthropicModel: patch.anthropicModel ?? "claude-sonnet-4.6",
     linearApiKey: patch.linearApiKey ?? "",
@@ -1748,6 +1750,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
   it("transitions to backlog when linearTransition is backlog", async () => {
     mockGetLinearIssue.mockReturnValue(linkedIssue);
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -1786,6 +1789,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
   it("transitions to configured state when linearTransition is configured", async () => {
     mockGetLinearIssue.mockReturnValue(linkedIssue);
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -1817,6 +1821,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
     mockGetLinearIssue.mockReturnValue(linkedIssue);
     mockTransitionLinearIssue.mockResolvedValue({ ok: false, error: "Linear API error" });
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -1896,6 +1901,7 @@ describe("GET /api/sessions/:id/archive-info", () => {
       teamId: "team-1",
     });
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -2230,6 +2236,7 @@ describe("POST /api/images/:tag/pull", () => {
 describe("GET /api/settings", () => {
   it("returns settings status without exposing the key", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "or-secret",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -2254,6 +2261,7 @@ describe("GET /api/settings", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({
+      authEnabled: true,
       anthropicApiKeyConfigured: true,
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKeyConfigured: false,
@@ -2273,6 +2281,7 @@ describe("GET /api/settings", () => {
 
   it("reports key as not configured when empty", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "openai/gpt-4o-mini",
       openaiApiKey: "",
@@ -2297,6 +2306,7 @@ describe("GET /api/settings", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({
+      authEnabled: true,
       anthropicApiKeyConfigured: false,
       anthropicModel: "openai/gpt-4o-mini",
       openaiApiKeyConfigured: false,
@@ -2318,6 +2328,7 @@ describe("GET /api/settings", () => {
 describe("PUT /api/settings", () => {
   it("updates settings", async () => {
     vi.mocked(settingsManager.updateSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "new-key",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -2345,6 +2356,7 @@ describe("PUT /api/settings", () => {
 
     expect(res.status).toBe(200);
     expect(settingsManager.updateSettings).toHaveBeenCalledWith({
+      authEnabled: undefined,
       anthropicApiKey: "new-key",
       anthropicModel: undefined,
       openaiApiKey: undefined,
@@ -2363,6 +2375,7 @@ describe("PUT /api/settings", () => {
     });
     const json = await res.json();
     expect(json).toEqual({
+      authEnabled: true,
       anthropicApiKeyConfigured: true,
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKeyConfigured: false,
@@ -2382,6 +2395,7 @@ describe("PUT /api/settings", () => {
 
   it("trims key and falls back to default model for blank value", async () => {
     vi.mocked(settingsManager.updateSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "trimmed-key",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -2409,6 +2423,7 @@ describe("PUT /api/settings", () => {
 
     expect(res.status).toBe(200);
     expect(settingsManager.updateSettings).toHaveBeenCalledWith({
+      authEnabled: undefined,
       anthropicApiKey: "trimmed-key",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: undefined,
@@ -2422,6 +2437,7 @@ describe("PUT /api/settings", () => {
 
   it("updates only model without overriding key", async () => {
     vi.mocked(settingsManager.updateSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "existing-key",
       anthropicModel: "openai/gpt-4o-mini",
       openaiApiKey: "",
@@ -2449,6 +2465,7 @@ describe("PUT /api/settings", () => {
 
     expect(res.status).toBe(200);
     expect(settingsManager.updateSettings).toHaveBeenCalledWith({
+      authEnabled: undefined,
       anthropicApiKey: undefined,
       anthropicModel: "openai/gpt-4o-mini",
       openaiApiKey: undefined,
@@ -2630,6 +2647,7 @@ describe("GET /api/linear/issues", () => {
 
   it("returns 400 when linear key is not configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -2657,6 +2675,7 @@ describe("GET /api/linear/issues", () => {
 
   it("proxies Linear issue search results with branchName", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -2738,6 +2757,7 @@ describe("GET /api/linear/issues", () => {
     // The home page issue picker should hide done/cancelled work and show backlog-like
     // items before currently started ones.
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -2826,6 +2846,7 @@ describe("GET /api/linear/issues", () => {
     // Verifies fallback: when branchName is null/missing from Linear API,
     // the response maps it to an empty string so the frontend can generate a slug
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -2879,6 +2900,7 @@ describe("GET /api/linear/issues", () => {
 describe("GET /api/linear/connection", () => {
   it("returns 400 when linear key is not configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -2906,6 +2928,7 @@ describe("GET /api/linear/connection", () => {
 
   it("returns viewer/team info when connection works", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -2956,6 +2979,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
   // Skips when auto-transition is disabled in settings
   it("skips when auto-transition is disabled", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -2988,6 +3012,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
   // Skips when no target state is configured
   it("skips when no target state is configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -3019,6 +3044,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
 
   it("returns 400 when linear key is not configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -3051,6 +3077,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
   // Happy path: uses configured stateId to update the issue directly
   it("transitions issue to configured state", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -3118,6 +3145,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
   // Error case: Linear API returns an error when updating issue state
   it("returns 502 when issue update fails", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -3164,6 +3192,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
 describe("GET /api/linear/projects", () => {
   it("returns 400 when linear key is not configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -3191,6 +3220,7 @@ describe("GET /api/linear/projects", () => {
 
   it("returns project list from Linear API", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -3249,6 +3279,7 @@ describe("GET /api/linear/project-issues", () => {
 
   it("returns 400 when linear key is not configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -3276,6 +3307,7 @@ describe("GET /api/linear/project-issues", () => {
 
   it("returns recent non-done issues for a project", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -3349,6 +3381,7 @@ describe("GET /api/linear/project-issues", () => {
   it("orders project issues backlog-like first, then in-progress", async () => {
     // UI issue lists should present queued/backlog work first, followed by started work.
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",

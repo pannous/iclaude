@@ -3,18 +3,22 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { networkInterfaces } from "node:os";
+import { getSettings } from "./settings-manager.js";
 
 const AUTH_FILE = join(homedir(), ".companion", "auth.json");
 const TOKEN_BYTES = 32; // 64 hex characters
 
 /**
  * Check if authentication is enabled.
- * Auth is disabled by default — set COMPANION_AUTH=1 to enable.
- * When disabled, all requests are trusted (localhost-like behavior for everyone).
+ * Auth is enabled by default — set COMPANION_AUTH=0 to force-disable, or toggle in settings.
+ * Env var COMPANION_AUTH overrides the persisted setting.
  */
 export function isAuthEnabled(): boolean {
   const val = process.env.COMPANION_AUTH;
-  return val === "1" || val === "true";
+  if (val === "0" || val === "false") return false;
+  if (val === "1" || val === "true") return true;
+  // Fall back to persisted setting (default: true)
+  return getSettings().authEnabled;
 }
 
 interface AuthData {

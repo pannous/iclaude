@@ -113,6 +113,7 @@ describe("attachCodexAdapterHandlers", () => {
 
     // Default: AI validation disabled — existing tests should not be affected
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -870,7 +871,8 @@ describe("attachCodexAdapterHandlers", () => {
     /** Helper: configure settings for AI validation enabled with all auto-actions on */
     function enableAiValidation() {
       vi.mocked(settingsManager.getSettings).mockReturnValue({
-        anthropicApiKey: "test-api-key",
+        authEnabled: true,
+      anthropicApiKey: "test-api-key",
         anthropicModel: "claude-sonnet-4.6",
         openaiApiKey: "",
         linearApiKey: "",
@@ -1039,7 +1041,8 @@ describe("attachCodexAdapterHandlers", () => {
       // flow: store in pendingPermissions, persist, and broadcast the permission_request
       // without calling validatePermission at all.
       vi.mocked(settingsManager.getSettings).mockReturnValue({
-        anthropicApiKey: "test-api-key",
+        authEnabled: true,
+      anthropicApiKey: "test-api-key",
         anthropicModel: "claude-sonnet-4.6",
         openaiApiKey: "",
         linearApiKey: "",
@@ -1078,7 +1081,8 @@ describe("attachCodexAdapterHandlers", () => {
       // Even if aiValidationEnabled is true, an empty API key means we can't call
       // the AI — fall through to normal manual flow.
       vi.mocked(settingsManager.getSettings).mockReturnValue({
-        anthropicApiKey: "",  // empty
+        authEnabled: true,
+      anthropicApiKey: "",  // empty
         anthropicModel: "claude-sonnet-4.6",
         openaiApiKey: "",
         linearApiKey: "",
@@ -1182,7 +1186,8 @@ describe("attachCodexAdapterHandlers", () => {
       // When the verdict is "safe" but auto-approve is disabled, the handler
       // should fall through to manual review instead of auto-approving.
       vi.mocked(settingsManager.getSettings).mockReturnValue({
-        anthropicApiKey: "test-api-key",
+        authEnabled: true,
+      anthropicApiKey: "test-api-key",
         anthropicModel: "claude-sonnet-4.6",
         openaiApiKey: "",
         linearApiKey: "",
@@ -1305,7 +1310,8 @@ describe("attachCodexAdapterHandlers", () => {
       // When the verdict is "dangerous" but auto-deny is disabled, the handler
       // should fall through to manual review instead of auto-denying.
       vi.mocked(settingsManager.getSettings).mockReturnValue({
-        anthropicApiKey: "test-api-key",
+        authEnabled: true,
+      anthropicApiKey: "test-api-key",
         anthropicModel: "claude-sonnet-4.6",
         openaiApiKey: "",
         linearApiKey: "",

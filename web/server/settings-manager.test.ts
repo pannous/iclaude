@@ -25,6 +25,7 @@ afterEach(() => {
 describe("settings-manager", () => {
   it("returns defaults when file is missing", () => {
     expect(getSettings()).toEqual({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: DEFAULT_ANTHROPIC_MODEL,
       openaiApiKey: "",
@@ -62,6 +63,7 @@ describe("settings-manager", () => {
     writeFileSync(
       settingsPath,
       JSON.stringify({
+        authEnabled: true,
         anthropicApiKey: "existing",
         anthropicModel: "claude-haiku-3",
         linearApiKey: "lin_api_abc",
@@ -73,6 +75,7 @@ describe("settings-manager", () => {
     _resetForTest(settingsPath);
 
     expect(getSettings()).toEqual({
+      authEnabled: true,
       anthropicApiKey: "existing",
       anthropicModel: "claude-haiku-3",
       openaiApiKey: "",
@@ -118,6 +121,7 @@ describe("settings-manager", () => {
     writeFileSync(
       settingsPath,
       JSON.stringify({
+        authEnabled: true,
         anthropicApiKey: 123,
         anthropicModel: null,
         linearApiKey: 123,
@@ -128,6 +132,7 @@ describe("settings-manager", () => {
     _resetForTest(settingsPath);
 
     expect(getSettings()).toEqual({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: DEFAULT_ANTHROPIC_MODEL,
       openaiApiKey: "",
@@ -160,6 +165,7 @@ describe("settings-manager", () => {
   it("ignores undefined patch values and preserves existing keys", () => {
     updateSettings({ anthropicApiKey: "sk-ant-key", linearApiKey: "lin_api_123" });
     const updated = updateSettings({
+      authEnabled: true,
       anthropicApiKey: undefined,
       anthropicModel: "claude-haiku-3",
       linearApiKey: undefined,

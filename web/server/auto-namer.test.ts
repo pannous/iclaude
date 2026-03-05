@@ -17,6 +17,7 @@ beforeEach(() => {
   // Individual tests that need the OpenAI fallback override this via vi.stubEnv.
   vi.stubEnv("OPENAI_API_KEY", "");
   vi.mocked(settingsManager.getSettings).mockReturnValue({
+    authEnabled: true,
     anthropicApiKey: "sk-ant-key",
     anthropicModel: "claude-sonnet-4.6",
     openaiApiKey: "",
@@ -53,6 +54,7 @@ describe("generateSessionTitle", () => {
 
   it("returns null when Anthropic key is not configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",
@@ -99,6 +101,7 @@ describe("generateSessionTitle", () => {
 
   it("uses configured Anthropic model", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "sk-ant-key",
       anthropicModel: "claude-haiku-3",
       openaiApiKey: "",
@@ -171,6 +174,7 @@ describe("generateSessionTitle", () => {
 
   it("uses default model when configured model is empty", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "sk-ant-key",
       anthropicModel: "",
       openaiApiKey: "",
@@ -230,6 +234,7 @@ describe("generateSessionTitle", () => {
 
   it("falls back to OpenAI when Anthropic key is empty but OpenAI key is set", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "sk-openai-key",
@@ -264,6 +269,7 @@ describe("generateSessionTitle", () => {
 
   it("falls back to OpenAI when Anthropic request fails", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "sk-ant-key",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "sk-openai-key",
@@ -300,6 +306,7 @@ describe("generateSessionTitle", () => {
 
   it("returns null when both Anthropic and OpenAI keys are empty", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
       anthropicApiKey: "",
       anthropicModel: "claude-sonnet-4.6",
       openaiApiKey: "",

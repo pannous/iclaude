@@ -6,6 +6,7 @@ export function registerSettingsRoutes(api: Hono): void {
   api.get("/settings", (c) => {
     const settings = getSettings();
     return c.json({
+      authEnabled: settings.authEnabled,
       anthropicApiKeyConfigured: !!settings.anthropicApiKey.trim(),
       anthropicModel: settings.anthropicModel || DEFAULT_ANTHROPIC_MODEL,
       openaiApiKeyConfigured: !!settings.openaiApiKey.trim(),
@@ -25,6 +26,9 @@ export function registerSettingsRoutes(api: Hono): void {
 
   api.put("/settings", async (c) => {
     const body = await c.req.json().catch(() => ({}));
+    if (body.authEnabled !== undefined && typeof body.authEnabled !== "boolean") {
+      return c.json({ error: "authEnabled must be a boolean" }, 400);
+    }
     if (body.anthropicApiKey !== undefined && typeof body.anthropicApiKey !== "string") {
       return c.json({ error: "anthropicApiKey must be a string" }, 400);
     }
@@ -73,7 +77,8 @@ export function registerSettingsRoutes(api: Hono): void {
     if (body.updateChannel !== undefined && body.updateChannel !== "stable" && body.updateChannel !== "prerelease") {
       return c.json({ error: "updateChannel must be 'stable' or 'prerelease'" }, 400);
     }
-    const hasAnyField = body.anthropicApiKey !== undefined || body.anthropicModel !== undefined
+    const hasAnyField = body.authEnabled !== undefined
+      || body.anthropicApiKey !== undefined || body.anthropicModel !== undefined
       || body.openaiApiKey !== undefined || body.linearApiKey !== undefined || body.linearAutoTransition !== undefined
       || body.linearAutoTransitionStateId !== undefined || body.linearAutoTransitionStateName !== undefined
       || body.linearArchiveTransition !== undefined || body.linearArchiveTransitionStateId !== undefined
@@ -92,6 +97,10 @@ export function registerSettingsRoutes(api: Hono): void {
     }
 
     const settings = updateSettings({
+      authEnabled:
+        typeof body.authEnabled === "boolean"
+          ? body.authEnabled
+          : undefined,
       anthropicApiKey:
         typeof body.anthropicApiKey === "string"
           ? body.anthropicApiKey.trim()
@@ -159,6 +168,7 @@ export function registerSettingsRoutes(api: Hono): void {
     });
 
     return c.json({
+      authEnabled: settings.authEnabled,
       anthropicApiKeyConfigured: !!settings.anthropicApiKey.trim(),
       anthropicModel: settings.anthropicModel || DEFAULT_ANTHROPIC_MODEL,
       openaiApiKeyConfigured: !!settings.openaiApiKey.trim(),

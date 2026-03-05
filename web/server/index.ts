@@ -440,7 +440,7 @@ if (isAuthEnabled()) {
     console.log("  (using COMPANION_AUTH_TOKEN env var)");
   }
 } else {
-  console.log(`  Auth: DISABLED (set COMPANION_AUTH=1 to enable)`);
+  console.log(`  Auth: DISABLED (toggle in settings or set COMPANION_AUTH=1)`);
 }
 console.log();
 console.log(`  CLI WebSocket:     ws://localhost:${server.port}/ws/cli/:sessionId`);

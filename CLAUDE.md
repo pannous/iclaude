@@ -22,7 +22,7 @@ cd web && bun run typecheck
 # Production build + serve
 cd web && bun run build && bun run start
 
-# Auth token management (optional — auth disabled by default, set COMPANION_AUTH=1 to enable)
+# Auth token management (auth enabled by default — toggle in Settings > Authentication, or set COMPANION_AUTH=0 to force-disable)
 cd web && bun run generate-token          # show current token
 cd web && bun run generate-token --force  # regenerate a new token
 ```

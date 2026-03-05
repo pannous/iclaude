@@ -265,6 +265,7 @@ export interface EditorStartResult {
 }
 
 export interface AppSettings {
+  authEnabled: boolean;
   anthropicApiKeyConfigured: boolean;
   anthropicModel: string;
   linearApiKeyConfigured: boolean;
@@ -803,6 +804,7 @@ export const api = {
   // Settings
   getSettings: () => get<AppSettings>("/settings"),
   updateSettings: (data: {
+    authEnabled?: boolean;
     anthropicApiKey?: string;
     anthropicModel?: string;
     linearApiKey?: string;

@@ -60,6 +60,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [verifyResult, setVerifyResult] = useState<{ valid: boolean; error?: string } | null>(null);
 
   // Auth section state
+  const [authEnabled, setAuthEnabled] = useState(true);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [tokenRevealed, setTokenRevealed] = useState(false);
   const [qrCodes, setQrCodes] = useState<{ label: string; url: string; qrDataUrl: string }[] | null>(null);
@@ -129,6 +130,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       .getSettings()
       .then((s) => {
         setConfigured(s.anthropicApiKeyConfigured);
+        if (typeof s.authEnabled === "boolean") setAuthEnabled(s.authEnabled);
         setAnthropicModel(s.anthropicModel || "claude-sonnet-4.6");
         setEditorTabEnabled(s.editorTabEnabled);
         setStoreEditorTabEnabled(s.editorTabEnabled);
@@ -366,6 +368,39 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
             <section id="authentication" ref={setSectionRef("authentication")}>
               <h2 className="text-sm font-semibold text-cc-fg mb-4">Authentication</h2>
               <div className="space-y-4">
+                {/* Auth toggle */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-sm font-medium">Local Authentication</label>
+                    <p className="text-xs text-cc-muted mt-0.5">
+                      Require a token to access the Companion from any device. Localhost is always trusted.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={authEnabled}
+                    onClick={async () => {
+                      const next = !authEnabled;
+                      setAuthEnabled(next);
+                      try {
+                        await api.updateSettings({ authEnabled: next });
+                      } catch {
+                        setAuthEnabled(!next); // revert on failure
+                      }
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                      authEnabled ? "bg-cc-primary" : "bg-cc-hover"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform ${
+                        authEnabled ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+
                 <p className="text-xs text-cc-muted">
                   Use the auth token or QR code to connect additional devices (e.g. mobile over Tailscale).
                 </p>

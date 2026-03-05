@@ -14,6 +14,7 @@ export type UpdateChannel = "stable" | "prerelease";
 export type AiProvider = "openrouter" | "claude";
 
 export interface CompanionSettings {
+  authEnabled: boolean;
   anthropicApiKey: string;
   anthropicModel: string;
   openaiApiKey: string;
@@ -38,6 +39,7 @@ const DEFAULT_PATH = join(homedir(), ".companion", "settings.json");
 let loaded = false;
 let filePath = DEFAULT_PATH;
 let settings: CompanionSettings = {
+  authEnabled: true,
   anthropicApiKey: "",
   anthropicModel: DEFAULT_ANTHROPIC_MODEL,
   openaiApiKey: "",
@@ -59,6 +61,7 @@ let settings: CompanionSettings = {
 
 function normalize(raw: Partial<CompanionSettings> | null | undefined): CompanionSettings {
   return {
+    authEnabled: typeof raw?.authEnabled === "boolean" ? raw.authEnabled : true,
     anthropicApiKey: typeof raw?.anthropicApiKey === "string" ? raw.anthropicApiKey : "",
     anthropicModel:
       typeof raw?.anthropicModel === "string" && raw.anthropicModel.trim()
@@ -106,10 +109,11 @@ export function getSettings(): CompanionSettings {
 }
 
 export function updateSettings(
-  patch: Partial<Pick<CompanionSettings, "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "editorTabEnabled" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "updateChannel">>,
+  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "editorTabEnabled" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "updateChannel">>,
 ): CompanionSettings {
   ensureLoaded();
   settings = normalize({
+    authEnabled: patch.authEnabled ?? settings.authEnabled,
     anthropicApiKey: patch.anthropicApiKey ?? settings.anthropicApiKey,
     anthropicModel: patch.anthropicModel ?? settings.anthropicModel,
     openaiApiKey: patch.openaiApiKey ?? settings.openaiApiKey,
