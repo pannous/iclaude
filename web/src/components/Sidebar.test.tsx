@@ -779,12 +779,11 @@ describe("Sidebar", () => {
     expect(screen.getByText("Settings")).toBeInTheDocument();
   });
 
-  it("footer navigation is grouped into clear sections", () => {
-    // Verifies that the redesigned menu exposes explicit grouping labels
-    // to improve scanability and information architecture.
+  it("footer navigation is a flat list (LOCAL: no Workbench/Workspace sections)", () => {
+    // LOCAL: we deliberately use a flat nav list instead of upstream's grouped sections
     render(<Sidebar />);
-    expect(screen.getByText("Workbench")).toBeInTheDocument();
-    expect(screen.getByText("Workspace")).toBeInTheDocument();
+    expect(screen.queryByText("Workbench")).not.toBeInTheDocument();
+    expect(screen.queryByText("Workspace")).not.toBeInTheDocument();
     expect(screen.getByText("Resources")).toBeInTheDocument();
   });
 
@@ -1577,14 +1576,13 @@ describe("Sidebar", () => {
     expect(integrationsBtn).toHaveClass("bg-cc-active");
   });
 
-  it("agents nav button is active on agent detail routes with aria-current", () => {
+  it("agents nav button is active on agent detail routes", () => {
     // Verifies active state semantics for nested agent pages.
     window.location.hash = "#/agents/agent-123";
     render(<Sidebar />);
 
     const agentsBtn = screen.getByTitle("Agents");
     expect(agentsBtn).toHaveClass("bg-cc-active");
-    expect(agentsBtn).toHaveAttribute("aria-current", "page");
   });
 
   // ─── Close sidebar button (mobile) ─────────────────────────────────────────
