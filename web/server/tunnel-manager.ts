@@ -38,6 +38,7 @@ export class TunnelManager {
       return { url: this._url, provider: this._provider! };
     }
 
+    this.killProc();
     this._state = "starting";
     this._error = null;
 
