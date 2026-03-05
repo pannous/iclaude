@@ -10,6 +10,7 @@ interface SettingsPageProps {
 
 const CATEGORIES = [
   { id: "general", label: "General" },
+  { id: "connection", label: "Connection" },
   { id: "authentication", label: "Authentication" },
   { id: "tunnel", label: "Tunnel" },
   { id: "notifications", label: "Notifications" },
@@ -58,6 +59,11 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [apiKeyFocused, setApiKeyFocused] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<{ valid: boolean; error?: string } | null>(null);
+
+  // Connection test state
+  const [connStatus, setConnStatus] = useState<"idle" | "testing" | "ok" | "error">("idle");
+  const [connLatency, setConnLatency] = useState<number | null>(null);
+  const [connError, setConnError] = useState<string | null>(null);
 
   // Auth section state
   const [authEnabled, setAuthEnabled] = useState(true);
@@ -361,6 +367,69 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 <p className="text-xs text-cc-muted px-1">
                   Last commit shows only uncommitted changes. Default branch shows all changes since diverging from main.
                 </p>
+              </div>
+            </section>
+
+            {/* Connection */}
+            <section id="connection" ref={setSectionRef("connection")}>
+              <h2 className="text-sm font-semibold text-cc-fg mb-4">Connection</h2>
+              <div className="space-y-3">
+                <p className="text-xs text-cc-muted">
+                  Test connectivity to the Companion backend server.
+                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={connStatus === "testing"}
+                    onClick={async () => {
+                      setConnStatus("testing");
+                      setConnError(null);
+                      setConnLatency(null);
+                      const start = performance.now();
+                      try {
+                        await api.getSettings();
+                        setConnLatency(Math.round(performance.now() - start));
+                        setConnStatus("ok");
+                      } catch (err) {
+                        setConnError(err instanceof Error ? err.message : String(err));
+                        setConnStatus("error");
+                      }
+                    }}
+                    className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-cc-hover hover:bg-cc-active text-cc-fg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {connStatus === "testing" ? "Testing..." : "Test Connection"}
+                  </button>
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-sm font-medium ${
+                      connStatus === "ok"
+                        ? "text-green-500"
+                        : connStatus === "error"
+                          ? "text-red-500"
+                          : connStatus === "testing"
+                            ? "text-yellow-500"
+                            : "text-cc-muted"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block w-2.5 h-2.5 rounded-full ${
+                        connStatus === "ok"
+                          ? "bg-green-500"
+                          : connStatus === "error"
+                            ? "bg-red-500"
+                            : connStatus === "testing"
+                              ? "bg-yellow-500 animate-pulse"
+                              : "bg-cc-muted/40"
+                      }`}
+                    />
+                    {connStatus === "idle" && "Not tested"}
+                    {connStatus === "testing" && "Connecting..."}
+                    {connStatus === "ok" && `Connected${connLatency != null ? ` (${connLatency}ms)` : ""}`}
+                    {connStatus === "error" && "Failed"}
+                  </span>
+                </div>
+                {connError && (
+                  <p className="text-xs text-red-500 px-1">{connError}</p>
+                )}
               </div>
             </section>
 

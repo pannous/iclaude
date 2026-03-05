@@ -1113,4 +1113,50 @@ describe("SettingsPage", () => {
       expect(screen.getByText("No tunnel tool found")).toBeInTheDocument();
     });
   });
+
+  // ─── Connection test section ──────────────────────────────────
+
+  // Verifies the connection section renders with the test button and idle status indicator
+  it("renders connection test button with idle status", async () => {
+    render(<SettingsPage />);
+    await screen.findByText("Anthropic key configured");
+
+    expect(screen.getByText("Test Connection")).toBeInTheDocument();
+    expect(screen.getByText("Not tested")).toBeInTheDocument();
+    expect(document.getElementById("connection")).toBeInTheDocument();
+  });
+
+  // Verifies a successful connection test shows latency and green status
+  it("shows connected status with latency after successful test", async () => {
+    render(<SettingsPage />);
+    await screen.findByText("Anthropic key configured");
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Test Connection"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Connected/)).toBeInTheDocument();
+    });
+    // getSettings is called both on mount and by the connection test
+    expect(mockApi.getSettings).toHaveBeenCalledTimes(2);
+  });
+
+  // Verifies a failed connection test shows error message
+  it("shows error status when connection test fails", async () => {
+    render(<SettingsPage />);
+    await screen.findByText("Anthropic key configured");
+
+    // Make the next getSettings call fail (first one on mount already resolved)
+    mockApi.getSettings.mockRejectedValueOnce(new Error("Network error"));
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Test Connection"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Failed")).toBeInTheDocument();
+      expect(screen.getByText("Network error")).toBeInTheDocument();
+    });
+  });
 });
