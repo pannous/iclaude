@@ -440,6 +440,32 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     >
                       {tokenCopied ? "Copied" : "Copy"}
                     </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!confirm("Regenerate auth token? All existing sessions on other devices will be signed out.")) return;
+                        setRegenerating(true);
+                        try {
+                          const res = await api.regenerateAuthToken();
+                          setAuthToken(res.token);
+                          setTokenRevealed(true);
+                          setQrCodes(null);
+                        } catch {
+                          // Regeneration failed
+                        } finally {
+                          setRegenerating(false);
+                        }
+                      }}
+                      disabled={regenerating}
+                      className={`px-3 py-2.5 min-h-[44px] rounded-lg text-sm transition-colors cursor-pointer ${
+                        regenerating
+                          ? "bg-cc-hover text-cc-muted cursor-not-allowed"
+                          : "bg-cc-error/10 hover:bg-cc-error/20 text-cc-error"
+                      }`}
+                      title="Regenerate token — invalidates all other devices"
+                    >
+                      {regenerating ? "..." : "Regenerate"}
+                    </button>
                   </div>
                 </div>
 
@@ -511,37 +537,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                   )}
                 </div>
 
-                {/* Regenerate token */}
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!confirm("Regenerate auth token? All existing sessions on other devices will be signed out.")) return;
-                      setRegenerating(true);
-                      try {
-                        const res = await api.regenerateAuthToken();
-                        setAuthToken(res.token);
-                        setTokenRevealed(true);
-                        setQrCodes(null); // invalidate old QR
-                      } catch {
-                        // Regeneration failed
-                      } finally {
-                        setRegenerating(false);
-                      }
-                    }}
-                    disabled={regenerating}
-                    className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                      regenerating
-                        ? "bg-cc-hover text-cc-muted cursor-not-allowed"
-                        : "bg-cc-error/10 hover:bg-cc-error/20 text-cc-error cursor-pointer"
-                    }`}
-                  >
-                    {regenerating ? "Regenerating..." : "Regenerate Token"}
-                  </button>
-                  <p className="mt-1.5 text-xs text-cc-muted">
-                    Creates a new token. All other signed-in devices will need to re-authenticate.
-                  </p>
-                </div>
               </div>
             </section>
 
