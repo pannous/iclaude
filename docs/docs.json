@@ -48,13 +48,13 @@
     "links": [
       {
         "label": "GitHub",
-        "href": "https://github.com/thevibecompany/the-companion"
+        "href": "https://github.com/thevibecompany/iclaude"
       }
     ]
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/thevibecompany/the-companion"
+      "github": "https://github.com/thevibecompany/iclaude"
     }
   },
   "favicon": "/images/favicon.svg"

@@ -4,20 +4,20 @@ on:
   push:
     branches: [main]
     paths:
-      - "web/docker/Dockerfile.the-companion"
+      - "web/docker/Dockerfile.iclaude"
     tags:
-      - "the-companion-v*"
+      - "iclaude-v*"
   pull_request:
     branches: [main]
     paths:
-      - "web/docker/Dockerfile.the-companion"
+      - "web/docker/Dockerfile.iclaude"
 
 permissions:
   contents: read
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: pannous/the-companion
+  IMAGE_NAME: pannous/iclaude
 
 jobs:
   build:
@@ -43,14 +43,14 @@ jobs:
           tags: |
             type=sha
             type=ref,event=branch
-            type=match,pattern=the-companion-v(.*),group=1
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/the-companion-v') }}
+            type=match,pattern=iclaude-v(.*),group=1
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/iclaude-v') }}
 
       - name: Build & Push
         uses: docker/build-push-action@v6
         with:
           context: web/docker
-          file: web/docker/Dockerfile.the-companion
+          file: web/docker/Dockerfile.iclaude
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

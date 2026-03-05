@@ -1,9 +1,9 @@
-# iClaude — comprehensive development image
+# The Companion — comprehensive development image
 # Ships with popular languages, runtimes, and tools pre-installed so Claude Code
 # can work on any project out of the box.
 #
 # Build:  docker build -t iclaude:latest -f Dockerfile.iclaude .
-# Usage:  Automatically used by iClaude when creating containerized sessions
+# Usage:  Automatically used by The Companion when creating containerized sessions
 
 FROM ubuntu:24.04
 

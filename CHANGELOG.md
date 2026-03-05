@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.72.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.71.0...the-companion-v0.72.0) (2026-03-04)
+## [0.72.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.71.0...iclaude-v0.72.0) (2026-03-04)
 
 
 ### Features
@@ -9,7 +9,7 @@
 * Development environment setup ([#472](https://github.com/The-Vibe-Company/companion/issues/472)) ([99fed7c](https://github.com/The-Vibe-Company/companion/commit/99fed7c1e35315e9bcec79ebd937010019796e20))
 * Menu esthétique ergonomie ([#474](https://github.com/The-Vibe-Company/companion/issues/474)) ([033a854](https://github.com/The-Vibe-Company/companion/commit/033a8547d18bee4fd12b71fadb9322a1f445ef9c))
 
-## [0.71.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.70.0...the-companion-v0.71.0) (2026-03-04)
+## [0.71.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.70.0...iclaude-v0.71.0) (2026-03-04)
 
 
 ### Features
@@ -17,7 +17,7 @@
 * **sidebar:** add external links to docs, GitHub, and website ([#468](https://github.com/The-Vibe-Company/companion/issues/468)) ([6fe561e](https://github.com/The-Vibe-Company/companion/commit/6fe561e83fbdd90359bee7bf76587256b35d0704))
 * **sidebar:** redesign footer nav from grid to vertical list ([#470](https://github.com/The-Vibe-Company/companion/issues/470)) ([8fdd9f6](https://github.com/The-Vibe-Company/companion/commit/8fdd9f6b1b91e5cb311abfd46ee122358c2cd553))
 
-## [0.70.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.69.0...the-companion-v0.70.0) (2026-03-03)
+## [0.70.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.69.0...iclaude-v0.70.0) (2026-03-03)
 
 
 ### Features
@@ -29,7 +29,7 @@
 
 * **tests:** stabilize SessionEditorPane refresh assertion ([#466](https://github.com/The-Vibe-Company/companion/issues/466)) ([c244ed8](https://github.com/The-Vibe-Company/companion/commit/c244ed86b5144a8ab1b3729be208fe5ba6278b9f))
 
-## [0.69.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.68.1...the-companion-v0.69.0) (2026-03-01)
+## [0.69.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.68.1...iclaude-v0.69.0) (2026-03-01)
 
 
 ### Features
@@ -41,14 +41,14 @@
 
 * **session:** fetch remote refs before worktree branch creation (THE-218) ([#460](https://github.com/The-Vibe-Company/companion/issues/460)) ([0050884](https://github.com/The-Vibe-Company/companion/commit/0050884dc07c3ec04a373be388e85f1ca28c2b97))
 
-## [0.68.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.68.0...the-companion-v0.68.1) (2026-03-01)
+## [0.68.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.68.0...iclaude-v0.68.1) (2026-03-01)
 
 
 ### Bug Fixes
 
 * **ci:** use patch-core bump for preview npm versions (THE-216) ([#456](https://github.com/The-Vibe-Company/companion/issues/456)) ([c3c1115](https://github.com/The-Vibe-Company/companion/commit/c3c11156b33e2a5549293365d32107ccf93c8d51))
 
-## [0.68.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.67.0...the-companion-v0.68.0) (2026-02-28)
+## [0.68.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.67.0...iclaude-v0.68.0) (2026-02-28)
 
 
 ### Features
@@ -60,7 +60,7 @@
 
 * **docs:** update mintlify docs.json schema ([265c89e](https://github.com/The-Vibe-Company/companion/commit/265c89eb3480974458dc7e0ad135a1fbb5b306b3))
 
-## [0.67.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.66.0...the-companion-v0.67.0) (2026-02-28)
+## [0.67.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.66.0...iclaude-v0.67.0) (2026-02-28)
 
 
 ### Features
@@ -77,42 +77,42 @@
 * **web:** decouple Saved Prompts page from session cwd and add grouped view ([#450](https://github.com/The-Vibe-Company/companion/issues/450)) ([c87cd27](https://github.com/The-Vibe-Company/companion/commit/c87cd2799c341ec44e760721df6a2721f0a3c1d0))
 * **web:** prevent Codex Docker sessions from becoming zombie/unreachable ([#449](https://github.com/The-Vibe-Company/companion/issues/449)) ([db947f5](https://github.com/The-Vibe-Company/companion/commit/db947f57989d676e1b40f44a7c7014cffb5fed19))
 
-## [0.66.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.65.0...the-companion-v0.66.0) (2026-02-28)
+## [0.66.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.65.0...iclaude-v0.66.0) (2026-02-28)
 
 
 ### Features
 
 * **web:** prompt to transition Linear issue status on session archive ([#441](https://github.com/The-Vibe-Company/companion/issues/441)) ([e8ed5bd](https://github.com/The-Vibe-Company/companion/commit/e8ed5bd4a3b30f20dcd7e10d64f834752bed8b37))
 
-## [0.65.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.64.3...the-companion-v0.65.0) (2026-02-27)
+## [0.65.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.64.3...iclaude-v0.65.0) (2026-02-27)
 
 
 ### Features
 
 * **web:** replace OpenRouter by Anthropic for AI features ([#439](https://github.com/The-Vibe-Company/companion/issues/439)) ([40d794c](https://github.com/The-Vibe-Company/companion/commit/40d794c24f90cd31628a362c960ad135877326e9))
 
-## [0.64.3](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.64.2...the-companion-v0.64.3) (2026-02-27)
+## [0.64.3](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.64.2...iclaude-v0.64.3) (2026-02-27)
 
 
 ### Bug Fixes
 
 * **web:** send full Linear ticket description in session prompt ([#435](https://github.com/The-Vibe-Company/companion/issues/435)) ([bd9745a](https://github.com/The-Vibe-Company/companion/commit/bd9745a81b43fccb843a32d9a842e6c04e7fb8b5))
 
-## [0.64.2](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.64.1...the-companion-v0.64.2) (2026-02-27)
+## [0.64.2](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.64.1...iclaude-v0.64.2) (2026-02-27)
 
 
 ### Bug Fixes
 
 * **web:** flush pending messages when attaching Codex adapter ([#433](https://github.com/The-Vibe-Company/companion/issues/433)) ([86a25ff](https://github.com/The-Vibe-Company/companion/commit/86a25ffde7ce7c8672367607352508bcc222b08a))
 
-## [0.64.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.64.0...the-companion-v0.64.1) (2026-02-26)
+## [0.64.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.64.0...iclaude-v0.64.1) (2026-02-26)
 
 
 ### Bug Fixes
 
 * **web:** fix Codex session reconnection Transport closed errors ([#431](https://github.com/The-Vibe-Company/companion/issues/431)) ([c559f79](https://github.com/The-Vibe-Company/companion/commit/c559f7910c4d18b83b343af99ef7c932e66cce66))
 
-## [0.64.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.63.0...the-companion-v0.64.0) (2026-02-26)
+## [0.64.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.63.0...iclaude-v0.64.0) (2026-02-26)
 
 
 ### Features
@@ -126,7 +126,7 @@
 * **web:** broadcast session name update on manual rename ([#427](https://github.com/The-Vibe-Company/companion/issues/427)) ([e3479b8](https://github.com/The-Vibe-Company/companion/commit/e3479b8ca0018014f6bd3121246d047ee292125e))
 * **web:** handle Codex ExitPlanMode as dedicated permission request ([#430](https://github.com/The-Vibe-Company/companion/issues/430)) ([bde2d11](https://github.com/The-Vibe-Company/companion/commit/bde2d11b5234faa9f6889d78133ef3dc2ae182ad))
 
-## [0.63.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.62.0...the-companion-v0.63.0) (2026-02-26)
+## [0.63.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.62.0...iclaude-v0.63.0) (2026-02-26)
 
 
 ### Features
@@ -135,7 +135,7 @@
 * **web:** move git fetch/checkout/pull inside Docker container ([#422](https://github.com/The-Vibe-Company/companion/issues/422)) ([02b22fa](https://github.com/The-Vibe-Company/companion/commit/02b22fa57dab59d95bf3a812c6800a1cdd121975))
 * **web:** move git fetch/checkout/pull inside Docker container ([#424](https://github.com/The-Vibe-Company/companion/issues/424)) ([8559dcf](https://github.com/The-Vibe-Company/companion/commit/8559dcf49a23d1969b17907f33c4ffcf91205f63))
 
-## [0.62.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.61.2...the-companion-v0.62.0) (2026-02-26)
+## [0.62.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.61.2...iclaude-v0.62.0) (2026-02-26)
 
 
 ### Features
@@ -148,35 +148,35 @@
 
 * **web:** fix plan display colors broken in light mode ([#417](https://github.com/The-Vibe-Company/companion/issues/417)) ([90f6e81](https://github.com/The-Vibe-Company/companion/commit/90f6e8182af098027610bc89481bb7c87c0038f3))
 
-## [0.61.2](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.61.1...the-companion-v0.61.2) (2026-02-25)
+## [0.61.2](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.61.1...iclaude-v0.61.2) (2026-02-25)
 
 
 ### Bug Fixes
 
 * **web:** add auth header to UpdateOverlay server poll ([#410](https://github.com/The-Vibe-Company/companion/issues/410)) ([86e26cb](https://github.com/The-Vibe-Company/companion/commit/86e26cb0a3983b5c5c39aa3a60276bdedf17629a))
 
-## [0.61.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.61.0...the-companion-v0.61.1) (2026-02-24)
+## [0.61.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.61.0...iclaude-v0.61.1) (2026-02-24)
 
 
 ### Bug Fixes
 
 * **agents:** replace emoji icons with SVG icon system ([#406](https://github.com/The-Vibe-Company/companion/issues/406)) ([d2ed31b](https://github.com/The-Vibe-Company/companion/commit/d2ed31b477e07d7f8d17e2a19c01599b45e05f69))
 
-## [0.61.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.60.1...the-companion-v0.61.0) (2026-02-24)
+## [0.61.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.60.1...iclaude-v0.61.0) (2026-02-24)
 
 
 ### Features
 
 * **web:** add auth, PWA, process panel, editor/files, page redesigns, and theme polish ([#396](https://github.com/The-Vibe-Company/companion/issues/396)) ([cb2f101](https://github.com/The-Vibe-Company/companion/commit/cb2f101d7c2764fbaa0d582ed1022763706c9283))
 
-## [0.60.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.60.0...the-companion-v0.60.1) (2026-02-24)
+## [0.60.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.60.0...iclaude-v0.60.1) (2026-02-24)
 
 
 ### Bug Fixes
 
 * **agents:** add resilient webhook copy URL behavior ([#400](https://github.com/The-Vibe-Company/companion/issues/400)) ([07bbf9b](https://github.com/The-Vibe-Company/companion/commit/07bbf9b8e63ec9e20f0bb4ac52fd6d0d18614f71))
 
-## [0.60.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.59.0...the-companion-v0.60.0) (2026-02-24)
+## [0.60.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.59.0...iclaude-v0.60.0) (2026-02-24)
 
 
 ### Features
@@ -188,7 +188,7 @@
 
 * **ci:** rewrite coverage gate to enforce 80% on new/changed files ([#399](https://github.com/The-Vibe-Company/companion/issues/399)) ([e257897](https://github.com/The-Vibe-Company/companion/commit/e257897674024a5cad12f3468c73a7e2f9d7c799))
 
-## [0.59.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.58.2...the-companion-v0.59.0) (2026-02-22)
+## [0.59.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.58.2...iclaude-v0.59.0) (2026-02-22)
 
 
 ### Features
@@ -201,42 +201,42 @@
 
 * **codex:** normalize rate-limit reset timestamps ([#386](https://github.com/The-Vibe-Company/companion/issues/386)) ([f361696](https://github.com/The-Vibe-Company/companion/commit/f3616960e48dcddccc48c956621c819568157e49))
 
-## [0.58.2](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.58.1...the-companion-v0.58.2) (2026-02-21)
+## [0.58.2](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.58.1...iclaude-v0.58.2) (2026-02-21)
 
 
 ### Bug Fixes
 
 * **editor:** replace vscode tab with codemirror behind settings ([#372](https://github.com/The-Vibe-Company/companion/issues/372)) ([52bc626](https://github.com/The-Vibe-Company/companion/commit/52bc626fdb1a27a06c2e13a2ef6aa59a4f0da9f9))
 
-## [0.58.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.58.0...the-companion-v0.58.1) (2026-02-20)
+## [0.58.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.58.0...iclaude-v0.58.1) (2026-02-20)
 
 
 ### Bug Fixes
 
 * **sidebar:** prevent hover overlay and restore archived click ([#370](https://github.com/The-Vibe-Company/companion/issues/370)) ([56abbc1](https://github.com/The-Vibe-Company/companion/commit/56abbc1ca11b5ff34d0a2c1350740d697640b6d9))
 
-## [0.58.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.57.0...the-companion-v0.58.0) (2026-02-20)
+## [0.58.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.57.0...iclaude-v0.58.0) (2026-02-20)
 
 
 ### Features
 
 * **sidebar:** redesign session items with status-first layout ([#368](https://github.com/The-Vibe-Company/companion/issues/368)) ([7287cfc](https://github.com/The-Vibe-Company/companion/commit/7287cfcb54cadbc35f1dff2ea7f0e42042b89124))
 
-## [0.57.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.56.1...the-companion-v0.57.0) (2026-02-20)
+## [0.57.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.56.1...iclaude-v0.57.0) (2026-02-20)
 
 
 ### Features
 
 * **sidebar:** redesign left sidebar navigation and sessions list ([#365](https://github.com/The-Vibe-Company/companion/issues/365)) ([000a748](https://github.com/The-Vibe-Company/companion/commit/000a7483c4fe7ad1df9dc8b1fa98ff0740c1c303))
 
-## [0.56.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.56.0...the-companion-v0.56.1) (2026-02-19)
+## [0.56.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.56.0...iclaude-v0.56.1) (2026-02-19)
 
 
 ### Bug Fixes
 
 * **topbar:** improve diff badge contrast in dark mode ([#359](https://github.com/The-Vibe-Company/companion/issues/359)) ([a995aa1](https://github.com/The-Vibe-Company/companion/commit/a995aa1568576905c6b6e9702b5b5f5cc3ca4527))
 
-## [0.56.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.55.4...the-companion-v0.56.0) (2026-02-19)
+## [0.56.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.55.4...iclaude-v0.56.0) (2026-02-19)
 
 
 ### Features
@@ -249,35 +249,35 @@
 
 * **settings:** open update overlay on update restart ([#356](https://github.com/The-Vibe-Company/companion/issues/356)) ([2c7989e](https://github.com/The-Vibe-Company/companion/commit/2c7989ee8242c95eebced7cc712a0191271f79e9))
 
-## [0.55.4](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.55.3...the-companion-v0.55.4) (2026-02-19)
+## [0.55.4](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.55.3...iclaude-v0.55.4) (2026-02-19)
 
 
 ### Bug Fixes
 
 * **linear:** add server-side cache to prevent API rate limiting ([#352](https://github.com/The-Vibe-Company/companion/issues/352)) ([843b585](https://github.com/The-Vibe-Company/companion/commit/843b5857a3aefd5ee304fa05aa60fa09d8add1b9))
 
-## [0.55.3](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.55.2...the-companion-v0.55.3) (2026-02-19)
+## [0.55.3](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.55.2...iclaude-v0.55.3) (2026-02-19)
 
 
 ### Bug Fixes
 
 * **update:** add full-screen overlay with auto-refresh after update ([#349](https://github.com/The-Vibe-Company/companion/issues/349)) ([f988b14](https://github.com/The-Vibe-Company/companion/commit/f988b142ea5458cb6654211a24e7cd02d7ee02da))
 
-## [0.55.2](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.55.1...the-companion-v0.55.2) (2026-02-19)
+## [0.55.2](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.55.1...iclaude-v0.55.2) (2026-02-19)
 
 
 ### Bug Fixes
 
 * **server:** map container repo root to host path ([#348](https://github.com/The-Vibe-Company/companion/issues/348)) ([c29f967](https://github.com/The-Vibe-Company/companion/commit/c29f9671d4dcdda876a999906f0e6fd63da8bd27))
 
-## [0.55.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.55.0...the-companion-v0.55.1) (2026-02-19)
+## [0.55.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.55.0...iclaude-v0.55.1) (2026-02-19)
 
 
 ### Bug Fixes
 
 * **linear:** show only active issues and prioritize backlog ([#346](https://github.com/The-Vibe-Company/companion/issues/346)) ([c2a6e1a](https://github.com/The-Vibe-Company/companion/commit/c2a6e1a0b8d22d032b516a186d5e23db906fdfc2))
 
-## [0.55.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.54.1...the-companion-v0.55.0) (2026-02-19)
+## [0.55.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.54.1...iclaude-v0.55.0) (2026-02-19)
 
 
 ### Features
@@ -289,14 +289,14 @@
 
 * **homepage:** restore linear issue branch auto-selection ([#342](https://github.com/The-Vibe-Company/companion/issues/342)) ([01936e4](https://github.com/The-Vibe-Company/companion/commit/01936e4de89bd925c71d13034c91c95560b5e517))
 
-## [0.54.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.54.0...the-companion-v0.54.1) (2026-02-19)
+## [0.54.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.54.0...iclaude-v0.54.1) (2026-02-19)
 
 
 ### Bug Fixes
 
 * **server:** resolve branch from containerized session git state ([#340](https://github.com/The-Vibe-Company/companion/issues/340)) ([304092d](https://github.com/The-Vibe-Company/companion/commit/304092df1c2e3ce8eceaa3c2c39917beb94b2cdb))
 
-## [0.54.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.53.1...the-companion-v0.54.0) (2026-02-19)
+## [0.54.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.53.1...iclaude-v0.54.0) (2026-02-19)
 
 
 ### Features
@@ -310,21 +310,21 @@
 
 * **ui:** hide Linear context bar when Linear is not configured ([#339](https://github.com/The-Vibe-Company/companion/issues/339)) ([cd4f55f](https://github.com/The-Vibe-Company/companion/commit/cd4f55f83d9ca166368680c6303c93c3b354f782))
 
-## [0.53.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.53.0...the-companion-v0.53.1) (2026-02-19)
+## [0.53.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.53.0...iclaude-v0.53.1) (2026-02-19)
 
 
 ### Bug Fixes
 
 * **server:** base new branches on origin/{defaultBranch} instead of stale local ref ([#334](https://github.com/The-Vibe-Company/companion/issues/334)) ([0a736f4](https://github.com/The-Vibe-Company/companion/commit/0a736f4f224db0a79aaca329a70f24f7b7e1b5e7))
 
-## [0.53.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.52.0...the-companion-v0.53.0) (2026-02-19)
+## [0.53.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.52.0...iclaude-v0.53.0) (2026-02-19)
 
 
 ### Features
 
 * **linear:** auto-create recommended branch when starting session with Linear issue ([#329](https://github.com/The-Vibe-Company/companion/issues/329)) ([51972b7](https://github.com/The-Vibe-Company/companion/commit/51972b78b32f6a7b2701016b55bf0675a4e13bc3))
 
-## [0.52.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.51.0...the-companion-v0.52.0) (2026-02-19)
+## [0.52.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.51.0...iclaude-v0.52.0) (2026-02-19)
 
 
 ### Features
@@ -339,7 +339,7 @@
 * **server:** prevent settings undefined overwrite crash ([#327](https://github.com/The-Vibe-Company/companion/issues/327)) ([9173ee2](https://github.com/The-Vibe-Company/companion/commit/9173ee2ed959a6333fb180d3e34f4deaa180c0d9))
 * **ui:** improve thinking, tool results, and question prompts ([#321](https://github.com/The-Vibe-Company/companion/issues/321)) ([5c3dd7c](https://github.com/The-Vibe-Company/companion/commit/5c3dd7c501bc23b52c56fee6d5a3995545f8730b))
 
-## [0.51.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.50.3...the-companion-v0.51.0) (2026-02-18)
+## [0.51.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.50.3...iclaude-v0.51.0) (2026-02-18)
 
 
 ### Features
@@ -347,35 +347,35 @@
 * **prompts:** add global prompt library with @ insertion ([#319](https://github.com/The-Vibe-Company/companion/issues/319)) ([10b97b4](https://github.com/The-Vibe-Company/companion/commit/10b97b450c26e57ee0a2a5c96f42bc2c27cbb0c7))
 * **server:** allow configuring session storage directory via COMPANION_SESSION_DIR ([#266](https://github.com/The-Vibe-Company/companion/issues/266)) ([3a63bc9](https://github.com/The-Vibe-Company/companion/commit/3a63bc915a16844aa2fbf33f08b60587efb9ea4a))
 
-## [0.50.3](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.50.2...the-companion-v0.50.3) (2026-02-18)
+## [0.50.3](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.50.2...iclaude-v0.50.3) (2026-02-18)
 
 
 ### Bug Fixes
 
 * **topbar:** hide context button on home page ([#317](https://github.com/The-Vibe-Company/companion/issues/317)) ([e5152e5](https://github.com/The-Vibe-Company/companion/commit/e5152e573ffc43ee5ad9aecc7bd76c937dd03d79))
 
-## [0.50.2](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.50.1...the-companion-v0.50.2) (2026-02-18)
+## [0.50.2](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.50.1...iclaude-v0.50.2) (2026-02-18)
 
 
 ### Bug Fixes
 
 * **topbar:** sample active tab color from underlying surface ([#315](https://github.com/The-Vibe-Company/companion/issues/315)) ([ebce0ec](https://github.com/The-Vibe-Company/companion/commit/ebce0ec12b5280ac46a8b63b4511202801009fcc))
 
-## [0.50.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.50.0...the-companion-v0.50.1) (2026-02-18)
+## [0.50.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.50.0...iclaude-v0.50.1) (2026-02-18)
 
 
 ### Bug Fixes
 
 * **codex:** use container cwd for docker runtime context ([#313](https://github.com/The-Vibe-Company/companion/issues/313)) ([ba6347b](https://github.com/The-Vibe-Company/companion/commit/ba6347ba90e93ba3e750b13b8687b7e428484725))
 
-## [0.50.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.49.0...the-companion-v0.50.0) (2026-02-18)
+## [0.50.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.49.0...iclaude-v0.50.0) (2026-02-18)
 
 
 ### Features
 
 * **docker:** background image pulls and streaming creation progress ([#311](https://github.com/The-Vibe-Company/companion/issues/311)) ([f3a7a5e](https://github.com/The-Vibe-Company/companion/commit/f3a7a5e48bbb371b828f8ffe53c8ad3448f1c07b))
 
-## [0.49.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.48.0...the-companion-v0.49.0) (2026-02-18)
+## [0.49.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.48.0...iclaude-v0.49.0) (2026-02-18)
 
 
 ### Features
@@ -387,7 +387,7 @@
 
 * **docker:** propagate host git identity into containers ([#310](https://github.com/The-Vibe-Company/companion/issues/310)) ([81be828](https://github.com/The-Vibe-Company/companion/commit/81be828db84efb74772ef4cb89d4d83fc5b4e9f5))
 
-## [0.48.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.47.0...the-companion-v0.48.0) (2026-02-18)
+## [0.48.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.47.0...iclaude-v0.48.0) (2026-02-18)
 
 
 ### Features
@@ -399,21 +399,21 @@
 
 * **ui:** dock session terminal inside workspace and prioritize docker target ([#302](https://github.com/The-Vibe-Company/companion/issues/302)) ([b3f0dd4](https://github.com/The-Vibe-Company/companion/commit/b3f0dd4196af53fd05fd8c432afdc40547a3f2c9))
 
-## [0.47.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.46.1...the-companion-v0.47.0) (2026-02-18)
+## [0.47.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.46.1...iclaude-v0.47.0) (2026-02-18)
 
 
 ### Features
 
 * **terminal:** add quick session terminal tabs for host and docker ([#299](https://github.com/The-Vibe-Company/companion/issues/299)) ([e4dfc51](https://github.com/The-Vibe-Company/companion/commit/e4dfc5141c54a898b0a5d4583ef3733b23a7d25d))
 
-## [0.46.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.46.0...the-companion-v0.46.1) (2026-02-17)
+## [0.46.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.46.0...iclaude-v0.46.1) (2026-02-17)
 
 
 ### Bug Fixes
 
 * **docker:** remove legacy companion-dev image support ([#295](https://github.com/The-Vibe-Company/companion/issues/295)) ([fe8cc2a](https://github.com/The-Vibe-Company/companion/commit/fe8cc2a57390a5ccd5e2d18605995c043cfa26b4))
 
-## [0.46.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.45.0...the-companion-v0.46.0) (2026-02-16)
+## [0.46.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.45.0...iclaude-v0.46.0) (2026-02-16)
 
 
 ### Features
@@ -425,7 +425,7 @@
 
 * **sidebar:** separate scheduled runs from regular sessions ([#284](https://github.com/The-Vibe-Company/companion/issues/284)) ([cc0f042](https://github.com/The-Vibe-Company/companion/commit/cc0f042472363e40410728c550a7e6e2275ab80b))
 
-## [0.45.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.44.1...the-companion-v0.45.0) (2026-02-16)
+## [0.45.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.44.1...iclaude-v0.45.0) (2026-02-16)
 
 
 ### Features
@@ -439,14 +439,14 @@
 
 * **ui:** cap textarea height and add overflow scroll for long prompts ([#285](https://github.com/The-Vibe-Company/companion/issues/285)) ([2b26bc7](https://github.com/The-Vibe-Company/companion/commit/2b26bc7b4122d22d29c821d9e1db29cce7dfbc64))
 
-## [0.44.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.44.0...the-companion-v0.44.1) (2026-02-16)
+## [0.44.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.44.0...iclaude-v0.44.1) (2026-02-16)
 
 
 ### Bug Fixes
 
 * **containers:** switch Docker registry from ghcr.io to Docker Hub ([525687e](https://github.com/The-Vibe-Company/companion/commit/525687e3e6d4eae3ab1125599c62881ee0ce80ac))
 
-## [0.44.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.43.0...the-companion-v0.44.0) (2026-02-16)
+## [0.44.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.43.0...iclaude-v0.44.0) (2026-02-16)
 
 
 ### Features
@@ -461,21 +461,21 @@
 * **ci:** only tag Docker image as :latest on version tags ([63ca679](https://github.com/The-Vibe-Company/companion/commit/63ca67934ab6d4a9024f5aa6031b4e059baeca79))
 * **containers:** rewrite SSH git remotes to HTTPS inside containers ([6c867e3](https://github.com/The-Vibe-Company/companion/commit/6c867e36cc7b76a94c59e646ba37813b4aea651b))
 
-## [0.43.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.42.0...the-companion-v0.43.0) (2026-02-15)
+## [0.43.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.42.0...iclaude-v0.43.0) (2026-02-15)
 
 
 ### Features
 
 * **assistant:** add Companion — persistent AI assistant session ([#268](https://github.com/The-Vibe-Company/companion/issues/268)) ([ec0e90b](https://github.com/The-Vibe-Company/companion/commit/ec0e90b8b58f0ec09104590b182941a4d7c9b503))
 
-## [0.42.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.41.0...the-companion-v0.42.0) (2026-02-15)
+## [0.42.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.41.0...iclaude-v0.42.0) (2026-02-15)
 
 
 ### Features
 
 * **cron:** add scheduled task system for autonomous sessions ([#84](https://github.com/The-Vibe-Company/companion/issues/84)) ([e02c55a](https://github.com/The-Vibe-Company/companion/commit/e02c55a079bb0f81b71bc7a1fd44b23181d97bb1))
 
-## [0.41.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.40.1...the-companion-v0.41.0) (2026-02-15)
+## [0.41.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.40.1...iclaude-v0.41.0) (2026-02-15)
 
 
 ### Features
@@ -488,14 +488,14 @@
 
 * **ui:** address review comments - stray 0 render, concurrent progress clearing ([#265](https://github.com/The-Vibe-Company/companion/issues/265)) ([6dfdee0](https://github.com/The-Vibe-Company/companion/commit/6dfdee0dbd25bc896e2c3ef37727021130da1808))
 
-## [0.40.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.40.0...the-companion-v0.40.1) (2026-02-15)
+## [0.40.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.40.0...iclaude-v0.40.1) (2026-02-15)
 
 
 ### Reverts
 
 * **plugins:** remove event-driven plugin runtime ([#260](https://github.com/The-Vibe-Company/companion/issues/260)) ([ea8011a](https://github.com/The-Vibe-Company/companion/commit/ea8011a714b9bdac096eb7bce8a6eca9b71e0eb1))
 
-## [0.40.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.39.1...the-companion-v0.40.0) (2026-02-14)
+## [0.40.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.39.1...iclaude-v0.40.0) (2026-02-14)
 
 
 ### Features
@@ -507,21 +507,21 @@
 
 * **repo:** add tailored greptile code review rules ([#258](https://github.com/The-Vibe-Company/companion/issues/258)) ([2030e55](https://github.com/The-Vibe-Company/companion/commit/2030e553015800b757716393ada8fe2b1527f5bf))
 
-## [0.39.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.39.0...the-companion-v0.39.1) (2026-02-14)
+## [0.39.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.39.0...iclaude-v0.39.1) (2026-02-14)
 
 
 ### Bug Fixes
 
 * **ui:** keep session action controls visible on mobile ([#247](https://github.com/The-Vibe-Company/companion/issues/247)) ([209ac9a](https://github.com/The-Vibe-Company/companion/commit/209ac9a3f2d5bd99e3e2dbe46dc9eb7b10e40082))
 
-## [0.39.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.38.0...the-companion-v0.39.0) (2026-02-14)
+## [0.39.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.38.0...iclaude-v0.39.0) (2026-02-14)
 
 
 ### Features
 
 * **telemetry:** add posthog analytics, opt-out controls, and CI env wiring ([#238](https://github.com/The-Vibe-Company/companion/issues/238)) ([743aeab](https://github.com/The-Vibe-Company/companion/commit/743aeab86aa5b9141c86f605bbd3572694c80113))
 
-## [0.38.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.37.2...the-companion-v0.38.0) (2026-02-13)
+## [0.38.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.37.2...iclaude-v0.38.0) (2026-02-13)
 
 
 ### Features
@@ -533,21 +533,21 @@
 
 * **landing:** focus messaging on codex, mcp, terminal and secure remote setup ([#237](https://github.com/The-Vibe-Company/companion/issues/237)) ([80759a7](https://github.com/The-Vibe-Company/companion/commit/80759a7ed3209d8aebf1e108d3e0c68d7bb8824f))
 
-## [0.37.2](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.37.1...the-companion-v0.37.2) (2026-02-13)
+## [0.37.2](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.37.1...iclaude-v0.37.2) (2026-02-13)
 
 
 ### Bug Fixes
 
 * **ws:** add durable replay cursors and idempotent message handling ([#232](https://github.com/The-Vibe-Company/companion/issues/232)) ([fba76e7](https://github.com/The-Vibe-Company/companion/commit/fba76e730ea5398a2df9dbda2167c32f49c7668f))
 
-## [0.37.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.37.0...the-companion-v0.37.1) (2026-02-13)
+## [0.37.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.37.0...iclaude-v0.37.1) (2026-02-13)
 
 
 ### Bug Fixes
 
 * **settings:** correct auto-renaming helper copy ([#230](https://github.com/The-Vibe-Company/companion/issues/230)) ([5da1586](https://github.com/The-Vibe-Company/companion/commit/5da15865508e6ae5bbcda45e149f64bc966b141c))
 
-## [0.37.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.36.2...the-companion-v0.37.0) (2026-02-13)
+## [0.37.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.36.2...iclaude-v0.37.0) (2026-02-13)
 
 
 ### Features
@@ -559,7 +559,7 @@
 
 * **web:** compare file diffs against default branch ([#226](https://github.com/The-Vibe-Company/companion/issues/226)) ([b437d2c](https://github.com/The-Vibe-Company/companion/commit/b437d2c5705ee32cb4e7964dd1d33113d3470f9d))
 
-## [0.36.2](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.36.1...the-companion-v0.36.2) (2026-02-13)
+## [0.36.2](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.36.1...iclaude-v0.36.2) (2026-02-13)
 
 
 ### Bug Fixes
@@ -567,14 +567,14 @@
 * **cli-launcher:** bypass shebang to use correct Node for Codex ([#223](https://github.com/The-Vibe-Company/companion/issues/223)) ([9fe1583](https://github.com/The-Vibe-Company/companion/commit/9fe158358880789ec80ea5bd5daf738a261089dc))
 * **ui:** move terminal, settings, and environments to full pages ([#224](https://github.com/The-Vibe-Company/companion/issues/224)) ([be1de35](https://github.com/The-Vibe-Company/companion/commit/be1de35e816ac782d4ba5c948f0b00abf0641f75))
 
-## [0.36.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.36.0...the-companion-v0.36.1) (2026-02-13)
+## [0.36.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.36.0...iclaude-v0.36.1) (2026-02-13)
 
 
 ### Bug Fixes
 
 * **cli-launcher:** pass enriched PATH to spawned CLI/Codex processes ([#221](https://github.com/The-Vibe-Company/companion/issues/221)) ([661e8b4](https://github.com/The-Vibe-Company/companion/commit/661e8b45d9909b9e59b0ecb396a4fb7a143f2816))
 
-## [0.36.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.35.0...the-companion-v0.36.0) (2026-02-13)
+## [0.36.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.35.0...iclaude-v0.36.0) (2026-02-13)
 
 
 ### Features
@@ -784,7 +784,7 @@
 * **web:** unset CLAUDECODE env var to prevent CLI nesting guard rejec… ([#181](https://github.com/The-Vibe-Company/companion/issues/181)) ([75e264a](https://github.com/The-Vibe-Company/companion/commit/75e264a0be975dadbf3d56e64b990e0e07b12777))
 * **web:** use --resume on CLI relaunch to restore conversation context ([#46](https://github.com/The-Vibe-Company/companion/issues/46)) ([3e2b5bd](https://github.com/The-Vibe-Company/companion/commit/3e2b5bdd39bd265ca5675784227a9f1b4f2a8aa3))
 
-## [0.34.5](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.34.4...the-companion-v0.34.5) (2026-02-13)
+## [0.34.5](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.34.4...iclaude-v0.34.5) (2026-02-13)
 
 
 ### Bug Fixes
@@ -793,35 +793,35 @@
 * **cli:** refresh systemd unit file on start/restart to prevent restart loops ([#215](https://github.com/The-Vibe-Company/companion/issues/215)) ([35f80d9](https://github.com/The-Vibe-Company/companion/commit/35f80d963b1f0f0feccf7215a9bd4711b4520a12))
 * **cli:** resolve binaries via user shell PATH when running as service ([#216](https://github.com/The-Vibe-Company/companion/issues/216)) ([47e4967](https://github.com/The-Vibe-Company/companion/commit/47e4967215a5bfd84c8afc2a86ce42151c73d187))
 
-## [0.34.4](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.34.3...the-companion-v0.34.4) (2026-02-13)
+## [0.34.4](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.34.3...iclaude-v0.34.4) (2026-02-13)
 
 
 ### Bug Fixes
 
 * **codex:** handle init failure gracefully and isolate per-session CODEX_HOME ([#210](https://github.com/The-Vibe-Company/companion/issues/210)) ([f4efcea](https://github.com/The-Vibe-Company/companion/commit/f4efceace6c260de92df728335678b7bded3e144))
 
-## [0.34.3](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.34.2...the-companion-v0.34.3) (2026-02-13)
+## [0.34.3](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.34.2...iclaude-v0.34.3) (2026-02-13)
 
 
 ### Bug Fixes
 
 * **cli:** auto-update restarts service reliably via explicit systemctl/launchctl ([#208](https://github.com/The-Vibe-Company/companion/issues/208)) ([33fa67e](https://github.com/The-Vibe-Company/companion/commit/33fa67ebd75609b9a7b8700ce67b1dd949663b06))
 
-## [0.34.2](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.34.1...the-companion-v0.34.2) (2026-02-13)
+## [0.34.2](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.34.1...iclaude-v0.34.2) (2026-02-13)
 
 
 ### Bug Fixes
 
 * **sidebar:** nest notification toggles behind disclosure ([#207](https://github.com/The-Vibe-Company/companion/issues/207)) ([87e71b8](https://github.com/The-Vibe-Company/companion/commit/87e71b8f5bf3e47c96421bca315ac412934a7dc2))
 
-## [0.34.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.34.0...the-companion-v0.34.1) (2026-02-13)
+## [0.34.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.34.0...iclaude-v0.34.1) (2026-02-13)
 
 
 ### Bug Fixes
 
 * **task-panel:** enable scrolling for long MCP sections ([#204](https://github.com/The-Vibe-Company/companion/issues/204)) ([b98abbb](https://github.com/The-Vibe-Company/companion/commit/b98abbbea4355c7e91d4dc322e53e638f4e4c542))
 
-## [0.34.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.33.0...the-companion-v0.34.0) (2026-02-13)
+## [0.34.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.33.0...iclaude-v0.34.0) (2026-02-13)
 
 
 ### Features
@@ -829,14 +829,14 @@
 * **cli:** start and stop Companion via daemon service ([#201](https://github.com/The-Vibe-Company/companion/issues/201)) ([39e2b79](https://github.com/The-Vibe-Company/companion/commit/39e2b79a6dbb70e7c7dcaf3ccbaf2116ac26b43a))
 * **sidebar:** group sound and alerts under notification ([#203](https://github.com/The-Vibe-Company/companion/issues/203)) ([0077e75](https://github.com/The-Vibe-Company/companion/commit/0077e75208e7505a53db8a829a9480a77b8c3916))
 
-## [0.33.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.32.0...the-companion-v0.33.0) (2026-02-13)
+## [0.33.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.32.0...iclaude-v0.33.0) (2026-02-13)
 
 
 ### Features
 
 * **web:** add browser web notifications ([#191](https://github.com/The-Vibe-Company/companion/issues/191)) ([092c59a](https://github.com/The-Vibe-Company/companion/commit/092c59aff620aa2b2eac51903c01ad7cb0c4bc8e))
 
-## [0.32.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.31.0...the-companion-v0.32.0) (2026-02-13)
+## [0.32.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.31.0...iclaude-v0.32.0) (2026-02-13)
 
 
 ### Features
@@ -848,7 +848,7 @@
 
 * **web:** refresh git branch tracking after session start ([#195](https://github.com/The-Vibe-Company/companion/issues/195)) ([c3cb47b](https://github.com/The-Vibe-Company/companion/commit/c3cb47b56257b866b76abbb66709694cb26e0925))
 
-## [0.31.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.30.1...the-companion-v0.31.0) (2026-02-13)
+## [0.31.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.30.1...iclaude-v0.31.0) (2026-02-13)
 
 
 ### Features
@@ -860,21 +860,21 @@
 
 * make service stop actually stop on macOS and refresh stale update checks ([#192](https://github.com/The-Vibe-Company/companion/issues/192)) ([f608f64](https://github.com/The-Vibe-Company/companion/commit/f608f64887bf78b2cca909aa20bd87e4a897ce94))
 
-## [0.30.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.30.0...the-companion-v0.30.1) (2026-02-13)
+## [0.30.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.30.0...iclaude-v0.30.1) (2026-02-13)
 
 
 ### Bug Fixes
 
 * **cli:** expose stop/restart in help and add test ([#188](https://github.com/The-Vibe-Company/companion/issues/188)) ([c307525](https://github.com/The-Vibe-Company/companion/commit/c30752545f2137fd7c03525d5bb7f5f8851271d4))
 
-## [0.30.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.29.0...the-companion-v0.30.0) (2026-02-13)
+## [0.30.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.29.0...iclaude-v0.30.0) (2026-02-13)
 
 
 ### Features
 
 * **cli:** add stop and restart service commands ([#185](https://github.com/The-Vibe-Company/companion/issues/185)) ([04da8e5](https://github.com/The-Vibe-Company/companion/commit/04da8e5a3d3f0e363f662cdd6bca6145eaec479f))
 
-## [0.29.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.28.0...the-companion-v0.29.0) (2026-02-13)
+## [0.29.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.28.0...iclaude-v0.29.0) (2026-02-13)
 
 
 ### Features
@@ -886,21 +886,21 @@
 
 * **web:** unset CLAUDECODE env var to prevent CLI nesting guard rejec… ([#181](https://github.com/The-Vibe-Company/companion/issues/181)) ([75e264a](https://github.com/The-Vibe-Company/companion/commit/75e264a0be975dadbf3d56e64b990e0e07b12777))
 
-## [0.28.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.27.1...the-companion-v0.28.0) (2026-02-12)
+## [0.28.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.27.1...iclaude-v0.28.0) (2026-02-12)
 
 
 ### Features
 
 * **web:** add embedded terminal in sidebar ([#175](https://github.com/The-Vibe-Company/companion/issues/175)) ([e711c5d](https://github.com/The-Vibe-Company/companion/commit/e711c5d5ef40edfa9c265642383a4c526b9b3ece))
 
-## [0.27.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.27.0...the-companion-v0.27.1) (2026-02-12)
+## [0.27.1](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.27.0...iclaude-v0.27.1) (2026-02-12)
 
 
 ### Bug Fixes
 
 * **web:** stable session ordering — sort by creation date only ([#173](https://github.com/The-Vibe-Company/companion/issues/173)) ([05c3a06](https://github.com/The-Vibe-Company/companion/commit/05c3a0652b823c5ca20b233be164a899f9920caf))
 
-## [0.27.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.26.0...the-companion-v0.27.0) (2026-02-12)
+## [0.27.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.26.0...iclaude-v0.27.0) (2026-02-12)
 
 
 ### Features
@@ -908,14 +908,14 @@
 * OpenRouter-based session auto-naming + settings page ([#168](https://github.com/The-Vibe-Company/companion/issues/168)) ([a86b1e7](https://github.com/The-Vibe-Company/companion/commit/a86b1e711ff1c38985bb3d622c6ec372a266637e))
 * **web:** add CLAUDE.md editor button in TopBar ([#170](https://github.com/The-Vibe-Company/companion/issues/170)) ([f553b9b](https://github.com/The-Vibe-Company/companion/commit/f553b9b86842f0b47c0bf24b08903e0352b7b078))
 
-## [0.26.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.25.0...the-companion-v0.26.0) (2026-02-12)
+## [0.26.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.25.0...iclaude-v0.26.0) (2026-02-12)
 
 
 ### Features
 
 * add Linux systemd support for service install/uninstall ([#169](https://github.com/The-Vibe-Company/companion/issues/169)) ([73fb3f7](https://github.com/The-Vibe-Company/companion/commit/73fb3f721efde79fec50f9c74a4f078f821c35d3))
 
-## [0.25.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.24.0...the-companion-v0.25.0) (2026-02-12)
+## [0.25.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.24.0...iclaude-v0.25.0) (2026-02-12)
 
 
 ### Features

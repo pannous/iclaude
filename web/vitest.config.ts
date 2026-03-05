@@ -47,7 +47,7 @@ export default defineConfig({
       if (log.includes("getClientRects")) return false;         // CodeMirror in jsdom
       if (log.includes("textRange(")) return false;             // CodeMirror in jsdom
       if (log.includes("coordsIn")) return false;               // CodeMirror in jsdom
-      if (log.includes("the-companion")) return false;           // service installer output
+      if (log.includes("iclaude")) return false;           // service installer output
       if (log.includes("launchctl")) return false;               // macOS service tests
       if (log.includes("systemctl")) return false;               // Linux service tests
       if (log.includes("Logs are preserved")) return false;      // service test cleanup

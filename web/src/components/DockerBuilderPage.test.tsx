@@ -76,7 +76,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Default: Docker available, one env with dockerfile, two images
   mockGetContainerStatus.mockResolvedValue({ available: true, version: "27.5.1" });
-  mockGetContainerImages.mockResolvedValue(["the-companion:latest", "node:20"]);
+  mockGetContainerImages.mockResolvedValue(["iclaude:latest", "node:20"]);
   mockListEnvs.mockResolvedValue([makeEnv()]);
   mockGetImageStatus.mockResolvedValue({ image: "", status: "ready", progress: [] });
   mockPullImage.mockResolvedValue({ ok: true, state: { image: "", status: "pulling", progress: [] } });
@@ -408,7 +408,7 @@ describe("DockerBuilderPage available images", () => {
     await screen.findByText("Available Images");
     // Images appear in the images list section
     await waitFor(() => {
-      expect(screen.getAllByText("the-companion:latest").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("iclaude:latest").length).toBeGreaterThan(0);
       expect(screen.getAllByText("node:20").length).toBeGreaterThan(0);
     });
   });
@@ -444,7 +444,7 @@ describe("DockerBuilderPage available images", () => {
   });
 
   it("shows Update text when image is ready", async () => {
-    mockGetImageStatus.mockResolvedValue({ image: "the-companion:latest", status: "ready", progress: [] });
+    mockGetImageStatus.mockResolvedValue({ image: "iclaude:latest", status: "ready", progress: [] });
     render(<DockerBuilderPage />);
 
     // Wait for image status to be fetched and Update buttons to appear

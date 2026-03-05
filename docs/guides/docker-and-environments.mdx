@@ -68,7 +68,7 @@ Docker sessions run the agent CLI inside a container, providing an isolated file
 
 ### The container image
 
-The default image (`the-companion:latest`) is based on Ubuntu 24.04 and includes:
+The default image (`iclaude:latest`) is based on Ubuntu 24.04 and includes:
 
 | Tool | Version |
 |---|---|
@@ -90,7 +90,7 @@ Plus system tools: git, curl, wget, make, jq, cmake, sqlite3, ffmpeg, imagemagic
 
 1. Go to **Environments** and create a new profile (or edit an existing one)
 2. Open the **Docker** tab
-3. Select a **base image** from the dropdown (e.g., `the-companion:latest`) or enter a custom image name
+3. Select a **base image** from the dropdown (e.g., `iclaude:latest`) or enter a custom image name
 4. Click **Pull** to download the image — progress is shown in real time
 
 ### Custom Dockerfile
@@ -100,7 +100,7 @@ If you need additional dependencies:
 1. In the Docker tab, write a custom **Dockerfile**:
 
 ```dockerfile
-FROM the-companion:latest
+FROM iclaude:latest
 
 # Add project-specific dependencies
 RUN apt-get update && apt-get install -y postgresql-client
