@@ -737,6 +737,56 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     <span className="text-xs text-cc-muted">Watch / iPhone / Mac</span>
                   </button>
                 )}
+                {tunnelState === "running" && tunnelUrl && (
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={tunnelTestStatus === "testing"}
+                      onClick={async () => {
+                        setTunnelTestStatus("testing");
+                        setTunnelTestError(null);
+                        setTunnelTestLatency(null);
+                        const start = performance.now();
+                        try {
+                          await fetch(tunnelUrl, { method: "HEAD", mode: "no-cors" });
+                          setTunnelTestLatency(Math.round(performance.now() - start));
+                          setTunnelTestStatus("ok");
+                        } catch (err) {
+                          setTunnelTestError(err instanceof Error ? err.message : String(err));
+                          setTunnelTestStatus("error");
+                        }
+                      }}
+                      className="px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium bg-cc-hover hover:bg-cc-active text-cc-fg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {tunnelTestStatus === "testing" ? "Testing..." : "Test Tunnel"}
+                    </button>
+                    <span
+                      className={`inline-flex items-center gap-1.5 text-sm font-medium ${
+                        tunnelTestStatus === "ok"
+                          ? "text-green-500"
+                          : tunnelTestStatus === "error"
+                            ? "text-red-500"
+                            : tunnelTestStatus === "testing"
+                              ? "text-yellow-500"
+                              : "text-cc-muted"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block w-2.5 h-2.5 rounded-full ${
+                          tunnelTestStatus === "ok"
+                            ? "bg-green-500"
+                            : tunnelTestStatus === "error"
+                              ? "bg-red-500"
+                              : tunnelTestStatus === "testing"
+                                ? "bg-yellow-500 animate-pulse"
+                                : "bg-cc-muted/40"
+                        }`}
+                      />
+                      {tunnelTestStatus === "ok" && tunnelTestLatency != null && `${tunnelTestLatency}ms`}
+                      {tunnelTestStatus === "error" && (tunnelTestError || "Failed")}
+                    </span>
+                  </div>
+                )}
                 {tunnelError && (
                   <p className="text-xs text-red-500 px-3">{tunnelError}</p>
                 )}

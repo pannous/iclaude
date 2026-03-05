@@ -1135,6 +1135,59 @@ describe("SettingsPage", () => {
     expect(mockApi.downloadTunnelShortcut).toHaveBeenCalledTimes(1);
   });
 
+  // ─── Tunnel connection test ──────────────────────────────────
+
+  // Verifies the tunnel test button appears when tunnel is running and shows latency on success
+  it("shows Test Tunnel button when tunnel is running and reports latency on success", async () => {
+    mockApi.getTunnelStatus.mockResolvedValue({
+      state: "running",
+      url: "https://test-tunnel.trycloudflare.com",
+      provider: "cloudflared",
+      error: null,
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response());
+
+    render(<SettingsPage />);
+    await waitFor(() => {
+      expect(screen.getByText("Test Tunnel")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Test Tunnel"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/ms$/)).toBeInTheDocument();
+    });
+    expect(fetchSpy).toHaveBeenCalledWith("https://test-tunnel.trycloudflare.com", { method: "HEAD", mode: "no-cors" });
+    fetchSpy.mockRestore();
+  });
+
+  // Verifies the tunnel test button shows error when fetch fails
+  it("shows error when tunnel test fails", async () => {
+    mockApi.getTunnelStatus.mockResolvedValue({
+      state: "running",
+      url: "https://fail-tunnel.trycloudflare.com",
+      provider: "cloudflared",
+      error: null,
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Tunnel unreachable"));
+
+    render(<SettingsPage />);
+    await waitFor(() => {
+      expect(screen.getByText("Test Tunnel")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Test Tunnel"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Tunnel unreachable")).toBeInTheDocument();
+    });
+    fetchSpy.mockRestore();
+  });
+
   // ─── Connection test section ──────────────────────────────────
 
   // Verifies the connection section renders with the test button and idle status indicator
