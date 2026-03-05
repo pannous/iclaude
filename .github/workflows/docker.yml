@@ -17,11 +17,10 @@ permissions:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: stangirard/the-companion
+  IMAGE_NAME: pannous/the-companion
 
 jobs:
   build:
-    if: github.repository == 'stangirard/the-companion'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
