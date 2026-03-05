@@ -135,6 +135,97 @@ Preview builds use a patch-core bump (e.g. `0.68.1-preview.*` when stable is `0.
 
 In **Settings > Updates**, switch the update channel to **Prerelease** to receive preview builds. The default channel is **Stable** (semver releases only). Switching channels takes effect immediately on the next update check.
 
+## Fork features (not yet in upstream)
+
+This fork adds several features and UX improvements on top of the upstream Companion:
+
+### Inline HTML fragments
+Output HTML in a ` ```html ` code block and it auto-renders as an interactive iframe in the chat. Fragments can push state back to the agent via `window.vibeReportState()` and the agent can query it via REST. Console output (`log/warn/error/info`) is captured automatically.
+
+### Protocol recordings
+All raw WebSocket messages (NDJSON from Claude Code, JSON-RPC from Codex) are recorded to `~/.companion/recordings/` as JSONL files. Useful for debugging and building replay-based tests. Controllable via `COMPANION_RECORD=0` env var or per-session REST endpoints.
+
+### Built-in tunnel manager
+One-click toggle in Settings to expose the server over an SSH tunnel (`companion.pannous.com`). Auto-injects auth tokens so remote access is seamless.
+
+### AI-powered input completion
+Ghost text suggestions in the Composer, powered by OpenAI `gpt-4o-mini` (or OpenRouter). Accept with Tab, dismiss with Escape or Ctrl+Z. Double-tap to accept on iOS.
+
+### Session forking
+Fork button in the Composer creates a new independent session seeded with the current conversation history. The forked session auto-loads prior transcript and shows a "(fork)" suffix.
+
+### AI session auto-namer
+After the first assistant turn, sessions are automatically renamed using an AI summary (via OpenRouter or OpenAI fallback). The AI-generated title takes priority in the sidebar.
+
+### Slash command auto-discovery
+Root-level scripts (`.claude/commands/*.md`, project scripts) are auto-discovered and surfaced as slash commands in the HomePage and Composer menu. Global prompts from `~/.claude/prompts/*.md` are also available.
+
+### File-based prompt manager
+Prompts are stored as individual Markdown files (`~/.claude/prompts/*.md` for global, `{cwd}/.claude/commands/*.md` for project), diverging from upstream's single JSON file approach.
+
+### Built-in code editor pane
+`SessionEditorPane` — an in-browser file editor tab with syntax highlighting, file size gates for large files, and the ability to open files directly from chat by clicking paths.
+
+### Desktop notifications
+Background sessions send native desktop notifications on permission requests and when they finish.
+
+### CLAUDE.md editor
+Edit the project's `CLAUDE.md` directly from the TopBar without leaving the UI.
+
+### Per-project session grouping
+Sidebar groups sessions by project folder. Clicking a folder label opens a new session in that folder. Per-project resume dropdown lets you quickly resume recent sessions.
+
+### Ghost session filter
+Sidebar filters out "ghost" sessions — those with no title, no history, and no meaningful state. Upstream shows everything.
+
+### Direct action buttons in sidebar
+Archive, restore, delete, and rename actions are exposed as direct buttons on session rows instead of upstream's three-dot context menu. Rename is triggered by double-click.
+
+### 3-column grid navigation
+Sidebar footer uses a compact 3-column grid layout for navigation instead of upstream's vertical Workbench/Workspace grouped sections. No external links section.
+
+### YOLO mode by default
+Permission mode defaults to `bypassPermissions` (agent mode). Upstream defaults to `"default"` which requires explicit approvals.
+
+### Smarter session pruning
+Sessions are only pruned if genuinely abandoned (no cwd, no history, no title). Upstream is more aggressive. Exited sessions are only restored if resumable, named, or archived.
+
+### Message deduplication
+User messages are deduplicated on reconnect by preserving client-generated IDs. Extended-thinking assistant messages sharing the same ID are also deduplicated.
+
+### System tag stripping
+XML system-injected tags (`<system-reminder>`, etc.) are stripped from session titles and message displays at all layers.
+
+### Clickable paths and URLs
+Inline-code URLs in chat are clickable. Bare filenames are searched in the project directory and linked if found.
+
+### Message queue management
+Send-now button to bypass the pending-input queue. Cancel queued messages before they reach the CLI. Clear-input event support.
+
+### Scroll behavior
+Auto-scroll disables when the scroll-to-bottom button is visible. Clicking the TopBar session tab scrolls to top.
+
+### iOS/iPad improvements
+Text selection enabled in shell output. Double-tap to accept ghost completion. Auth cookie uses `SameSite=Lax` to fix cross-site navigation issues. WKWebView reload loop eliminated.
+
+### Siri Shortcuts / Apple Watch API
+`/api/ask` endpoint for sending prompts via Siri Shortcuts or Apple Watch.
+
+### Compacting context indicator
+Visual indicator in the message feed when Claude's context is being compacted.
+
+### Draft persistence
+Composer input drafts persist across HMR and server restarts.
+
+### Auth improvements
+Auth is disabled by default (`COMPANION_AUTH=1` to enable). When disabled, all API calls skip authentication. Auto-auth on startup prevents login-page flash. Unified login page replaces separate token page.
+
+### OpenRouter / AI provider toggle
+Settings toggle between OpenRouter and direct Claude API for features like auto-naming and completion.
+
+### Image serving route
+`/api/images/*` route with tilde expansion for serving local images (used for iMessage integration).
+
 ## Docs
 - **Full documentation**: [`docs/`](docs/) (Mintlify — run `cd docs && mint dev` to preview locally)
 - Protocol reverse engineering: [`WEBSOCKET_PROTOCOL_REVERSED.md`](WEBSOCKET_PROTOCOL_REVERSED.md)
