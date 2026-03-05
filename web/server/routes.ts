@@ -37,7 +37,7 @@ import { registerGitRoutes } from "./routes/git-routes.js";
 import { registerSystemRoutes } from "./routes/system-routes.js";
 import { registerLinearRoutes, transitionLinearIssue, fetchLinearTeamStates } from "./routes/linear-routes.js";
 import { registerCompleteRoutes } from "./routes/complete-routes.js";
-import { getSettings } from "./settings-manager.js";
+import { getSettings, updateSettings } from "./settings-manager.js";
 import { discoverClaudeSessions } from "./claude-session-discovery.js";
 import { getClaudeSessionHistoryPage } from "./claude-session-history.js";
 import { verifyToken, getToken, getLanAddress, regenerateToken, getAllAddresses, isAuthEnabled } from "./auth-manager.js";
@@ -1936,6 +1936,7 @@ export function createRoutes(
     if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
     try {
       const result = await tunnelManager.start(getTunnelPort());
+      updateSettings({ tunnelEnabled: true });
       return c.json(result);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
@@ -1945,6 +1946,7 @@ export function createRoutes(
   api.post("/tunnel/stop", async (c) => {
     if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
     await tunnelManager.stop();
+    updateSettings({ tunnelEnabled: false });
     return c.json({ ok: true });
   });
 

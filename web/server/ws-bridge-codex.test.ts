@@ -125,6 +125,7 @@ describe("attachCodexAdapterHandlers", () => {
     linearArchiveTransitionStateId: "",
     linearArchiveTransitionStateName: "",
       editorTabEnabled: false,
+      tunnelEnabled: false,
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
@@ -883,6 +884,7 @@ describe("attachCodexAdapterHandlers", () => {
     linearArchiveTransitionStateId: "",
     linearArchiveTransitionStateName: "",
         editorTabEnabled: false,
+        tunnelEnabled: false,
         aiValidationEnabled: true,
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
@@ -1053,6 +1055,7 @@ describe("attachCodexAdapterHandlers", () => {
     linearArchiveTransitionStateId: "",
     linearArchiveTransitionStateName: "",
         editorTabEnabled: false,
+        tunnelEnabled: false,
         aiValidationEnabled: false,  // disabled
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
@@ -1093,6 +1096,7 @@ describe("attachCodexAdapterHandlers", () => {
     linearArchiveTransitionStateId: "",
     linearArchiveTransitionStateName: "",
         editorTabEnabled: false,
+        tunnelEnabled: false,
         aiValidationEnabled: true,
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
@@ -1198,6 +1202,7 @@ describe("attachCodexAdapterHandlers", () => {
     linearArchiveTransitionStateId: "",
     linearArchiveTransitionStateName: "",
         editorTabEnabled: false,
+        tunnelEnabled: false,
         aiValidationEnabled: true,
         aiValidationAutoApprove: false,  // disabled
         aiValidationAutoDeny: true,
@@ -1322,6 +1327,7 @@ describe("attachCodexAdapterHandlers", () => {
     linearArchiveTransitionStateId: "",
     linearArchiveTransitionStateName: "",
         editorTabEnabled: false,
+        tunnelEnabled: false,
         aiValidationEnabled: true,
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: false,  // disabled

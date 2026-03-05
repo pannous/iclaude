@@ -33,10 +33,11 @@ import { ChatBot } from "./chat-bot.js";
 import { RelayClient } from "./relay-client.js";
 
 import { TunnelManager, getTunnelPort } from "./tunnel-manager.js";
+import QRCode from "qrcode";
 import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
 import { imagePullManager } from "./image-pull-manager.js";
 import { isRunningAsService } from "./service.js";
-import { getToken, verifyToken, isAuthEnabled } from "./auth-manager.js";
+import { getToken, verifyToken, isAuthEnabled, getLanAddress } from "./auth-manager.js";
 import { getCookie, setCookie } from "hono/cookie";
 import type { SocketData } from "./ws-bridge.js";
 import type { ServerWebSocket } from "bun";
@@ -451,12 +452,33 @@ if (process.env.NODE_ENV !== "production") {
   console.log(`Dev mode: Vite at http://localhost:${vitePort} (proxied through :${server.port})`);
 }
 
+// ── QR code helper ───────────────────────────────────────────────────────────
+async function printQR(url: string, label?: string): Promise<void> {
+  try {
+    const qr = await QRCode.toString(url, { type: "terminal", small: true });
+    if (label) console.log(label);
+    console.log(qr);
+  } catch (err) {
+    console.error("[qr] Failed to generate QR code:", err);
+  }
+}
+
 // ── Auto-tunnel ─────────────────────────────────────────────────────────────
 const tunnelEnv = process.env.COMPANION_TUNNEL;
-if (tunnelEnv === "1" || tunnelEnv === "true") {
-  tunnelManager.start(getTunnelPort()).catch((err) => {
+const tunnelSetting = getSettings().tunnelEnabled;
+if (tunnelEnv === "1" || tunnelEnv === "true" || tunnelSetting) {
+  tunnelManager.start(getTunnelPort()).then(({ url }) => {
+    const authUrl = `${url}/?token=${getToken()}`;
+    printQR(authUrl, `\n  Scan to open (tunnel):`);
+  }).catch((err) => {
     console.error(`[tunnel] Failed to start: ${err.message}`);
   });
+} else if (isAuthEnabled()) {
+  const lanIp = getLanAddress();
+  if (lanIp !== "localhost") {
+    const authUrl = `http://${lanIp}:${server.port}/auth?token=${getToken()}`;
+    printQR(authUrl, `\n  Scan to open (LAN):`);
+  }
 }
 
 // ── Cron scheduler ──────────────────────────────────────────────────────────

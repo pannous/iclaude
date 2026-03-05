@@ -29,6 +29,7 @@ export interface CompanionSettings {
   aiValidationEnabled: boolean;
   aiValidationAutoApprove: boolean;
   aiValidationAutoDeny: boolean;
+  tunnelEnabled: boolean;
   aiProvider: AiProvider;
   updateChannel: UpdateChannel;
   updatedAt: number;
@@ -51,6 +52,7 @@ let settings: CompanionSettings = {
   linearArchiveTransitionStateId: "",
   linearArchiveTransitionStateName: "",
   editorTabEnabled: false,
+  tunnelEnabled: false,
   aiValidationEnabled: false,
   aiValidationAutoApprove: true,
   aiValidationAutoDeny: true,
@@ -76,6 +78,7 @@ function normalize(raw: Partial<CompanionSettings> | null | undefined): Companio
     linearArchiveTransitionStateId: typeof raw?.linearArchiveTransitionStateId === "string" ? raw.linearArchiveTransitionStateId : "",
     linearArchiveTransitionStateName: typeof raw?.linearArchiveTransitionStateName === "string" ? raw.linearArchiveTransitionStateName : "",
     editorTabEnabled: typeof raw?.editorTabEnabled === "boolean" ? raw.editorTabEnabled : false,
+    tunnelEnabled: typeof raw?.tunnelEnabled === "boolean" ? raw.tunnelEnabled : false,
     aiValidationEnabled: typeof raw?.aiValidationEnabled === "boolean" ? raw.aiValidationEnabled : false,
     aiValidationAutoApprove: typeof raw?.aiValidationAutoApprove === "boolean" ? raw.aiValidationAutoApprove : true,
     aiValidationAutoDeny: typeof raw?.aiValidationAutoDeny === "boolean" ? raw.aiValidationAutoDeny : true,
@@ -109,7 +112,7 @@ export function getSettings(): CompanionSettings {
 }
 
 export function updateSettings(
-  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "editorTabEnabled" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "updateChannel">>,
+  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "editorTabEnabled" | "tunnelEnabled" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "updateChannel">>,
 ): CompanionSettings {
   ensureLoaded();
   settings = normalize({
@@ -125,6 +128,7 @@ export function updateSettings(
     linearArchiveTransitionStateId: patch.linearArchiveTransitionStateId ?? settings.linearArchiveTransitionStateId,
     linearArchiveTransitionStateName: patch.linearArchiveTransitionStateName ?? settings.linearArchiveTransitionStateName,
     editorTabEnabled: patch.editorTabEnabled ?? settings.editorTabEnabled,
+    tunnelEnabled: patch.tunnelEnabled ?? settings.tunnelEnabled,
     aiValidationEnabled: patch.aiValidationEnabled ?? settings.aiValidationEnabled,
     aiValidationAutoApprove: patch.aiValidationAutoApprove ?? settings.aiValidationAutoApprove,
     aiValidationAutoDeny: patch.aiValidationAutoDeny ?? settings.aiValidationAutoDeny,
