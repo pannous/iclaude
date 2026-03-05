@@ -1107,4 +1107,6 @@ export const api = {
     post<{ url: string; provider: string }>("/tunnel/start"),
   stopTunnel: () =>
     post<{ ok: boolean }>("/tunnel/stop"),
+  getTunnelQr: () =>
+    get<{ url: string; qrDataUrl: string }>("/tunnel/qr"),
 };

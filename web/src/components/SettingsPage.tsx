@@ -75,6 +75,8 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [tunnelError, setTunnelError] = useState<string | null>(null);
   const [tunnelLoading, setTunnelLoading] = useState(false);
   const [tunnelUrlCopied, setTunnelUrlCopied] = useState(false);
+  const [tunnelQr, setTunnelQr] = useState<{ url: string; qrDataUrl: string } | null>(null);
+  const [tunnelQrLoading, setTunnelQrLoading] = useState(false);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -146,6 +148,9 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       setTunnelUrl(s.url);
       setTunnelProvider(s.provider);
       setTunnelError(s.error);
+      if (s.state === "running" && s.url) {
+        api.getTunnelQr().then(setTunnelQr).catch(() => {});
+      }
     }).catch(() => {});
   }, []);
 
@@ -524,12 +529,15 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                         setTunnelState("stopped");
                         setTunnelUrl(null);
                         setTunnelProvider(null);
+                        setTunnelQr(null);
                       } else {
                         setTunnelState("starting");
                         const res = await api.startTunnel();
                         setTunnelState("running");
                         setTunnelUrl(res.url);
                         setTunnelProvider(res.provider);
+                        // Auto-fetch QR code for the tunnel URL
+                        api.getTunnelQr().then(setTunnelQr).catch(() => {});
                       }
                     } catch (err) {
                       setTunnelState("error");
@@ -568,6 +576,44 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     </button>
                     {tunnelProvider && (
                       <span className="text-[10px] text-cc-muted shrink-0">{tunnelProvider}</span>
+                    )}
+                  </div>
+                )}
+                {tunnelState === "running" && tunnelUrl && (
+                  <div className="space-y-2">
+                    {tunnelQr ? (
+                      <>
+                        <label className="block text-sm font-medium">Scan to Connect</label>
+                        <div className="inline-block rounded-lg bg-white p-2">
+                          <img
+                            src={tunnelQr.qrDataUrl}
+                            alt="QR code for tunnel login"
+                            className="w-48 h-48"
+                          />
+                        </div>
+                        <p className="text-xs text-cc-muted">
+                          Scan with your phone — opens the tunnel URL and auto-authenticates.
+                        </p>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setTunnelQrLoading(true);
+                          try {
+                            setTunnelQr(await api.getTunnelQr());
+                          } catch { /* retry later */ }
+                          finally { setTunnelQrLoading(false); }
+                        }}
+                        disabled={tunnelQrLoading}
+                        className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
+                          tunnelQrLoading
+                            ? "bg-cc-hover text-cc-muted cursor-not-allowed"
+                            : "bg-cc-hover hover:bg-cc-active text-cc-fg cursor-pointer"
+                        }`}
+                      >
+                        {tunnelQrLoading ? "Generating..." : "Show QR Code"}
+                      </button>
                     )}
                   </div>
                 )}
@@ -954,7 +1000,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     </button>
                   ) : (
                     <p className="text-xs text-cc-muted self-center">
-                      Install service mode with <code className="font-mono-code bg-cc-code-bg px-1 py-0.5 rounded text-cc-code-fg">the-companion install</code> to enable one-click updates.
+                      Install service mode with <code className="font-mono-code bg-cc-code-bg px-1 py-0.5 rounded text-cc-code-fg">iclaude install</code> to enable one-click updates.
                     </p>
                   )}
                 </div>

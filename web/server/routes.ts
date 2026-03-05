@@ -1490,9 +1490,9 @@ export function createRoutes(
     const session = launcher.getSession(sessionId);
     if (!session) return c.json({ error: "Session not found" }, 404);
 
-    // Safety: don't allow killing the Companion server or Claude CLI process itself
+    // Safety: don't allow killing iClaude server or Claude CLI process itself
     if (pid === process.pid) {
-      return c.json({ error: "Cannot kill the Companion server" }, 403);
+      return c.json({ error: "Cannot kill iClaude server" }, 403);
     }
     if (session.pid === pid) {
       return c.json({ error: "Use the session kill endpoint to terminate Claude" }, 403);
@@ -1946,6 +1946,18 @@ export function createRoutes(
     if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
     await tunnelManager.stop();
     return c.json({ ok: true });
+  });
+
+  api.get("/tunnel/qr", async (c) => {
+    if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
+    const status = tunnelManager.getStatus();
+    if (status.state !== "running" || !status.url) {
+      return c.json({ error: "No active tunnel" }, 400);
+    }
+    const token = getToken();
+    const loginUrl = `${status.url}/?token=${token}`;
+    const qrDataUrl = await QRCode.toDataURL(loginUrl, { width: 256, margin: 2 });
+    return c.json({ url: status.url, qrDataUrl });
   });
 
   return api;

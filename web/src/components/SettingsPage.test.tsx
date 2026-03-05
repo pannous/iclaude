@@ -67,6 +67,7 @@ const mockApi = {
   getTunnelStatus: vi.fn(),
   startTunnel: vi.fn(),
   stopTunnel: vi.fn(),
+  getTunnelQr: vi.fn(),
 };
 
 const mockTelemetry = {
@@ -87,6 +88,7 @@ vi.mock("../api.js", () => ({
     getTunnelStatus: (...args: unknown[]) => mockApi.getTunnelStatus(...args),
     startTunnel: (...args: unknown[]) => mockApi.startTunnel(...args),
     stopTunnel: (...args: unknown[]) => mockApi.stopTunnel(...args),
+    getTunnelQr: (...args: unknown[]) => mockApi.getTunnelQr(...args),
   },
 }));
 
@@ -151,6 +153,10 @@ beforeEach(() => {
     url: null,
     provider: null,
     error: null,
+  });
+  mockApi.getTunnelQr.mockResolvedValue({
+    url: "https://test-tunnel.trycloudflare.com",
+    qrDataUrl: "data:image/png;base64,TUNNEL_QR",
   });
   mockTelemetry.getTelemetryPreferenceEnabled.mockReturnValue(true);
 });
