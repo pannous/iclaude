@@ -1,6 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { EventEmitter } from "node:events";
 
+// Mock settings-manager so getSettings() returns defaults without file I/O
+vi.mock("./settings-manager.js", () => ({
+  getSettings: () => ({
+    tunnelMode: "quick",
+    tunnelId: "",
+    tunnelHostname: "",
+    tunnelCredentialsPath: "",
+    tunnelEnabled: false,
+  }),
+  updateSettings: vi.fn(),
+}));
+
 // Mock child_process.spawn and execSync to avoid spawning real processes
 // execSync is mocked so detectProvider() doesn't require cloudflared/ngrok on CI
 vi.mock("node:child_process", async () => {
@@ -112,6 +124,7 @@ describe("tunnel-manager", () => {
       state: "stopped",
       url: null,
       provider: null,
+      mode: "quick",
       error: null,
     });
   });

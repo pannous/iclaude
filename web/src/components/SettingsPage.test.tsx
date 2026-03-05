@@ -69,6 +69,9 @@ const mockApi = {
   stopTunnel: vi.fn(),
   getTunnelQr: vi.fn(),
   downloadTunnelShortcut: vi.fn(),
+  getNamedTunnelInfo: vi.fn(),
+  setupNamedTunnel: vi.fn(),
+  deleteNamedTunnel: vi.fn(),
 };
 
 const mockTelemetry = {
@@ -91,6 +94,9 @@ vi.mock("../api.js", () => ({
     stopTunnel: (...args: unknown[]) => mockApi.stopTunnel(...args),
     getTunnelQr: (...args: unknown[]) => mockApi.getTunnelQr(...args),
     downloadTunnelShortcut: (...args: unknown[]) => mockApi.downloadTunnelShortcut(...args),
+    getNamedTunnelInfo: (...args: unknown[]) => mockApi.getNamedTunnelInfo(...args),
+    setupNamedTunnel: (...args: unknown[]) => mockApi.setupNamedTunnel(...args),
+    deleteNamedTunnel: (...args: unknown[]) => mockApi.deleteNamedTunnel(...args),
   },
 }));
 
@@ -154,7 +160,14 @@ beforeEach(() => {
     state: "stopped",
     url: null,
     provider: null,
+    mode: "quick",
     error: null,
+  });
+  mockApi.getNamedTunnelInfo.mockResolvedValue({
+    loggedIn: false,
+    tunnelId: null,
+    hostname: null,
+    credentialsPath: null,
   });
   mockApi.getTunnelQr.mockResolvedValue({
     url: "https://test-tunnel.trycloudflare.com",

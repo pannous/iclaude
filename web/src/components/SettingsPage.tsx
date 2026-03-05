@@ -88,6 +88,14 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [tunnelTestStatus, setTunnelTestStatus] = useState<"idle" | "testing" | "ok" | "error">("idle");
   const [tunnelTestLatency, setTunnelTestLatency] = useState<number | null>(null);
   const [tunnelTestError, setTunnelTestError] = useState<string | null>(null);
+  const [tunnelMode, setTunnelMode] = useState<string>("quick");
+
+  // Named tunnel setup state
+  const [namedInfo, setNamedInfo] = useState<{ loggedIn: boolean; tunnelId: string | null; hostname: string | null } | null>(null);
+  const [namedSetupName, setNamedSetupName] = useState("iclaude");
+  const [namedSetupHostname, setNamedSetupHostname] = useState("");
+  const [namedSetupLoading, setNamedSetupLoading] = useState(false);
+  const [namedSetupError, setNamedSetupError] = useState<string | null>(null);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -159,10 +167,15 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       setTunnelState(s.state);
       setTunnelUrl(s.url);
       setTunnelProvider(s.provider);
+      setTunnelMode(s.mode || "quick");
       setTunnelError(s.error);
       if (s.state === "running" && s.url) {
         api.getTunnelQr().then(setTunnelQr).catch(() => {});
       }
+    }).catch(() => {});
+    api.getNamedTunnelInfo().then((info) => {
+      setNamedInfo(info);
+      if (info.hostname) setNamedSetupHostname(info.hostname);
     }).catch(() => {});
   }, []);
 
@@ -627,6 +640,98 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 <p className="text-xs text-cc-muted">
                   Expose this instance to the internet via cloudflared or ngrok. Auth is automatically enabled when a tunnel is active.
                 </p>
+
+                {/* Named tunnel config */}
+                {namedInfo && (
+                  <div className="space-y-2 p-3 rounded-lg bg-cc-bg border border-cc-border">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-cc-fg">Persistent URL</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${namedInfo.tunnelId ? "bg-green-500/20 text-green-400" : "bg-cc-hover text-cc-muted"}`}>
+                        {namedInfo.tunnelId ? "configured" : "not set up"}
+                      </span>
+                    </div>
+                    {!namedInfo.loggedIn ? (
+                      <p className="text-xs text-cc-muted">
+                        For a persistent URL, run <code className="bg-cc-hover px-1 rounded">cloudflared tunnel login</code> in your terminal, then refresh.
+                      </p>
+                    ) : namedInfo.tunnelId ? (
+                      <div className="space-y-1">
+                        <p className="text-xs text-cc-muted">
+                          Hostname: <span className="text-cc-fg">{namedInfo.hostname}</span>
+                        </p>
+                        <p className="text-xs text-cc-muted">
+                          Tunnel ID: <span className="text-cc-fg font-mono">{namedInfo.tunnelId.slice(0, 8)}...</span>
+                        </p>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm("Delete the named tunnel and revert to random URLs?")) return;
+                            setNamedSetupLoading(true);
+                            try {
+                              await api.deleteNamedTunnel();
+                              setNamedInfo({ loggedIn: true, tunnelId: null, hostname: null });
+                              setTunnelMode("quick");
+                            } catch (err) {
+                              setNamedSetupError(err instanceof Error ? err.message : String(err));
+                            } finally {
+                              setNamedSetupLoading(false);
+                            }
+                          }}
+                          disabled={namedSetupLoading}
+                          className="text-xs text-red-400 hover:text-red-300 cursor-pointer disabled:opacity-50"
+                        >
+                          Remove persistent tunnel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-xs text-cc-muted">
+                          Create a named Cloudflare tunnel with a fixed hostname on your domain.
+                        </p>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={namedSetupName}
+                            onChange={(e) => setNamedSetupName(e.target.value)}
+                            placeholder="Tunnel name"
+                            className="flex-1 px-2 py-1.5 text-xs rounded bg-cc-hover border border-cc-border text-cc-fg placeholder:text-cc-muted"
+                          />
+                          <input
+                            type="text"
+                            value={namedSetupHostname}
+                            onChange={(e) => setNamedSetupHostname(e.target.value)}
+                            placeholder="hostname.yourdomain.com"
+                            className="flex-[2] px-2 py-1.5 text-xs rounded bg-cc-hover border border-cc-border text-cc-fg placeholder:text-cc-muted"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          disabled={namedSetupLoading || !namedSetupName || !namedSetupHostname}
+                          onClick={async () => {
+                            setNamedSetupLoading(true);
+                            setNamedSetupError(null);
+                            try {
+                              const result = await api.setupNamedTunnel(namedSetupName, namedSetupHostname);
+                              setNamedInfo({ loggedIn: true, tunnelId: result.tunnelId, hostname: result.hostname });
+                              setTunnelMode("named");
+                            } catch (err) {
+                              setNamedSetupError(err instanceof Error ? err.message : String(err));
+                            } finally {
+                              setNamedSetupLoading(false);
+                            }
+                          }}
+                          className="px-3 py-1.5 text-xs rounded bg-cc-primary text-white hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {namedSetupLoading ? "Setting up..." : "Create Persistent Tunnel"}
+                        </button>
+                        {namedSetupError && (
+                          <p className="text-xs text-red-500">{namedSetupError}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <button
                   type="button"
                   disabled={tunnelLoading}
@@ -685,7 +790,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                       {tunnelUrlCopied ? "Copied" : "Copy"}
                     </button>
                     {tunnelProvider && (
-                      <span className="text-[10px] text-cc-muted shrink-0">{tunnelProvider}</span>
+                      <span className="text-[10px] text-cc-muted shrink-0">{tunnelProvider}{tunnelMode === "named" ? " (persistent)" : ""}</span>
                     )}
                   </div>
                 )}

@@ -30,6 +30,10 @@ export interface CompanionSettings {
   aiValidationAutoApprove: boolean;
   aiValidationAutoDeny: boolean;
   tunnelEnabled: boolean;
+  tunnelMode: "quick" | "named";
+  tunnelId: string;
+  tunnelHostname: string;
+  tunnelCredentialsPath: string;
   aiProvider: AiProvider;
   updateChannel: UpdateChannel;
   updatedAt: number;
@@ -53,6 +57,10 @@ let settings: CompanionSettings = {
   linearArchiveTransitionStateName: "",
   editorTabEnabled: false,
   tunnelEnabled: false,
+  tunnelMode: "quick",
+  tunnelId: "",
+  tunnelHostname: "",
+  tunnelCredentialsPath: "",
   aiValidationEnabled: false,
   aiValidationAutoApprove: true,
   aiValidationAutoDeny: true,
@@ -79,6 +87,10 @@ function normalize(raw: Partial<CompanionSettings> | null | undefined): Companio
     linearArchiveTransitionStateName: typeof raw?.linearArchiveTransitionStateName === "string" ? raw.linearArchiveTransitionStateName : "",
     editorTabEnabled: typeof raw?.editorTabEnabled === "boolean" ? raw.editorTabEnabled : false,
     tunnelEnabled: typeof raw?.tunnelEnabled === "boolean" ? raw.tunnelEnabled : false,
+    tunnelMode: raw?.tunnelMode === "named" ? "named" : "quick",
+    tunnelId: typeof raw?.tunnelId === "string" ? raw.tunnelId : "",
+    tunnelHostname: typeof raw?.tunnelHostname === "string" ? raw.tunnelHostname : "",
+    tunnelCredentialsPath: typeof raw?.tunnelCredentialsPath === "string" ? raw.tunnelCredentialsPath : "",
     aiValidationEnabled: typeof raw?.aiValidationEnabled === "boolean" ? raw.aiValidationEnabled : false,
     aiValidationAutoApprove: typeof raw?.aiValidationAutoApprove === "boolean" ? raw.aiValidationAutoApprove : true,
     aiValidationAutoDeny: typeof raw?.aiValidationAutoDeny === "boolean" ? raw.aiValidationAutoDeny : true,
@@ -112,7 +124,7 @@ export function getSettings(): CompanionSettings {
 }
 
 export function updateSettings(
-  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "editorTabEnabled" | "tunnelEnabled" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "updateChannel">>,
+  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "editorTabEnabled" | "tunnelEnabled" | "tunnelMode" | "tunnelId" | "tunnelHostname" | "tunnelCredentialsPath" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "updateChannel">>,
 ): CompanionSettings {
   ensureLoaded();
   settings = normalize({
@@ -129,6 +141,10 @@ export function updateSettings(
     linearArchiveTransitionStateName: patch.linearArchiveTransitionStateName ?? settings.linearArchiveTransitionStateName,
     editorTabEnabled: patch.editorTabEnabled ?? settings.editorTabEnabled,
     tunnelEnabled: patch.tunnelEnabled ?? settings.tunnelEnabled,
+    tunnelMode: patch.tunnelMode ?? settings.tunnelMode,
+    tunnelId: patch.tunnelId ?? settings.tunnelId,
+    tunnelHostname: patch.tunnelHostname ?? settings.tunnelHostname,
+    tunnelCredentialsPath: patch.tunnelCredentialsPath ?? settings.tunnelCredentialsPath,
     aiValidationEnabled: patch.aiValidationEnabled ?? settings.aiValidationEnabled,
     aiValidationAutoApprove: patch.aiValidationAutoApprove ?? settings.aiValidationAutoApprove,
     aiValidationAutoDeny: patch.aiValidationAutoDeny ?? settings.aiValidationAutoDeny,

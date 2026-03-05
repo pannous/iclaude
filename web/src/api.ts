@@ -1102,9 +1102,9 @@ export const api = {
 
   // Tunnel
   getTunnelStatus: () =>
-    get<{ state: string; url: string | null; provider: string | null; error: string | null }>("/tunnel/status"),
+    get<{ state: string; url: string | null; provider: string | null; mode: string; error: string | null }>("/tunnel/status"),
   startTunnel: () =>
-    post<{ url: string; provider: string }>("/tunnel/start"),
+    post<{ url: string; provider: string; mode: string }>("/tunnel/start"),
   stopTunnel: () =>
     post<{ ok: boolean }>("/tunnel/stop"),
   getTunnelQr: () =>
@@ -1115,4 +1115,10 @@ export const api = {
     a.download = "Companion.shortcut";
     a.click();
   },
+  getNamedTunnelInfo: () =>
+    get<{ loggedIn: boolean; tunnelId: string | null; hostname: string | null; credentialsPath: string | null }>("/tunnel/named/info"),
+  setupNamedTunnel: (name: string, hostname: string) =>
+    post<{ tunnelId: string; hostname: string }>("/tunnel/named/setup", { name, hostname }),
+  deleteNamedTunnel: () =>
+    post<{ ok: boolean }>("/tunnel/named/delete"),
 };

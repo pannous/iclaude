@@ -1965,6 +1965,38 @@ export function createRoutes(
     return c.json({ url: status.url, qrDataUrl });
   });
 
+  // Named tunnel info (login status, existing config)
+  api.get("/tunnel/named/info", (c) => {
+    if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
+    return c.json(tunnelManager.getNamedTunnelInfo());
+  });
+
+  // Setup a persistent named tunnel: creates tunnel + routes DNS + saves settings
+  api.post("/tunnel/named/setup", async (c) => {
+    if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
+    const body = await c.req.json<{ name: string; hostname: string }>();
+    if (!body.name || !body.hostname) {
+      return c.json({ error: "Both 'name' and 'hostname' are required" }, 400);
+    }
+    try {
+      const result = await tunnelManager.setupNamedTunnel(body.name, body.hostname);
+      return c.json(result);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+    }
+  });
+
+  // Delete the named tunnel and revert to quick mode
+  api.post("/tunnel/named/delete", async (c) => {
+    if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
+    try {
+      await tunnelManager.deleteNamedTunnel();
+      return c.json({ ok: true });
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+    }
+  });
+
   // Generate an Apple Shortcut (.shortcut) file pre-filled with the tunnel URL.
   // The shortcut opens the authenticated tunnel URL and is Apple Watch compatible.
   api.get("/tunnel/shortcut", async (c) => {
