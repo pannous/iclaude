@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.72.14](https://github.com/pannous/iclaude/compare/the-companion-v0.72.13...the-companion-v0.72.14) (2026-03-05)
+
+
+### Bug Fixes
+
+* **minor:** gate pannous QR code to home server only ([e930077](https://github.com/pannous/iclaude/commit/e930077e63f7ad8df5892a610ee230e41d91212b))
+* **minor:** skip Docker workflow on forks (no Docker Hub secrets) ([2051c9a](https://github.com/pannous/iclaude/commit/2051c9a74df2fdb4cf3133f40e8243fb43e7d7ce))
+* **minor:** update Docker workflow for fork (pannous/the-companion) ([6c63fd5](https://github.com/pannous/iclaude/commit/6c63fd526609075461af1c0ad30dd1cd2bbb158b))
+* **minor:** update release workflow for fork (pannous/iclaude) ([40ca454](https://github.com/pannous/iclaude/commit/40ca4542795f4931e8eb2e21e8f1ac08642a296d))
+* **minor:** use npm Trusted Publishing (OIDC) instead of access token ([7b2f719](https://github.com/pannous/iclaude/commit/7b2f7192a030d3af048cb1890f72985144527129))
+
 ## [0.72.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.71.0...the-companion-v0.72.0) (2026-03-04)
 
 
