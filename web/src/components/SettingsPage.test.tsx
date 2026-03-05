@@ -580,7 +580,7 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
     await screen.findByText("Anthropic key configured");
 
-    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
 
     await waitFor(() => {
       expect(mockApi.regenerateAuthToken).toHaveBeenCalledTimes(1);
@@ -599,7 +599,7 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
     await screen.findByText("Anthropic key configured");
 
-    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
 
     expect(mockApi.regenerateAuthToken).not.toHaveBeenCalled();
 
