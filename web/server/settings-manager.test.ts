@@ -39,6 +39,7 @@ describe("settings-manager", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -86,6 +87,7 @@ describe("settings-manager", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 123,
     });
@@ -140,6 +142,7 @@ describe("settings-manager", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });

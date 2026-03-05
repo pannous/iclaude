@@ -95,6 +95,7 @@ vi.mock("./settings-manager.js", () => ({
     aiValidationEnabled: false,
     aiValidationAutoApprove: true,
     aiValidationAutoDeny: true,
+    aiProvider: "openrouter",
     updateChannel: "stable",
     updatedAt: 0,
   })),
@@ -704,11 +705,11 @@ describe("POST /api/sessions/create", () => {
       name: "Companion",
       slug: "companion",
       variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockImplementationOnce(() => {
       throw new Error("docker daemon timeout");
@@ -734,11 +735,11 @@ describe("POST /api/sessions/create", () => {
       name: "Codex Docker",
       slug: "codex-docker",
       variables: {},
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
 
     const res = await app.request("/api/sessions/create", {
       method: "POST",
@@ -758,16 +759,16 @@ describe("POST /api/sessions/create", () => {
       name: "Codex Docker",
       slug: "codex-docker",
       variables: { OPENAI_API_KEY: "sk-test" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     const createSpy = vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-codex",
       name: "companion-codex",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/test",
       containerCwd: "/workspace",
@@ -798,16 +799,16 @@ describe("POST /api/sessions/create", () => {
       name: "Companion",
       slug: "companion",
       variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       createdAt: 1000,
       updatedAt: 1000,
       ports: [3000],
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     const createSpy = vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-vscode",
       name: "companion-vscode",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/test",
       containerCwd: "/workspace",
@@ -834,14 +835,14 @@ describe("POST /api/sessions/create", () => {
       name: "Companion",
       slug: "companion",
       variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     mockImagePullIsReady.mockReturnValue(false);
     mockImagePullGetState.mockReturnValue({
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       status: "idle" as const,
       progress: [],
     });
@@ -849,7 +850,7 @@ describe("POST /api/sessions/create", () => {
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-1",
       name: "companion-temp",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/test",
       containerCwd: "/workspace",
@@ -864,7 +865,7 @@ describe("POST /api/sessions/create", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(mockImagePullEnsureImage).toHaveBeenCalledWith("the-companion:latest");
+    expect(mockImagePullEnsureImage).toHaveBeenCalledWith("iclaude:latest");
     expect(mockImagePullWaitForReady).toHaveBeenCalled();
     expect(launcher.launch).toHaveBeenCalled();
   });
@@ -875,17 +876,17 @@ describe("POST /api/sessions/create", () => {
       name: "WithInit",
       slug: "with-init",
       variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       initScript: "bun install && pip install -r requirements.txt",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-init",
       name: "companion-init",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/test",
       containerCwd: "/workspace",
@@ -917,17 +918,17 @@ describe("POST /api/sessions/create", () => {
       name: "FailInit",
       slug: "fail-init",
       variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       initScript: "exit 1",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-fail",
       name: "companion-fail",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/test",
       containerCwd: "/workspace",
@@ -966,15 +967,15 @@ describe("POST /api/sessions/create", () => {
       name: "Docker",
       slug: "docker",
       variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-git",
       name: "companion-git",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/repo",
       containerCwd: "/workspace",
@@ -1012,15 +1013,15 @@ describe("POST /api/sessions/create", () => {
       name: "Docker",
       slug: "docker",
       variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-nobranch",
       name: "companion-nobranch",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/test",
       containerCwd: "/workspace",
@@ -1052,15 +1053,15 @@ describe("POST /api/sessions/create", () => {
       name: "Docker",
       slug: "docker",
       variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-failcheckout",
       name: "companion-failcheckout",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/repo",
       containerCwd: "/workspace",
@@ -1464,7 +1465,7 @@ describe("POST /api/sessions/:id/editor/start", () => {
     vi.spyOn(containerManager, "getContainer").mockReturnValue({
       containerId: "cid-1",
       name: "companion-s1",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [{ containerPort: 13337, hostPort: 49152 }],
       hostCwd: "/repo",
       containerCwd: "/workspace",
@@ -1761,6 +1762,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -1798,6 +1800,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -1828,6 +1831,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -1906,6 +1910,7 @@ describe("GET /api/sessions/:id/archive-info", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2176,15 +2181,15 @@ describe("Saved prompts API", () => {
 describe("GET /api/images/:tag/status", () => {
   it("returns the pull state for an image", async () => {
     mockImagePullGetState.mockReturnValueOnce({
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       status: "ready",
       progress: [],
     });
 
-    const res = await app.request("/api/images/the-companion%3Alatest/status");
+    const res = await app.request("/api/images/iclaude%3Alatest/status");
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.image).toBe("the-companion:latest");
+    expect(json.image).toBe("iclaude:latest");
     expect(json.status).toBe("ready");
   });
 });
@@ -2193,25 +2198,25 @@ describe("POST /api/images/:tag/pull", () => {
   it("triggers a pull and returns the current state", async () => {
     vi.spyOn(containerManager, "checkDocker").mockReturnValue(true);
     mockImagePullGetState.mockReturnValueOnce({
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       status: "pulling",
       progress: [],
       startedAt: Date.now(),
     });
 
-    const res = await app.request("/api/images/the-companion%3Alatest/pull", {
+    const res = await app.request("/api/images/iclaude%3Alatest/pull", {
       method: "POST",
     });
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.ok).toBe(true);
-    expect(mockImagePullPull).toHaveBeenCalledWith("the-companion:latest");
+    expect(mockImagePullPull).toHaveBeenCalledWith("iclaude:latest");
   });
 
   it("returns 503 when Docker is not available", async () => {
     vi.spyOn(containerManager, "checkDocker").mockReturnValue(false);
 
-    const res = await app.request("/api/images/the-companion%3Alatest/pull", {
+    const res = await app.request("/api/images/iclaude%3Alatest/pull", {
       method: "POST",
     });
     expect(res.status).toBe(503);
@@ -2239,6 +2244,7 @@ describe("GET /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 123,
     });
@@ -2260,6 +2266,7 @@ describe("GET /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
     });
   });
@@ -2280,6 +2287,7 @@ describe("GET /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 123,
     });
@@ -2301,6 +2309,7 @@ describe("GET /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
     });
   });
@@ -2323,6 +2332,7 @@ describe("PUT /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 456,
     });
@@ -2365,6 +2375,7 @@ describe("PUT /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
     });
   });
@@ -2385,6 +2396,7 @@ describe("PUT /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 789,
     });
@@ -2424,6 +2436,7 @@ describe("PUT /api/settings", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 999,
     });
@@ -2631,6 +2644,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2657,6 +2671,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2737,6 +2752,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2824,6 +2840,7 @@ describe("GET /api/linear/issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2876,6 +2893,7 @@ describe("GET /api/linear/connection", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2902,6 +2920,7 @@ describe("GET /api/linear/connection", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2951,6 +2970,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -2982,6 +3002,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3012,6 +3033,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3043,6 +3065,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3109,6 +3132,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3154,6 +3178,7 @@ describe("GET /api/linear/projects", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3180,6 +3205,7 @@ describe("GET /api/linear/projects", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3237,6 +3263,7 @@ describe("GET /api/linear/project-issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3263,6 +3290,7 @@ describe("GET /api/linear/project-issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -3335,6 +3363,7 @@ describe("GET /api/linear/project-issues", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -4397,16 +4426,16 @@ describe("POST /api/sessions/create-stream", () => {
       name: "Docker",
       slug: "docker",
       variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-stream",
       name: "companion-stream",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/test",
       containerCwd: "/workspace",
@@ -4447,15 +4476,15 @@ describe("POST /api/sessions/create-stream", () => {
       name: "Docker",
       slug: "docker",
       variables: { ANTHROPIC_API_KEY: "key" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     // Image not ready initially — pull manager will handle it
     mockImagePullIsReady.mockReturnValue(false);
     mockImagePullGetState.mockReturnValue({
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       status: "idle" as const,
       progress: [],
     });
@@ -4463,7 +4492,7 @@ describe("POST /api/sessions/create-stream", () => {
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-pulled",
       name: "companion-pulled",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/test",
       containerCwd: "/workspace",
@@ -4491,7 +4520,7 @@ describe("POST /api/sessions/create-stream", () => {
         containerCwd: "/workspace",
       }),
     );
-    expect(mockImagePullEnsureImage).toHaveBeenCalledWith("the-companion:latest");
+    expect(mockImagePullEnsureImage).toHaveBeenCalledWith("iclaude:latest");
     expect(mockImagePullWaitForReady).toHaveBeenCalled();
   });
 
@@ -4500,14 +4529,14 @@ describe("POST /api/sessions/create-stream", () => {
       name: "Docker",
       slug: "docker",
       variables: { ANTHROPIC_API_KEY: "key" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     mockImagePullIsReady.mockReturnValue(false);
     mockImagePullGetState.mockReturnValue({
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       status: "error" as const,
       progress: [],
       error: "Pull and build both failed",
@@ -4532,17 +4561,17 @@ describe("POST /api/sessions/create-stream", () => {
       name: "WithInit",
       slug: "with-init",
       variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       initScript: "npm install",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-init-stream",
       name: "companion-init-stream",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/test",
       containerCwd: "/workspace",
@@ -4577,17 +4606,17 @@ describe("POST /api/sessions/create-stream", () => {
       name: "FailInit",
       slug: "fail-init",
       variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       initScript: "exit 1",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-fail-stream",
       name: "companion-fail-stream",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/test",
       containerCwd: "/workspace",
@@ -4637,15 +4666,15 @@ describe("POST /api/sessions/create-stream", () => {
       name: "Docker",
       slug: "docker",
       variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-git-stream",
       name: "companion-git-stream",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/repo",
       containerCwd: "/workspace",
@@ -4708,15 +4737,15 @@ describe("POST /api/sessions/create-stream", () => {
       name: "Docker",
       slug: "docker",
       variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "the-companion:latest",
+      baseImage: "iclaude:latest",
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("the-companion:latest");
+    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-fail-git",
       name: "companion-fail-git",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/repo",
       containerCwd: "/workspace",
@@ -5004,7 +5033,7 @@ describe("POST /api/sessions/:id/processes/system/:pid/kill", () => {
     });
     expect(res.status).toBe(403);
     const data = await res.json();
-    expect(data.error).toContain("Cannot kill the Companion server");
+    expect(data.error).toContain("Cannot kill iClaude server");
   });
 
   it("refuses to kill the session's own CLI process", async () => {

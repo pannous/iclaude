@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { DEFAULT_ANTHROPIC_MODEL, getSettings, updateSettings, type UpdateChannel } from "../settings-manager.js";
+import { DEFAULT_ANTHROPIC_MODEL, getSettings, updateSettings, type UpdateChannel, type AiProvider } from "../settings-manager.js";
 import { linearCache } from "../linear-cache.js";
 
 export function registerSettingsRoutes(api: Hono): void {
@@ -18,6 +18,7 @@ export function registerSettingsRoutes(api: Hono): void {
       aiValidationEnabled: settings.aiValidationEnabled,
       aiValidationAutoApprove: settings.aiValidationAutoApprove,
       aiValidationAutoDeny: settings.aiValidationAutoDeny,
+      aiProvider: settings.aiProvider,
       updateChannel: settings.updateChannel,
     });
   });
@@ -66,6 +67,9 @@ export function registerSettingsRoutes(api: Hono): void {
     if (body.aiValidationAutoDeny !== undefined && typeof body.aiValidationAutoDeny !== "boolean") {
       return c.json({ error: "aiValidationAutoDeny must be a boolean" }, 400);
     }
+    if (body.aiProvider !== undefined && body.aiProvider !== "openrouter" && body.aiProvider !== "claude") {
+      return c.json({ error: "aiProvider must be 'openrouter' or 'claude'" }, 400);
+    }
     if (body.updateChannel !== undefined && body.updateChannel !== "stable" && body.updateChannel !== "prerelease") {
       return c.json({ error: "updateChannel must be 'stable' or 'prerelease'" }, 400);
     }
@@ -77,6 +81,7 @@ export function registerSettingsRoutes(api: Hono): void {
       || body.editorTabEnabled !== undefined
       || body.aiValidationEnabled !== undefined || body.aiValidationAutoApprove !== undefined
       || body.aiValidationAutoDeny !== undefined
+      || body.aiProvider !== undefined
       || body.updateChannel !== undefined;
     if (!hasAnyField) {
       return c.json({ error: "At least one settings field is required" }, 400);
@@ -143,6 +148,10 @@ export function registerSettingsRoutes(api: Hono): void {
         typeof body.aiValidationAutoDeny === "boolean"
           ? body.aiValidationAutoDeny
           : undefined,
+      aiProvider:
+        body.aiProvider === "openrouter" || body.aiProvider === "claude"
+          ? (body.aiProvider as AiProvider)
+          : undefined,
       updateChannel:
         body.updateChannel === "stable" || body.updateChannel === "prerelease"
           ? (body.updateChannel as UpdateChannel)
@@ -162,6 +171,7 @@ export function registerSettingsRoutes(api: Hono): void {
       aiValidationEnabled: settings.aiValidationEnabled,
       aiValidationAutoApprove: settings.aiValidationAutoApprove,
       aiValidationAutoDeny: settings.aiValidationAutoDeny,
+      aiProvider: settings.aiProvider,
       updateChannel: settings.updateChannel,
     });
   });

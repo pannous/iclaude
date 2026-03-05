@@ -277,7 +277,6 @@ export interface AppSettings {
   aiValidationAutoApprove: boolean;
   aiValidationAutoDeny: boolean;
   updateChannel: "stable" | "prerelease";
-  // LOCAL: aiProvider toggles between openrouter and direct claude API
   aiProvider?: "openrouter" | "claude";
 }
 
@@ -818,7 +817,6 @@ export const api = {
     aiValidationAutoApprove?: boolean;
     aiValidationAutoDeny?: boolean;
     updateChannel?: "stable" | "prerelease";
-    // LOCAL: aiProvider toggles between openrouter and direct claude API
     aiProvider?: "openrouter" | "claude";
   }) => put<AppSettings>("/settings", data),
   verifyAnthropicKey: (apiKey: string) =>

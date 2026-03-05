@@ -751,7 +751,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
 
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-cc-muted">
-                    {loading ? "Loading..." : configured ? "Anthropic key configured" : "Anthropic key not configured"}
+                    {loading ? "Loading..." : aiProvider === "claude" ? "Using environment key" : configured ? "Anthropic key configured" : "Anthropic key not configured"}
                   </span>
                   <div className="flex items-center gap-2">
                     <button

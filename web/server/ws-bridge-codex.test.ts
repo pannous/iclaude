@@ -127,6 +127,7 @@ describe("attachCodexAdapterHandlers", () => {
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -883,6 +884,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationEnabled: true,
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
+        aiProvider: "openrouter",
         updateChannel: "stable",
         updatedAt: 0,
       });
@@ -1051,6 +1053,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationEnabled: false,  // disabled
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
+        aiProvider: "openrouter",
         updateChannel: "stable",
         updatedAt: 0,
       });
@@ -1089,6 +1092,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationEnabled: true,
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
+        aiProvider: "openrouter",
         updateChannel: "stable",
         updatedAt: 0,
       });
@@ -1192,6 +1196,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationEnabled: true,
         aiValidationAutoApprove: false,  // disabled
         aiValidationAutoDeny: true,
+        aiProvider: "openrouter",
         updateChannel: "stable",
         updatedAt: 0,
       });
@@ -1314,6 +1319,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiValidationEnabled: true,
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: false,  // disabled
+        aiProvider: "openrouter",
         updateChannel: "stable",
         updatedAt: 0,
       });
