@@ -42,6 +42,7 @@ import { discoverClaudeSessions } from "./claude-session-discovery.js";
 import { getClaudeSessionHistoryPage } from "./claude-session-history.js";
 import { verifyToken, getToken, getLanAddress, regenerateToken, getAllAddresses, isAuthEnabled } from "./auth-manager.js";
 import QRCode from "qrcode";
+import { isHomeServer } from "./constants.js";
 
 const UPDATE_CHECK_STALE_MS = 5 * 60 * 1000;
 const ROUTES_DIR = dirname(fileURLToPath(import.meta.url));
@@ -193,10 +194,12 @@ export function createRoutes(
         return { label: a.label, url: `http://${a.ip}:${port}`, qrDataUrl };
       }),
     );
-    // Add Universal Link QR for Listen app (opens app if installed, browser fallback otherwise)
-    const universalUrl = `https://claude.pannous.com/auth?token=${authToken}`;
-    const universalQr = await QRCode.toDataURL(universalUrl, { width: 256, margin: 2 });
-    qrCodes.unshift({ label: "Listen App / Browser", url: "https://claude.pannous.com", qrDataUrl: universalQr });
+    // Add Universal Link QR for Listen app (only on the author's home server)
+    if (isHomeServer()) {
+      const universalUrl = `https://claude.pannous.com/auth?token=${authToken}`;
+      const universalQr = await QRCode.toDataURL(universalUrl, { width: 256, margin: 2 });
+      qrCodes.unshift({ label: "Listen App / Browser", url: "https://claude.pannous.com", qrDataUrl: universalQr });
+    }
     return { qrCodes };
   }
 
