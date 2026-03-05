@@ -270,7 +270,7 @@ app.get("/auth", (c) => {
 // so this is the only way to bridge auth across the install boundary.
 app.get("/manifest.json", (c) => {
   const manifest = {
-    name: "iClaude",
+    name: "The Companion",
     short_name: "Companion",
     description: "Web UI for Claude Code and Codex",
     start_url: "/",

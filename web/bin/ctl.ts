@@ -469,10 +469,10 @@ Management commands:
   companion cron <subcommand>             Manage scheduled jobs
   companion skills <subcommand>           Manage Claude Code skills
   companion settings <subcommand>         Manage settings
-  companion assistant <subcommand>        Manage iClaude Assistant
+  companion assistant <subcommand>        Manage the Companion Assistant
 
 Global options:
-  --port <n>    Override iClaude API port (default: 3456, or COMPANION_PORT env)
+  --port <n>    Override the Companion API port (default: 3456, or COMPANION_PORT env)
 
 Run 'companion <command>' without subcommand for available subcommands.
 `);
@@ -521,7 +521,7 @@ export async function handleCtlCommand(command: string, rawArgv: string[]): Prom
     const message = e instanceof Error ? e.message : String(e);
     // Check if it's a connection error
     if (message.includes("ECONNREFUSED") || message.includes("fetch failed")) {
-      err(`Cannot connect to iClaude at ${base}. Is the server running?`);
+      err(`Cannot connect to The Companion at ${base}. Is the server running?`);
     }
     err(message);
   }

@@ -973,7 +973,7 @@ describe("codex websocket launcher", () => {
     mockGetContainerById.mockReturnValue({
       containerId: "abc123def456",
       name: "companion-codex",
-      image: "iclaude:latest",
+      image: "the-companion:latest",
       portMappings: [{ containerPort: 4502, hostPort: 55021 }],
       hostCwd: "/tmp/project",
       containerCwd: "/workspace",

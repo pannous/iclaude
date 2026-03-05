@@ -1146,7 +1146,7 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
                 Start a conversation
               </p>
               <p className="text-xs text-cc-muted leading-relaxed">
-                Send a message to begin working with iClaude.
+                Send a message to begin working with The Companion.
               </p>
             </>
           )}

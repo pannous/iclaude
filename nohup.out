@@ -1,0 +1,286 @@
+$ cd web && bun run dev
+$ bun dev.ts
+[31m[vite][0m $ vite
+[36m[dev][0m Watching server/ for changes (typecheck-gated restarts)
+[35m[vite][0m   VITE v6.4.1  ready in 201 ms
+[35m[vite][0m   ➜  Local:   http://localhost:2345/
+[35m[vite][0m   ➜  Network: http://192.168.1.177:2345/
+[35m[vite][0m   ➜  Network: http://192.168.1.208:2345/
+[35m[vite][0m   ➜  Network: http://169.254.133.209:2345/
+[31m[vite][0m 1:09:45 PM [vite] http proxy error: /api/sessions
+[31m[vite][0m AggregateError [ECONNREFUSED]: 
+[31m[vite][0m     at internalConnectMultiple (node:net:1201:49)
+[31m[vite][0m     at afterConnectMultiple (node:net:1791:7)
+[36m[api][0m [ws-bridge] Restored 69 session(s) from disk
+[36m[api][0m [server] Session persistence: /var/folders/x3/8vyvmvd936j2pzv4dc9yw68c0000gn/T/vibe-sessions
+[36m[api][0m [server] Recording enabled (dir: /Users/me/.companion/recordings, max: 100000 lines)
+[36m[api][0m Server running on http://localhost:3457
+[36m[api][0m   CLI WebSocket:     ws://localhost:3457/ws/cli/:sessionId
+[36m[api][0m   Browser WebSocket: ws://localhost:3457/ws/browser/:sessionId
+[36m[api][0m Dev mode: frontend at http://localhost:2345
+[36m[api][0m [cron-scheduler] Skipping one-shot "Ring the bell." — target time is in the past
+[36m[api][0m [cron-scheduler] Started 1 cron job(s)
+[36m[api][0m [ws-bridge] Browser connected for session cb697614-ce57-473b-a44a-4e1d287305f1 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 7bd7bc05-2517-4a36-8d85-6a635eb9bd4f (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 8b97b6de-30fc-4ad5-b0d9-9de2105b97ab (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session f2beaf4e-788b-4687-af5d-3f1d5299b254 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 89751fdd-16a1-451a-8984-0451585b325f (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 1ed73636-f878-4f61-9987-e7965f80f61d (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session c2e0e879-9490-4935-8c8d-23a2087f2076 (1 browsers)
+[36m[api][0m [ws-bridge] CLI not yet connected for session cb697614-ce57-473b-a44a-4e1d287305f1, queuing message
+[36m[api][0m [ws-bridge] Browser connected for session 95b44066-67fc-42a4-b6c4-fbdc5c391389 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 8b7df6e3-88bd-4898-a9c5-32dd151946ad (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session f0070c8e-65fe-406b-b4df-70cc7974059c (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 574c4556-1887-490f-b545-556e5d1b2254 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session dc228a46-ed22-49cb-8f56-54c96cbb5a20 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session fa79ee81-6679-4846-b167-2266faac1f12 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session c7f64738-a8a9-4afd-8e82-b897715d85cf (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session e9afc5fd-6b39-49b4-a33c-2eb0c721b8e8 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session e0b3502c-7ea9-445b-80d6-dac09a5fabe4 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 72d165f5-7d52-4a4d-9e85-16bf33e4dd48 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 57c81e92-d7a9-468b-a171-855ffe08e33e (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 35677103-1754-4b81-8601-7f7dd8fffeea (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 0bb3d579-fe6e-46f6-a815-11f2b34c08ab (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 6535b3cf-ff6b-48e6-81db-ed5e7d254955 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session fd225d65-a5d7-4b79-8073-cbb8f4fb6f92 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 9d7c0277-30ae-4dec-87a3-4017251b028d (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session f512ab2d-b750-497e-a1f7-2503a3c419e0 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 224da42f-5cf8-48be-8d44-409a45b715bb (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 42d47089-a967-4444-8954-110820bfb5a9 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session ad1aa679-dd58-457a-b835-0b5ec43e9d7b (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 6e249b9b-3173-4ae4-9ff3-cd2743507675 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 8a28d89c-13a3-49a2-9707-424b8ffe7acf (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 9333cc4f-352b-4996-9281-66d6e8752022 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 24fbe511-55fb-4232-bfa0-7def512036a4 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 7841ff02-5290-4f43-9f76-9a81fd8a5087 (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 9fe15313-1f6b-44b3-918e-8b865533155f (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 0859c487-d0dc-4ddd-9691-7fab302791bc (1 browsers)
+[36m[api][0m [ws-bridge] Backend still dead for session cb697614-ce57-473b-a44a-4e1d287305f1, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session cb697614-ce57-473b-a44a-4e1d287305f1 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session cb697614-ce57-473b-a44a-4e1d287305f1: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/cb697614-ce57-473b-a44a-4e1d287305f1 --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions --resume 4da78a87-c10e-4a1c-adb3-16335794879b -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 7bd7bc05-2517-4a36-8d85-6a635eb9bd4f, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 7bd7bc05-2517-4a36-8d85-6a635eb9bd4f (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 7bd7bc05-2517-4a36-8d85-6a635eb9bd4f: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/7bd7bc05-2517-4a36-8d85-6a635eb9bd4f --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 8b97b6de-30fc-4ad5-b0d9-9de2105b97ab, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 8b97b6de-30fc-4ad5-b0d9-9de2105b97ab (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 8b97b6de-30fc-4ad5-b0d9-9de2105b97ab: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/8b97b6de-30fc-4ad5-b0d9-9de2105b97ab --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session f2beaf4e-788b-4687-af5d-3f1d5299b254, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session f2beaf4e-788b-4687-af5d-3f1d5299b254 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session f2beaf4e-788b-4687-af5d-3f1d5299b254: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/f2beaf4e-788b-4687-af5d-3f1d5299b254 --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 89751fdd-16a1-451a-8984-0451585b325f, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 89751fdd-16a1-451a-8984-0451585b325f (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 89751fdd-16a1-451a-8984-0451585b325f: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/89751fdd-16a1-451a-8984-0451585b325f --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 1ed73636-f878-4f61-9987-e7965f80f61d, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 1ed73636-f878-4f61-9987-e7965f80f61d (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 1ed73636-f878-4f61-9987-e7965f80f61d: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/1ed73636-f878-4f61-9987-e7965f80f61d --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session c2e0e879-9490-4935-8c8d-23a2087f2076, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session c2e0e879-9490-4935-8c8d-23a2087f2076 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session c2e0e879-9490-4935-8c8d-23a2087f2076: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/c2e0e879-9490-4935-8c8d-23a2087f2076 --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 95b44066-67fc-42a4-b6c4-fbdc5c391389, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 95b44066-67fc-42a4-b6c4-fbdc5c391389 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 95b44066-67fc-42a4-b6c4-fbdc5c391389: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/95b44066-67fc-42a4-b6c4-fbdc5c391389 --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 8b7df6e3-88bd-4898-a9c5-32dd151946ad, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 8b7df6e3-88bd-4898-a9c5-32dd151946ad (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 8b7df6e3-88bd-4898-a9c5-32dd151946ad: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/8b7df6e3-88bd-4898-a9c5-32dd151946ad --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session f0070c8e-65fe-406b-b4df-70cc7974059c, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session f0070c8e-65fe-406b-b4df-70cc7974059c (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session f0070c8e-65fe-406b-b4df-70cc7974059c: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/f0070c8e-65fe-406b-b4df-70cc7974059c --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 574c4556-1887-490f-b545-556e5d1b2254, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 574c4556-1887-490f-b545-556e5d1b2254 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 574c4556-1887-490f-b545-556e5d1b2254: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/574c4556-1887-490f-b545-556e5d1b2254 --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session dc228a46-ed22-49cb-8f56-54c96cbb5a20, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session dc228a46-ed22-49cb-8f56-54c96cbb5a20 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session dc228a46-ed22-49cb-8f56-54c96cbb5a20: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/dc228a46-ed22-49cb-8f56-54c96cbb5a20 --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session fa79ee81-6679-4846-b167-2266faac1f12, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session fa79ee81-6679-4846-b167-2266faac1f12 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session fa79ee81-6679-4846-b167-2266faac1f12: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/fa79ee81-6679-4846-b167-2266faac1f12 --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session c7f64738-a8a9-4afd-8e82-b897715d85cf, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session c7f64738-a8a9-4afd-8e82-b897715d85cf (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session c7f64738-a8a9-4afd-8e82-b897715d85cf: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/c7f64738-a8a9-4afd-8e82-b897715d85cf --print --output-format stream-json --input-format stream-json --verbose --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session e9afc5fd-6b39-49b4-a33c-2eb0c721b8e8, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session e9afc5fd-6b39-49b4-a33c-2eb0c721b8e8 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session e9afc5fd-6b39-49b4-a33c-2eb0c721b8e8: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/e9afc5fd-6b39-49b4-a33c-2eb0c721b8e8 --print --output-format stream-json --input-format stream-json --verbose --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session e0b3502c-7ea9-445b-80d6-dac09a5fabe4, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session e0b3502c-7ea9-445b-80d6-dac09a5fabe4 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session e0b3502c-7ea9-445b-80d6-dac09a5fabe4: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/e0b3502c-7ea9-445b-80d6-dac09a5fabe4 --print --output-format stream-json --input-format stream-json --verbose -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 72d165f5-7d52-4a4d-9e85-16bf33e4dd48, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 72d165f5-7d52-4a4d-9e85-16bf33e4dd48 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 72d165f5-7d52-4a4d-9e85-16bf33e4dd48: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/72d165f5-7d52-4a4d-9e85-16bf33e4dd48 --print --output-format stream-json --input-format stream-json --verbose --permission-mode default -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 57c81e92-d7a9-468b-a171-855ffe08e33e, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 57c81e92-d7a9-468b-a171-855ffe08e33e (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 57c81e92-d7a9-468b-a171-855ffe08e33e: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/57c81e92-d7a9-468b-a171-855ffe08e33e --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] CLI connected for session 7bd7bc05-2517-4a36-8d85-6a635eb9bd4f
+[36m[api][0m [cli-launcher] Session 7bd7bc05-2517-4a36-8d85-6a635eb9bd4f connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session cb697614-ce57-473b-a44a-4e1d287305f1
+[36m[api][0m [ws-bridge] Flushing 1 queued message(s) on CLI connect for session cb697614-ce57-473b-a44a-4e1d287305f1
+[36m[api][0m [cli-launcher] Session cb697614-ce57-473b-a44a-4e1d287305f1 connected via WebSocket
+[36m[api][0m [ws-bridge] Backend still dead for session 35677103-1754-4b81-8601-7f7dd8fffeea, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 35677103-1754-4b81-8601-7f7dd8fffeea (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 35677103-1754-4b81-8601-7f7dd8fffeea: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/35677103-1754-4b81-8601-7f7dd8fffeea --print --output-format stream-json --input-format stream-json --verbose --permission-mode default -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 0bb3d579-fe6e-46f6-a815-11f2b34c08ab, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 0bb3d579-fe6e-46f6-a815-11f2b34c08ab (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 0bb3d579-fe6e-46f6-a815-11f2b34c08ab: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/0bb3d579-fe6e-46f6-a815-11f2b34c08ab --print --output-format stream-json --input-format stream-json --verbose --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 6535b3cf-ff6b-48e6-81db-ed5e7d254955, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 6535b3cf-ff6b-48e6-81db-ed5e7d254955 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 6535b3cf-ff6b-48e6-81db-ed5e7d254955: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/6535b3cf-ff6b-48e6-81db-ed5e7d254955 --print --output-format stream-json --input-format stream-json --verbose --permission-mode default -p 
+[36m[api][0m [ws-bridge] Backend still dead for session fd225d65-a5d7-4b79-8073-cbb8f4fb6f92, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session fd225d65-a5d7-4b79-8073-cbb8f4fb6f92 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session fd225d65-a5d7-4b79-8073-cbb8f4fb6f92: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/fd225d65-a5d7-4b79-8073-cbb8f4fb6f92 --print --output-format stream-json --input-format stream-json --verbose --permission-mode default -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 9d7c0277-30ae-4dec-87a3-4017251b028d, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 9d7c0277-30ae-4dec-87a3-4017251b028d (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 9d7c0277-30ae-4dec-87a3-4017251b028d: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/9d7c0277-30ae-4dec-87a3-4017251b028d --print --output-format stream-json --input-format stream-json --verbose --permission-mode default -p 
+[36m[api][0m [ws-bridge] Backend still dead for session f512ab2d-b750-497e-a1f7-2503a3c419e0, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session f512ab2d-b750-497e-a1f7-2503a3c419e0 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session f512ab2d-b750-497e-a1f7-2503a3c419e0: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/f512ab2d-b750-497e-a1f7-2503a3c419e0 --print --output-format stream-json --input-format stream-json --verbose --permission-mode default -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 224da42f-5cf8-48be-8d44-409a45b715bb, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 224da42f-5cf8-48be-8d44-409a45b715bb (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 224da42f-5cf8-48be-8d44-409a45b715bb: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/224da42f-5cf8-48be-8d44-409a45b715bb --print --output-format stream-json --input-format stream-json --verbose --permission-mode default -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 42d47089-a967-4444-8954-110820bfb5a9, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 42d47089-a967-4444-8954-110820bfb5a9 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 42d47089-a967-4444-8954-110820bfb5a9: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/42d47089-a967-4444-8954-110820bfb5a9 --print --output-format stream-json --input-format stream-json --verbose --permission-mode default -p 
+[36m[api][0m [ws-bridge] Backend still dead for session ad1aa679-dd58-457a-b835-0b5ec43e9d7b, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session ad1aa679-dd58-457a-b835-0b5ec43e9d7b (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session ad1aa679-dd58-457a-b835-0b5ec43e9d7b: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/ad1aa679-dd58-457a-b835-0b5ec43e9d7b --print --output-format stream-json --input-format stream-json --verbose --permission-mode default -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 6e249b9b-3173-4ae4-9ff3-cd2743507675, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 6e249b9b-3173-4ae4-9ff3-cd2743507675 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 6e249b9b-3173-4ae4-9ff3-cd2743507675: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/6e249b9b-3173-4ae4-9ff3-cd2743507675 --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 8a28d89c-13a3-49a2-9707-424b8ffe7acf, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 8a28d89c-13a3-49a2-9707-424b8ffe7acf (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 8a28d89c-13a3-49a2-9707-424b8ffe7acf: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/8a28d89c-13a3-49a2-9707-424b8ffe7acf --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 9333cc4f-352b-4996-9281-66d6e8752022, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 9333cc4f-352b-4996-9281-66d6e8752022 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 9333cc4f-352b-4996-9281-66d6e8752022: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/9333cc4f-352b-4996-9281-66d6e8752022 --print --output-format stream-json --input-format stream-json --verbose --permission-mode default -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 24fbe511-55fb-4232-bfa0-7def512036a4, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 24fbe511-55fb-4232-bfa0-7def512036a4 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 24fbe511-55fb-4232-bfa0-7def512036a4: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/24fbe511-55fb-4232-bfa0-7def512036a4 --print --output-format stream-json --input-format stream-json --verbose --permission-mode default -p 
+[36m[api][0m [ws-bridge] CLI connected for session 8b97b6de-30fc-4ad5-b0d9-9de2105b97ab
+[36m[api][0m [cli-launcher] Session 8b97b6de-30fc-4ad5-b0d9-9de2105b97ab connected via WebSocket
+[36m[api][0m [ws-bridge] Backend still dead for session 7841ff02-5290-4f43-9f76-9a81fd8a5087, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 7841ff02-5290-4f43-9f76-9a81fd8a5087 (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 7841ff02-5290-4f43-9f76-9a81fd8a5087: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/7841ff02-5290-4f43-9f76-9a81fd8a5087 --print --output-format stream-json --input-format stream-json --verbose --permission-mode default -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 9fe15313-1f6b-44b3-918e-8b865533155f, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 9fe15313-1f6b-44b3-918e-8b865533155f (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 9fe15313-1f6b-44b3-918e-8b865533155f: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/9fe15313-1f6b-44b3-918e-8b865533155f --print --output-format stream-json --input-format stream-json --verbose -p 
+[36m[api][0m [ws-bridge] Backend still dead for session 0859c487-d0dc-4ddd-9691-7fab302791bc, requesting relaunch
+[36m[api][0m [server] Auto-relaunching CLI for session 0859c487-d0dc-4ddd-9691-7fab302791bc (attempt 1, cooldown 5000ms)
+[36m[api][0m [cli-launcher] Spawning session 0859c487-d0dc-4ddd-9691-7fab302791bc: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/0859c487-d0dc-4ddd-9691-7fab302791bc --print --output-format stream-json --input-format stream-json --verbose --model claude-opus-4-6 --permission-mode bypassPermissions --resume 0ea03a52-c5bf-4880-afe3-57aa396705aa -p 
+[36m[api][0m [ws-bridge] CLI connected for session f2beaf4e-788b-4687-af5d-3f1d5299b254
+[36m[api][0m [cli-launcher] Session f2beaf4e-788b-4687-af5d-3f1d5299b254 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 1ed73636-f878-4f61-9987-e7965f80f61d
+[36m[api][0m [cli-launcher] Session 1ed73636-f878-4f61-9987-e7965f80f61d connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 89751fdd-16a1-451a-8984-0451585b325f
+[36m[api][0m [cli-launcher] Session 89751fdd-16a1-451a-8984-0451585b325f connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session c2e0e879-9490-4935-8c8d-23a2087f2076
+[36m[api][0m [cli-launcher] Session c2e0e879-9490-4935-8c8d-23a2087f2076 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 57c81e92-d7a9-468b-a171-855ffe08e33e
+[36m[api][0m [cli-launcher] Session 57c81e92-d7a9-468b-a171-855ffe08e33e connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session dc228a46-ed22-49cb-8f56-54c96cbb5a20
+[36m[api][0m [cli-launcher] Session dc228a46-ed22-49cb-8f56-54c96cbb5a20 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 6535b3cf-ff6b-48e6-81db-ed5e7d254955
+[36m[api][0m [cli-launcher] Session 6535b3cf-ff6b-48e6-81db-ed5e7d254955 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 72d165f5-7d52-4a4d-9e85-16bf33e4dd48
+[36m[api][0m [cli-launcher] Session 72d165f5-7d52-4a4d-9e85-16bf33e4dd48 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session fa79ee81-6679-4846-b167-2266faac1f12
+[36m[api][0m [cli-launcher] Session fa79ee81-6679-4846-b167-2266faac1f12 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session f512ab2d-b750-497e-a1f7-2503a3c419e0
+[36m[api][0m [cli-launcher] Session f512ab2d-b750-497e-a1f7-2503a3c419e0 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 9333cc4f-352b-4996-9281-66d6e8752022
+[36m[api][0m [cli-launcher] Session 9333cc4f-352b-4996-9281-66d6e8752022 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session fd225d65-a5d7-4b79-8073-cbb8f4fb6f92
+[36m[api][0m [cli-launcher] Session fd225d65-a5d7-4b79-8073-cbb8f4fb6f92 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 35677103-1754-4b81-8601-7f7dd8fffeea
+[36m[api][0m [cli-launcher] Session 35677103-1754-4b81-8601-7f7dd8fffeea connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 9d7c0277-30ae-4dec-87a3-4017251b028d
+[36m[api][0m [cli-launcher] Session 9d7c0277-30ae-4dec-87a3-4017251b028d connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 8a28d89c-13a3-49a2-9707-424b8ffe7acf
+[36m[api][0m [cli-launcher] Session 8a28d89c-13a3-49a2-9707-424b8ffe7acf connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 224da42f-5cf8-48be-8d44-409a45b715bb
+[36m[api][0m [cli-launcher] Session 224da42f-5cf8-48be-8d44-409a45b715bb connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session ad1aa679-dd58-457a-b835-0b5ec43e9d7b
+[36m[api][0m [cli-launcher] Session ad1aa679-dd58-457a-b835-0b5ec43e9d7b connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 42d47089-a967-4444-8954-110820bfb5a9
+[36m[api][0m [cli-launcher] Session 42d47089-a967-4444-8954-110820bfb5a9 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 6e249b9b-3173-4ae4-9ff3-cd2743507675
+[36m[api][0m [cli-launcher] Session 6e249b9b-3173-4ae4-9ff3-cd2743507675 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 0859c487-d0dc-4ddd-9691-7fab302791bc
+[36m[api][0m [cli-launcher] Session 0859c487-d0dc-4ddd-9691-7fab302791bc connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 7841ff02-5290-4f43-9f76-9a81fd8a5087
+[36m[api][0m [cli-launcher] Session 7841ff02-5290-4f43-9f76-9a81fd8a5087 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 24fbe511-55fb-4232-bfa0-7def512036a4
+[36m[api][0m [cli-launcher] Session 24fbe511-55fb-4232-bfa0-7def512036a4 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 574c4556-1887-490f-b545-556e5d1b2254
+[36m[api][0m [cli-launcher] Session 574c4556-1887-490f-b545-556e5d1b2254 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 95b44066-67fc-42a4-b6c4-fbdc5c391389
+[36m[api][0m [cli-launcher] Session 95b44066-67fc-42a4-b6c4-fbdc5c391389 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session f0070c8e-65fe-406b-b4df-70cc7974059c
+[36m[api][0m [cli-launcher] Session f0070c8e-65fe-406b-b4df-70cc7974059c connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session e9afc5fd-6b39-49b4-a33c-2eb0c721b8e8
+[36m[api][0m [cli-launcher] Session e9afc5fd-6b39-49b4-a33c-2eb0c721b8e8 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 8b7df6e3-88bd-4898-a9c5-32dd151946ad
+[36m[api][0m [cli-launcher] Session 8b7df6e3-88bd-4898-a9c5-32dd151946ad connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session c7f64738-a8a9-4afd-8e82-b897715d85cf
+[36m[api][0m [cli-launcher] Session c7f64738-a8a9-4afd-8e82-b897715d85cf connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 0bb3d579-fe6e-46f6-a815-11f2b34c08ab
+[36m[api][0m [cli-launcher] Session 0bb3d579-fe6e-46f6-a815-11f2b34c08ab connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session e0b3502c-7ea9-445b-80d6-dac09a5fabe4
+[36m[api][0m [cli-launcher] Session e0b3502c-7ea9-445b-80d6-dac09a5fabe4 connected via WebSocket
+[36m[api][0m [ws-bridge] CLI connected for session 9fe15313-1f6b-44b3-918e-8b865533155f
+[36m[api][0m [cli-launcher] Session 9fe15313-1f6b-44b3-918e-8b865533155f connected via WebSocket
+[36m[api][0m [ws-bridge] Browser connected for session cb697614-ce57-473b-a44a-4e1d287305f1 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 7bd7bc05-2517-4a36-8d85-6a635eb9bd4f (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session f2beaf4e-788b-4687-af5d-3f1d5299b254 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 8b97b6de-30fc-4ad5-b0d9-9de2105b97ab (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 89751fdd-16a1-451a-8984-0451585b325f (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 1ed73636-f878-4f61-9987-e7965f80f61d (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session c2e0e879-9490-4935-8c8d-23a2087f2076 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 95b44066-67fc-42a4-b6c4-fbdc5c391389 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session dc228a46-ed22-49cb-8f56-54c96cbb5a20 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 8b7df6e3-88bd-4898-a9c5-32dd151946ad (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session f0070c8e-65fe-406b-b4df-70cc7974059c (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 574c4556-1887-490f-b545-556e5d1b2254 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session fa79ee81-6679-4846-b167-2266faac1f12 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session e9afc5fd-6b39-49b4-a33c-2eb0c721b8e8 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session c7f64738-a8a9-4afd-8e82-b897715d85cf (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 72d165f5-7d52-4a4d-9e85-16bf33e4dd48 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session e0b3502c-7ea9-445b-80d6-dac09a5fabe4 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 57c81e92-d7a9-468b-a171-855ffe08e33e (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 35677103-1754-4b81-8601-7f7dd8fffeea (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 0bb3d579-fe6e-46f6-a815-11f2b34c08ab (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 6535b3cf-ff6b-48e6-81db-ed5e7d254955 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session fd225d65-a5d7-4b79-8073-cbb8f4fb6f92 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 9d7c0277-30ae-4dec-87a3-4017251b028d (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session f512ab2d-b750-497e-a1f7-2503a3c419e0 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 224da42f-5cf8-48be-8d44-409a45b715bb (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 42d47089-a967-4444-8954-110820bfb5a9 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session ad1aa679-dd58-457a-b835-0b5ec43e9d7b (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 6e249b9b-3173-4ae4-9ff3-cd2743507675 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 8a28d89c-13a3-49a2-9707-424b8ffe7acf (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 9fe15313-1f6b-44b3-918e-8b865533155f (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 0859c487-d0dc-4ddd-9691-7fab302791bc (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 9333cc4f-352b-4996-9281-66d6e8752022 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 24fbe511-55fb-4232-bfa0-7def512036a4 (2 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 7841ff02-5290-4f43-9f76-9a81fd8a5087 (2 browsers)
+[36m[api][0m [ws-bridge] CLI disconnected for session 9fe15313-1f6b-44b3-918e-8b865533155f
+[36m[api][0m [cli-launcher] Session 9fe15313-1f6b-44b3-918e-8b865533155f exited (code=143)
+[36m[api][0m [cli-launcher] Spawning session 9fe15313-1f6b-44b3-918e-8b865533155f: /opt/homebrew/bin/claude --sdk-url ws://localhost:3457/ws/cli/9fe15313-1f6b-44b3-918e-8b865533155f --print --output-format stream-json --input-format stream-json --verbose -p 
+[36m[api][0m [ws-bridge] Browser disconnected for session 9fe15313-1f6b-44b3-918e-8b865533155f (1 browsers)
+[36m[api][0m [ws-bridge] Browser connected for session 9fe15313-1f6b-44b3-918e-8b865533155f (2 browsers)
+[36m[api][0m [ws-bridge] CLI not yet connected for session 9fe15313-1f6b-44b3-918e-8b865533155f, queuing message
+[36m[api][0m [ws-bridge] CLI connected for session 9fe15313-1f6b-44b3-918e-8b865533155f
+[36m[api][0m [ws-bridge] Flushing 1 queued message(s) on CLI connect for session 9fe15313-1f6b-44b3-918e-8b865533155f
+[36m[api][0m [cli-launcher] Session 9fe15313-1f6b-44b3-918e-8b865533155f connected via WebSocket
+[31m[vite][0m 1:13:32 PM [vite] ws proxy socket error:
+[31m[vite][0m Error: read ECONNRESET
+[31m[vite][0m     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+[31m[vite][0m 1:13:32 PM [vite] ws proxy socket error:
+[31m[vite][0m Error: read ECONNRESET
+[31m[vite][0m     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+[31m[vite][0m 1:13:32 PM [vite] ws proxy socket error:
+[31m[vite][0m Error: read ECONNRESET
+[31m[vite][0m     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+[36m[api][0m [ws-bridge] Browser disconnected for session 8a28d89c-13a3-49a2-9707-424b8ffe7acf (1 browsers)
+[36m[api][0m [ws-bridge] Browser disconnected for session 1ed73636-f878-4f61-9987-e7965f80f61d (1 browsers)
+[36m[api][0m [ws-bridge] Browser disconnected for session 95b44066-67fc-42a4-b6c4-fbdc5c391389 (1 browsers)
+error: script "dev" was terminated by signal SIGHUP (Terminal hung up)
+error: script "dev" was terminated by signal SIGHUP (Terminal hung up)
+./start.sh: line 1: 94458 Hangup: 1               bun run dev

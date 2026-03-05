@@ -116,7 +116,7 @@ export class ChatBot {
     // Find an agent configured to handle this platform
     const agent = this.findAgentForPlatform(adapterName, message.text);
     if (!agent) {
-      await thread.post("No agent is configured to handle this platform. Configure an agent with a chat trigger in iClaude.");
+      await thread.post("No agent is configured to handle this platform. Configure an agent with a chat trigger in The Companion.");
       return;
     }
 
@@ -130,7 +130,7 @@ export class ChatBot {
       });
 
       if (!sessionInfo) {
-        await thread.post("Failed to start agent session. Check iClaude for details.");
+        await thread.post("Failed to start agent session. Check The Companion for details.");
         return;
       }
 

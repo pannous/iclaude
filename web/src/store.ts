@@ -4,7 +4,6 @@ import type { UpdateInfo, PRStatusResponse, CreationProgressEvent, LinearIssue }
 import { safeStorage } from "./utils/safe-storage.js";
 import { AUTH_STORAGE_KEY } from "./utils/auth-constants.js";
 import { type TaskPanelConfig, getInitialTaskPanelConfig, getDefaultConfig, persistTaskPanelConfig } from "./components/task-panel-sections.js";
-import { stopReadback } from "./utils/readback.js";
 
 function setInMap<K, V>(map: Map<K, V>, key: K, value: V): Map<K, V> {
   const next = new Map(map);
@@ -501,7 +500,6 @@ export const useStore = create<AppState>((set) => ({
     set({ taskPanelConfig: config });
   },
   newSession: () => {
-    stopReadback();
     safeStorage.removeItem("cc-current-session");
     set((s) => ({ currentSessionId: null, activeTab: "chat", homeResetKey: s.homeResetKey + 1 }));
   },

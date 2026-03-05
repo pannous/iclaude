@@ -14,7 +14,6 @@ import { useMentionMenu } from "../utils/use-mention-menu.js";
 
 import { readFileAsBase64, type ImageAttachment } from "../utils/image.js";
 import { scanContent } from "../utils/result-scanner.js";
-import { tryClientCommand } from "../utils/client-commands.js";
 
 // LOCAL: slugify for panel names
 function slugify(input: string): string {
@@ -372,19 +371,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   function handleSend() {
     if (isListening) recognitionRef.current?.stop();
     const msg = autoCorrectSlashCommand(text.trim());
-    if (!msg) return;
-
-    // Client-side commands are consumed silently — never sent to the agent.
-    if (tryClientCommand(msg)) {
-      setText("");
-      setSlashMenuOpen(false);
-      setCompletionSuggestion(null);
-      if (textareaRef.current) textareaRef.current.style.height = "auto";
-      textareaRef.current?.focus();
-      return;
-    }
-
-    if (!isConnected) return;
+    if (!msg || !isConnected) return;
 
     const store = useStore.getState();
     const msgId = `user-${Date.now()}-${++idCounter}`;

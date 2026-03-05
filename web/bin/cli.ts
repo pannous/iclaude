@@ -35,7 +35,7 @@ Management commands (requires running server):
   cron        Manage scheduled jobs (list, get, create, update, delete, toggle, run)
   skills      Manage Claude Code skills (list, get, create, update, delete)
   settings    Manage settings (get, set)
-  assistant   Manage iClaude Assistant (status, launch, stop, config)
+  assistant   Manage the Companion Assistant (status, launch, stop, config)
 
 Options:
   --port <n>  Override the default port (default: 3456)
@@ -105,13 +105,13 @@ switch (command) {
       const { status } = await import("../server/service.js");
       const result = await status();
       if (!result.installed) {
-        console.log("iClaude is not installed as a service.");
+        console.log("The Companion is not installed as a service.");
         console.log("Run: companion install");
       } else if (result.running) {
-        console.log(`iClaude is running (PID: ${result.pid})`);
+        console.log(`The Companion is running (PID: ${result.pid})`);
         console.log(`  URL: http://localhost:${result.port}`);
       } else {
-        console.log("iClaude is installed but not running.");
+        console.log("The Companion is installed but not running.");
         console.log("Check logs at ~/.companion/logs/");
       }
     }

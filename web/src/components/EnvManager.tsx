@@ -14,7 +14,7 @@ interface VarRow {
 
 type Tab = "variables" | "docker" | "ports" | "init";
 
-const DEFAULT_DOCKERFILE = `FROM iclaude:latest
+const DEFAULT_DOCKERFILE = `FROM the-companion:latest
 
 # Add project-specific dependencies here
 # RUN apt-get update && apt-get install -y ...
@@ -604,9 +604,9 @@ export function EnvManager({ onClose, embedded = false }: Props) {
             className="w-full px-3 py-2.5 min-h-[44px] text-sm bg-cc-bg rounded-lg text-cc-fg focus:outline-none focus:ring-1 focus:ring-cc-primary/40 transition-shadow"
           >
             <option value="">None (local execution)</option>
-            <option value="iclaude:latest">iclaude:latest</option>
+            <option value="the-companion:latest">the-companion:latest</option>
             {availableImages
-              .filter((img) => img !== "iclaude:latest")
+              .filter((img) => img !== "the-companion:latest")
               .map((img) => (
                 <option key={img} value={img}>{img}</option>
               ))}

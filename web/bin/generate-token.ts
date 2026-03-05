@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Generate (or regenerate) iClaude auth token.
+ * Generate (or regenerate) the Companion auth token.
  *
  * Usage:
  *   bun run generate-token          # show current or auto-generated token

@@ -1955,10 +1955,7 @@ export function createRoutes(
       return c.json({ error: "No active tunnel" }, 400);
     }
     const token = getToken();
-    // Encode tunnel URL into the claude.pannous.com universal link so iOS Listen app
-    // can intercept via Associated Domains and set both token + host automatically
-    const tunnelHost = new URL(status.url).host;
-    const loginUrl = `https://claude.pannous.com/auth?token=${token}&host=${encodeURIComponent(tunnelHost)}`;
+    const loginUrl = `${status.url}/?token=${token}`;
     const qrDataUrl = await QRCode.toDataURL(loginUrl, { width: 256, margin: 2 });
     return c.json({ url: status.url, qrDataUrl });
   });

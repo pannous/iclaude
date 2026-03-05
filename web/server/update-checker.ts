@@ -11,7 +11,7 @@ function readCurrentVersion(): string {
   return JSON.parse(readFileSync(packageJsonPath, "utf-8")).version;
 }
 
-const NPM_REGISTRY_BASE = "https://registry.npmjs.org/iclaude";
+const NPM_REGISTRY_BASE = "https://registry.npmjs.org/the-companion";
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const INITIAL_DELAY_MS = 10_000; // 10 seconds after boot
 

@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 // ---------------------------------------------------------------------------
 
 export interface ContainerConfig {
-  /** Docker image to use (e.g. "iclaude:latest", "node:22-slim") */
+  /** Docker image to use (e.g. "the-companion:latest", "node:22-slim") */
   image: string;
   /** Container ports to expose (e.g. [3000, 8080]) */
   ports: number[];
@@ -55,7 +55,7 @@ const CONTAINER_BOOT_TIMEOUT_MS = 20_000;
 const WORKSPACE_COPY_TIMEOUT_MS = 15 * 60_000; // 15 min for large repos
 const IMAGE_PULL_TIMEOUT_MS = 300_000; // 5 min for pulling images
 
-const DOCKER_REGISTRY = "docker.io/pannous"; // LOCAL: fork uses pannous docker hub
+const DOCKER_REGISTRY = "docker.io/stangirard";
 
 const CONTAINER_WORKSPACE_PATH = "/workspace";
 const HOST_CLAUDE_MOUNT_PATH = "/companion-host-claude";
@@ -830,7 +830,7 @@ export class ContainerManager {
    * Build a Docker image from a provided Dockerfile path.
    * Returns the build output log. Throws on failure.
    */
-  buildImage(dockerfilePath: string, tag: string = "iclaude:latest"): string {
+  buildImage(dockerfilePath: string, tag: string = "the-companion:latest"): string {
     const contextDir = dockerfilePath.replace(/\/[^/]+$/, "") || ".";
     try {
       const output = exec(
@@ -939,8 +939,8 @@ export class ContainerManager {
    * Return the Docker Hub remote path for a default image, or null for non-default images.
    */
   static getRegistryImage(localTag: string): string | null {
-    if (localTag === "iclaude:latest") {
-      return `${DOCKER_REGISTRY}/iclaude:latest`;
+    if (localTag === "the-companion:latest") {
+      return `${DOCKER_REGISTRY}/the-companion:latest`;
     }
     return null;
   }

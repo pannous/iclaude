@@ -123,10 +123,10 @@ export function registerSystemRoutes(
     setTimeout(async () => {
       try {
         console.log(
-          `[update] Updating iclaude to ${state.latestVersion}...`,
+          `[update] Updating the-companion to ${state.latestVersion}...`,
         );
         const proc = Bun.spawn(
-          ["bun", "install", "-g", `iclaude@${state.latestVersion}`],
+          ["bun", "install", "-g", `the-companion@${state.latestVersion}`],
           { stdout: "pipe", stderr: "pipe" },
         );
         const exitCode = await proc.exited;
@@ -152,7 +152,7 @@ export function registerSystemRoutes(
         const isLinux = process.platform === "linux";
         const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
         const restartCmd = isLinux
-          ? ["systemctl", "--user", "restart", "iclaude.service"]
+          ? ["systemctl", "--user", "restart", "the-companion.service"]
           : uid !== undefined
             ? ["launchctl", "kickstart", "-k", `gui/${uid}/sh.thecompanion.app`]
             : ["launchctl", "kickstart", "-k", "sh.thecompanion.app"];

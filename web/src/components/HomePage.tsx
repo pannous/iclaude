@@ -866,9 +866,9 @@ export function HomePage() {
       <div className="w-full max-w-2xl">
         {/* Logo + Title */}
         <div className="flex flex-col items-center justify-center mb-3 sm:mb-4">
-          <img src={logoSrc} alt="iClaude" className="w-16 h-16 sm:w-20 sm:h-20 mb-2.5" />
+          <img src={logoSrc} alt="The Companion" className="w-16 h-16 sm:w-20 sm:h-20 mb-2.5" />
           <h1 className="text-2xl sm:text-[2rem] font-semibold tracking-tight text-cc-fg">
-            iClaude
+            The Companion
           </h1>
         </div>
 

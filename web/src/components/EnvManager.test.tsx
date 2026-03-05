@@ -70,7 +70,7 @@ beforeEach(() => {
   // Default: one env, Docker available
   mockListEnvs.mockResolvedValue([makeEnv()]);
   mockGetContainerStatus.mockResolvedValue({ available: true, version: "27.5.1" });
-  mockGetContainerImages.mockResolvedValue(["iclaude:latest", "node:20"]);
+  mockGetContainerImages.mockResolvedValue(["the-companion:latest", "node:20"]);
   mockUpdateEnv.mockResolvedValue({});
   mockCreateEnv.mockResolvedValue({});
   mockDeleteEnv.mockResolvedValue({});
@@ -607,11 +607,11 @@ describe("EnvManager docker tab", () => {
     const select = screen.getByRole("combobox") as HTMLSelectElement;
     expect(select).toBeInTheDocument();
 
-    // Options: None, iclaude:latest, node:20
+    // Options: None, the-companion:latest, node:20
     const options = within(select).getAllByRole("option");
     expect(options.length).toBe(3);
     expect(options[0]).toHaveTextContent("None (local execution)");
-    expect(options[1]).toHaveTextContent("iclaude:latest");
+    expect(options[1]).toHaveTextContent("the-companion:latest");
     expect(options[2]).toHaveTextContent("node:20");
   });
 
@@ -635,7 +635,7 @@ describe("EnvManager docker tab", () => {
     fireEvent.click(screen.getByText("Use template"));
 
     const textarea = screen.getByPlaceholderText("# Custom Dockerfile content...") as HTMLTextAreaElement;
-    expect(textarea.value).toContain("FROM iclaude:latest");
+    expect(textarea.value).toContain("FROM the-companion:latest");
   });
 
   it("shows image pull status badges", async () => {
@@ -740,7 +740,7 @@ describe("EnvManager docker tab", () => {
     // Switch to docker tab and set base image
     fireEvent.click(screen.getByRole("button", { name: "docker" }));
     const select = screen.getByRole("combobox") as HTMLSelectElement;
-    fireEvent.change(select, { target: { value: "iclaude:latest" } });
+    fireEvent.change(select, { target: { value: "the-companion:latest" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
@@ -748,7 +748,7 @@ describe("EnvManager docker tab", () => {
       expect(mockCreateEnv).toHaveBeenCalledWith(
         "docker-env",
         {},
-        expect.objectContaining({ baseImage: "iclaude:latest" }),
+        expect.objectContaining({ baseImage: "the-companion:latest" }),
       );
     });
   });
@@ -1025,14 +1025,14 @@ describe("EnvManager existing env edit — Docker baseImage update", () => {
     // Docker controls are visible in existing env edit mode.
     const baseImageSelect = screen.getAllByRole("combobox")[0] as HTMLSelectElement;
     expect(baseImageSelect.value).toBe("");
-    fireEvent.change(baseImageSelect, { target: { value: "iclaude:latest" } });
+    fireEvent.change(baseImageSelect, { target: { value: "the-companion:latest" } });
 
     fireEvent.click(screen.getByText("Save"));
 
     await waitFor(() => {
       expect(mockUpdateEnv).toHaveBeenCalledWith(
         "companion",
-        expect.objectContaining({ baseImage: "iclaude:latest" }),
+        expect.objectContaining({ baseImage: "the-companion:latest" }),
       );
     });
   });

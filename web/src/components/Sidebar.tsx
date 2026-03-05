@@ -645,7 +645,7 @@ export function Sidebar() {
         {/* LOCAL: Link to GitHub repo */}
         <a href="https://github.com/pannous/companion" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 mb-3 hover:opacity-80 transition-opacity">
           <img src={logoSrc} alt="" className="w-6 h-6" />
-          <span className="text-[13px] font-semibold text-cc-fg tracking-tight">iClaude</span>
+          <span className="text-[13px] font-semibold text-cc-fg tracking-tight">The Companion</span>
         </a>
 
         <div className="flex gap-1.5">

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+# Guard: reject commits that delete more than 50 tracked files at once
+deleted_count=$(git diff --cached --diff-filter=D --name-only | wc -l | tr -d ' ')
+if [ "$deleted_count" -gt 50 ]; then
+  echo "🚨 PRE-COMMIT BLOCKED: This commit deletes $deleted_count files."
+  echo "   This is almost certainly a mistake (runaway git add -A or empty index)."
+  echo "   If intentional, use: git commit --no-verify"
+  exit 1
+fi
+
+cd web && bun run typecheck && bun run test -- --coverage

@@ -53,7 +53,7 @@ beforeEach(() => {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-/** Minimal env fixture matching iClaudeEnv shape. */
+/** Minimal env fixture matching the CompanionEnv shape. */
 function makeEnv(overrides: Record<string, unknown> = {}) {
   return {
     name: "Test Env",
@@ -441,7 +441,7 @@ describe("GET /api/docker/base-image", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.exists).toBe(false);
-    expect(json.image).toBe("iclaude:latest");
+    expect(json.image).toBe("the-companion:latest");
   });
 
   it("returns exists: true when the base image is present", async () => {

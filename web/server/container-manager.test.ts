@@ -878,9 +878,9 @@ describe("ContainerManager buildImage", () => {
 // ---------------------------------------------------------------------------
 
 describe("ContainerManager.getRegistryImage", () => {
-  it("returns registry path for iclaude:latest", () => {
-    const result = ContainerManager.getRegistryImage("iclaude:latest");
-    expect(result).toContain("pannous/iclaude:latest");
+  it("returns registry path for the-companion:latest", () => {
+    const result = ContainerManager.getRegistryImage("the-companion:latest");
+    expect(result).toContain("stangirard/the-companion:latest");
   });
 
   it("returns null for non-default images", () => {

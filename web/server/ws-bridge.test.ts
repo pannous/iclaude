@@ -388,7 +388,7 @@ describe("CLI handlers", () => {
     const getContainerSpy = vi.spyOn(containerManager, "getContainer").mockReturnValue({
       containerId: "abc123def456",
       name: "companion-test",
-      image: "iclaude:latest",
+      image: "the-companion:latest",
       portMappings: [],
       hostCwd: "/Users/stan/Dev/myproject",
       containerCwd: "/workspace",
@@ -425,7 +425,7 @@ describe("CLI handlers", () => {
     const getContainerSpy = vi.spyOn(containerManager, "getContainer").mockReturnValue({
       containerId: "abc123def456",
       name: "companion-test",
-      image: "iclaude:latest",
+      image: "the-companion:latest",
       portMappings: [],
       hostCwd: "/Users/stan/Dev/myproject",
       containerCwd: "/workspace",

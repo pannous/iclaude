@@ -2,7 +2,7 @@
  * Codex App-Server Adapter
  *
  * Translates between the Codex app-server JSON-RPC protocol (stdin/stdout)
- * and iClaude's BrowserIncomingMessage/BrowserOutgoingMessage types.
+ * and The Companion's BrowserIncomingMessage/BrowserOutgoingMessage types.
  *
  * This allows the browser to be completely unaware of which backend is running —
  * it sees the same message types regardless of whether Claude Code or Codex is
@@ -751,7 +751,7 @@ export class CodexAdapter {
       const result = await this.transport.call("initialize", {
         clientInfo: {
           name: "thecompanion",
-          title: "iClaude",
+          title: "The Companion",
           version: "1.0.0",
         },
         capabilities: {

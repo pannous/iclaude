@@ -5,7 +5,6 @@ import { safeStorage } from "./utils/safe-storage.js";
 import { AUTH_STORAGE_KEY } from "./utils/auth-constants.js";
 import { api } from "./api.js";
 import { playNotificationSound } from "./utils/notification-sound.js";
-import { speakText } from "./utils/readback.js";
 
 const sockets = new Map<string, WebSocket>();
 const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -751,10 +750,6 @@ function handleParsedMessage(
       // Play notification sound if enabled and tab is not focused
       if (!document.hasFocus() && store.notificationSound) {
         playNotificationSound();
-      }
-      // TTS readback of the final result text
-      if (r.result && typeof r.result === "string") {
-        speakText(r.result);
       }
       if (r.is_error && r.errors?.length) {
         store.appendMessage(sessionId, {
