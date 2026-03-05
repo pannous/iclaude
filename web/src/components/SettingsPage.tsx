@@ -682,7 +682,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                   <div className="space-y-2">
                     {tunnelQr ? (
                       <>
-                        <label className="block text-sm font-medium">Scan to Connect</label>
+                        <label className="block text-sm font-medium">Scan to Connect in Browser or in <a href="https://github.com/pannous/Listen" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">App</a></label>
                         <div className="inline-block rounded-lg bg-white p-2">
                           <img
                             src={tunnelQr.qrDataUrl}

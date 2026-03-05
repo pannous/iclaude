@@ -22,9 +22,23 @@ function McpServerRow({
   sessionId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [testResult, setTestResult] = useState<"idle" | "testing" | "success" | "fail">("idle");
   const style = STATUS_STYLES[server.status] || DEFAULT_STATUS;
   const isEnabled = server.status !== "disabled";
   const toolCount = server.tools?.length ?? 0;
+
+  function handleTestConnection() {
+    setTestResult("testing");
+    sendMcpReconnect(sessionId, server.name);
+    // After reconnect + status refresh (~1.5s), check updated status
+    setTimeout(() => {
+      const updated = useStore.getState().mcpServers.get(sessionId);
+      const srv = updated?.find((s) => s.name === server.name);
+      setTestResult(srv?.status === "connected" ? "success" : "fail");
+      // Auto-clear result after 4s
+      setTimeout(() => setTestResult("idle"), 4000);
+    }, 1500);
+  }
 
   return (
     <div className="rounded-lg border border-cc-border bg-cc-bg">
@@ -83,6 +97,39 @@ function McpServerRow({
                 <path d="M12.5 2v3h-3M3.5 14v-3h3" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
+          )}
+
+          {/* Test connection button + result icon */}
+          {isEnabled && (
+            testResult === "testing" ? (
+              <span className="w-6 h-6 flex items-center justify-center" title="Testing connection…">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3 animate-spin text-cc-accent">
+                  <path d="M8 2a6 6 0 105.3 3.2" strokeLinecap="round" />
+                </svg>
+              </span>
+            ) : testResult === "success" ? (
+              <span className="w-6 h-6 flex items-center justify-center text-cc-success" title="Connection OK">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
+                  <path d="M3 8.5l3.5 3.5L13 4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+            ) : testResult === "fail" ? (
+              <span className="w-6 h-6 flex items-center justify-center text-cc-error" title="Connection failed">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
+                  <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+                </svg>
+              </span>
+            ) : (
+              <button
+                onClick={handleTestConnection}
+                className="w-6 h-6 flex items-center justify-center rounded-md text-cc-muted hover:text-cc-accent hover:bg-cc-accent/10 transition-colors cursor-pointer"
+                title="Test connection"
+              >
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3">
+                  <path d="M2 8h3l2-4 2 8 2-4h3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )
           )}
         </div>
       </div>

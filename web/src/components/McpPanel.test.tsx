@@ -7,7 +7,7 @@
  * including server status, toggle/reconnect controls, and an add-server form.
  * It auto-fetches MCP status when the CLI is connected.
  */
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import type { McpServerDetail } from "../types.js";
 
@@ -530,6 +530,66 @@ describe("McpSection accessibility", () => {
     fireEvent.click(screen.getByTitle("Add MCP server"));
     const results = await axe(container);
     expect(results).toHaveNoViolations();
+  });
+});
+
+describe("McpSection test connection button", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("shows test connection button for enabled servers", () => {
+    // Enabled servers should have a "Test connection" button visible
+    resetStore({ mcpServers: new Map([["s1", [makeServer()]]]) });
+    render(<McpSection sessionId="s1" />);
+    expandSection();
+    expect(screen.getByTitle("Test connection")).toBeInTheDocument();
+  });
+
+  it("does not show test connection button for disabled servers", () => {
+    // Disabled servers should not have the test button
+    resetStore({ mcpServers: new Map([["s1", [makeServer({ status: "disabled" })]]]) });
+    render(<McpSection sessionId="s1" />);
+    expandSection();
+    expect(screen.queryByTitle("Test connection")).not.toBeInTheDocument();
+  });
+
+  it("shows spinner while testing, then success icon on connected result", () => {
+    // Clicking test should show a spinner, then resolve to success if server is connected
+    const srv = makeServer({ status: "connected" });
+    resetStore({ mcpServers: new Map([["s1", [srv]]]) });
+    render(<McpSection sessionId="s1" />);
+    expandSection();
+
+    fireEvent.click(screen.getByTitle("Test connection"));
+    expect(screen.getByTitle("Testing connection…")).toBeInTheDocument();
+    expect(mockSendMcpReconnect).toHaveBeenCalledWith("s1", "test-server");
+
+    // After 1500ms the handler checks status — server is still connected
+    act(() => { vi.advanceTimersByTime(1500); });
+    expect(screen.getByTitle("Connection OK")).toBeInTheDocument();
+
+    // After 4s more the result clears
+    act(() => { vi.advanceTimersByTime(4000); });
+    expect(screen.getByTitle("Test connection")).toBeInTheDocument();
+  });
+
+  it("shows fail icon when server is not connected after test", () => {
+    // If the server status is 'failed' after reconnect attempt, show fail icon
+    const srv = makeServer({ status: "connected" });
+    resetStore({ mcpServers: new Map([["s1", [srv]]]) });
+    render(<McpSection sessionId="s1" />);
+    expandSection();
+
+    fireEvent.click(screen.getByTitle("Test connection"));
+
+    // Simulate the store updating to failed before the timer fires
+    mockState.mcpServers.set("s1", [makeServer({ status: "failed" })]);
+    act(() => { vi.advanceTimersByTime(1500); });
+    expect(screen.getByTitle("Connection failed")).toBeInTheDocument();
   });
 });
 
