@@ -16,7 +16,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
     const isHook = typeof message.content === "string" && message.content.startsWith("Hook ");
     if (isHook) {
       return (
-        <div className="-my-2.5 sm:-my-3.5 text-center leading-tight">
+        <div className="-my-1.5 sm:-my-2.5 text-center leading-tight">
           <span className="text-[10px] text-cc-muted/50 font-mono-code">
             {message.content}
           </span>
