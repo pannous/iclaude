@@ -1962,7 +1962,104 @@ export function createRoutes(
     return c.json({ url: status.url, qrDataUrl });
   });
 
+  // Generate an Apple Shortcut (.shortcut) file pre-filled with the tunnel URL.
+  // The shortcut opens the authenticated tunnel URL and is Apple Watch compatible.
+  api.get("/tunnel/shortcut", async (c) => {
+    if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
+    const status = tunnelManager.getStatus();
+    if (status.state !== "running" || !status.url) {
+      return c.json({ error: "No active tunnel" }, 400);
+    }
+    const token = getToken();
+    const loginUrl = `${status.url}/?token=${token}`;
+    const plist = generateShortcutPlist("Companion", loginUrl);
+    c.header("Content-Type", "application/x-apple-shortcut");
+    c.header("Content-Disposition", 'attachment; filename="Companion.shortcut"');
+    return c.body(plist);
+  });
+
   return api;
+}
+
+/** Generate an Apple Shortcut XML plist that opens a URL. WatchKit-compatible. */
+function generateShortcutPlist(name: string, url: string): string {
+  const escaped = url.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+\t<key>WFWorkflowActions</key>
+\t<array>
+\t\t<dict>
+\t\t\t<key>WFWorkflowActionIdentifier</key>
+\t\t\t<string>is.workflow.actions.openurl</string>
+\t\t\t<key>WFWorkflowActionParameters</key>
+\t\t\t<dict>
+\t\t\t\t<key>WFInput</key>
+\t\t\t\t<dict>
+\t\t\t\t\t<key>Value</key>
+\t\t\t\t\t<dict>
+\t\t\t\t\t\t<key>attachmentsByRange</key>
+\t\t\t\t\t\t<dict/>
+\t\t\t\t\t\t<key>string</key>
+\t\t\t\t\t\t<string>${escaped}</string>
+\t\t\t\t\t</dict>
+\t\t\t\t\t<key>WFSerializationType</key>
+\t\t\t\t\t<string>WFTextTokenString</string>
+\t\t\t\t</dict>
+\t\t\t</dict>
+\t\t</dict>
+\t</array>
+\t<key>WFWorkflowClientVersion</key>
+\t<string>2302.0.4</string>
+\t<key>WFWorkflowHasOutputFallback</key>
+\t<false/>
+\t<key>WFWorkflowHasShortcutInputVariables</key>
+\t<false/>
+\t<key>WFWorkflowIcon</key>
+\t<dict>
+\t\t<key>WFWorkflowIconGlyphNumber</key>
+\t\t<integer>59511</integer>
+\t\t<key>WFWorkflowIconStartColor</key>
+\t\t<integer>4282601983</integer>
+\t</dict>
+\t<key>WFWorkflowImportQuestions</key>
+\t<array/>
+\t<key>WFWorkflowInputContentItemClasses</key>
+\t<array>
+\t\t<string>WFAppStoreAppContentItem</string>
+\t\t<string>WFArticleContentItem</string>
+\t\t<string>WFContactContentItem</string>
+\t\t<string>WFDateContentItem</string>
+\t\t<string>WFEmailAddressContentItem</string>
+\t\t<string>WFGenericFileContentItem</string>
+\t\t<string>WFImageContentItem</string>
+\t\t<string>WFiTunesProductContentItem</string>
+\t\t<string>WFLocationContentItem</string>
+\t\t<string>WFDCMapsLinkContentItem</string>
+\t\t<string>WFAVAssetContentItem</string>
+\t\t<string>WFPDFContentItem</string>
+\t\t<string>WFPhoneNumberContentItem</string>
+\t\t<string>WFRichTextContentItem</string>
+\t\t<string>WFSafariWebPageContentItem</string>
+\t\t<string>WFStringContentItem</string>
+\t\t<string>WFURLContentItem</string>
+\t</array>
+\t<key>WFWorkflowMinimumClientVersion</key>
+\t<integer>900</integer>
+\t<key>WFWorkflowMinimumClientVersionString</key>
+\t<string>900</string>
+\t<key>WFWorkflowName</key>
+\t<string>${name}</string>
+\t<key>WFWorkflowOutputContentItemClasses</key>
+\t<array/>
+\t<key>WFWorkflowTypes</key>
+\t<array>
+\t\t<string>NCWidget</string>
+\t\t<string>WatchKit</string>
+\t</array>
+</dict>
+</plist>`;
 }
 
 const TITLE_GEN_PREFIX = "Generate a concise 3-5 word session title";

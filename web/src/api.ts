@@ -1109,4 +1109,10 @@ export const api = {
     post<{ ok: boolean }>("/tunnel/stop"),
   getTunnelQr: () =>
     get<{ url: string; qrDataUrl: string }>("/tunnel/qr"),
+  downloadTunnelShortcut: () => {
+    const a = document.createElement("a");
+    a.href = `${BASE}/tunnel/shortcut`;
+    a.download = "Companion.shortcut";
+    a.click();
+  },
 };

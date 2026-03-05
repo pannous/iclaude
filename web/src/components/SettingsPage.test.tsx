@@ -68,6 +68,7 @@ const mockApi = {
   startTunnel: vi.fn(),
   stopTunnel: vi.fn(),
   getTunnelQr: vi.fn(),
+  downloadTunnelShortcut: vi.fn(),
 };
 
 const mockTelemetry = {
@@ -89,6 +90,7 @@ vi.mock("../api.js", () => ({
     startTunnel: (...args: unknown[]) => mockApi.startTunnel(...args),
     stopTunnel: (...args: unknown[]) => mockApi.stopTunnel(...args),
     getTunnelQr: (...args: unknown[]) => mockApi.getTunnelQr(...args),
+    downloadTunnelShortcut: (...args: unknown[]) => mockApi.downloadTunnelShortcut(...args),
   },
 }));
 
@@ -1112,6 +1114,25 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("No tunnel tool found")).toBeInTheDocument();
     });
+  });
+
+  // Verifies the "Create Apple Shortcut" button appears when tunnel is running
+  it("shows Create Apple Shortcut button when tunnel is running", async () => {
+    mockApi.getTunnelStatus.mockResolvedValue({
+      state: "running",
+      url: "https://shortcut-tunnel.trycloudflare.com",
+      provider: "cloudflared",
+      error: null,
+    });
+
+    render(<SettingsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Create Apple Shortcut")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Create Apple Shortcut").closest("button")!);
+    expect(mockApi.downloadTunnelShortcut).toHaveBeenCalledTimes(1);
   });
 
   // ─── Connection test section ──────────────────────────────────

@@ -716,6 +716,16 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     )}
                   </div>
                 )}
+                {tunnelState === "running" && tunnelUrl && (
+                  <button
+                    type="button"
+                    onClick={() => api.downloadTunnelShortcut()}
+                    className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+                  >
+                    <span>Create Apple Shortcut</span>
+                    <span className="text-xs text-cc-muted">Watch / iPhone / Mac</span>
+                  </button>
+                )}
                 {tunnelError && (
                   <p className="text-xs text-red-500 px-3">{tunnelError}</p>
                 )}
