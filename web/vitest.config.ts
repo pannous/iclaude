@@ -1,0 +1,58 @@
+import { defineConfig } from "vitest/config";
+import { resolve } from "node:path";
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      // vite-plugin-pwa provides this virtual module at build time.
+      // During tests, vi.mock() handles it, but Vite's import analysis
+      // runs first and fails if the module can't be resolved.
+      // This stub file lets the import resolve so vi.mock() can take over.
+      "virtual:pwa-register": resolve(__dirname, "src/__mocks__/virtual-pwa-register.ts"),
+      // posthog-js accesses navigator.userAgent at module init time, which
+      // crashes in jsdom. Redirect to a no-op stub for all test runs.
+      "posthog-js": resolve(__dirname, "src/__mocks__/posthog-js.ts"),
+    },
+  },
+  test: {
+    globals: true,
+    environment: "node",
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json-summary"],
+      // The coverage-gate CI workflow reads json-summary to enforce
+      // that new / changed files have ≥ 80 % line coverage.
+    },
+    include: ["server/**/*.test.ts", "src/**/*.test.ts", "src/**/*.test.tsx"],
+    environmentMatchGlobs: [
+      ["src/**/*.test.ts", "jsdom"],
+      ["src/**/*.test.tsx", "jsdom"],
+    ],
+    setupFiles: ["src/test-setup.ts"],
+    // React 19.2+ only exports `act` in the development CJS build.
+    // Without this, jsdom tests load react.production.js which breaks
+    // @testing-library/react's act() calls.
+    env: { NODE_ENV: "test" },
+    // Suppress noisy console output that vitest captures from test workers.
+    // Return false to discard, true to print. Keeps genuinely unexpected output.
+    onConsoleLog(log: string) {
+      // Suppress known noisy output from server code, git subprocesses, and jsdom gaps
+      if (/^\[[\w-]+\]/.test(log)) return false;               // any [bracket-prefixed] log
+      if (log.startsWith("fatal:")) return false;               // git errors in test dirs
+      if (log.includes("Not implemented:")) return false;       // jsdom stubs
+      if (log.includes("not wrapped in act")) return false;     // React act() noise
+      if (log.includes("hydration error")) return false;        // React SSR noise in jsdom
+      if (log.includes("error boundary")) return false;         // React error boundary logs
+      if (log.includes("recreate this component")) return false;
+      if (log.includes("getClientRects")) return false;         // CodeMirror in jsdom
+      if (log.includes("textRange(")) return false;             // CodeMirror in jsdom
+      if (log.includes("coordsIn")) return false;               // CodeMirror in jsdom
+      if (log.includes("iclaude")) return false;           // service installer output
+      if (log.includes("launchctl")) return false;               // macOS service tests
+      if (log.includes("systemctl")) return false;               // Linux service tests
+      if (log.includes("Logs are preserved")) return false;      // service test cleanup
+      if (log.includes("Run '")) return false;                   // CLI help text in tests
+      if (log.includes("Then retry")) return false;              // CLI help text in tests
+    },
+  },
+});

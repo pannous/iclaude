@@ -1,0 +1,1110 @@
+import type { SdkSessionInfo } from "./types.js";
+import type { ContentBlock } from "./types.js";
+import { captureEvent, captureException } from "./analytics.js";
+import { AUTH_STORAGE_KEY } from "./utils/auth-constants.js";
+
+const BASE = "/api";
+
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = localStorage.getItem(AUTH_STORAGE_KEY);
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
+}
+
+function handle401(status: number): void {
+  if (status === 401 && typeof window !== "undefined") {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    // Dynamic import to avoid circular dependency
+    import("./store.js").then(({ useStore }) => {
+      useStore.getState().logout();
+    }).catch(() => {});
+  }
+}
+
+async function request<T = unknown>(method: string, path: string, body?: object): Promise<T> {
+  const headers: Record<string, string> = { ...getAuthHeaders() };
+  if (body || (method !== "GET" && method !== "DELETE")) {
+    headers["Content-Type"] = "application/json";
+  }
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    handle401(res.status);
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    const error = new Error(err.error || res.statusText);
+    captureEvent("api_request_failed", { method, status: res.status });
+    captureException(error, { method, path: path.split("?")[0], status: res.status });
+    throw error;
+  }
+  return res.json();
+}
+
+function post<T = unknown>(path: string, body?: object): Promise<T> {
+  return request<T>("POST", path, body);
+}
+
+function get<T = unknown>(path: string): Promise<T> {
+  return request<T>("GET", path);
+}
+
+function put<T = unknown>(path: string, body?: object): Promise<T> {
+  return request<T>("PUT", path, body);
+}
+
+function patch<T = unknown>(path: string, body?: object): Promise<T> {
+  return request<T>("PATCH", path, body);
+}
+
+function del<T = unknown>(path: string, body?: object): Promise<T> {
+  return request<T>("DELETE", path, body);
+}
+
+export interface ContainerCreateOpts {
+  image?: string;
+  ports?: number[];
+  volumes?: string[];
+  env?: Record<string, string>;
+}
+
+export interface ContainerStatus {
+  available: boolean;
+  version: string | null;
+}
+
+export interface CloudProviderPlan {
+  provider: "modal";
+  sessionId: string;
+  image: string;
+  cwd: string;
+  mappedPorts: Array<{ containerPort: number; hostPort: number }>;
+  commandPreview: string;
+}
+
+export interface CreateSessionOpts {
+  model?: string;
+  permissionMode?: string;
+  cwd?: string;
+  claudeBinary?: string;
+  codexBinary?: string;
+  codexInternetAccess?: boolean;
+  allowedTools?: string[];
+  envSlug?: string;
+  branch?: string;
+  createBranch?: boolean;
+  useWorktree?: boolean;
+  resumeSessionId?: string;
+  backend?: "claude" | "codex";
+  container?: ContainerCreateOpts;
+  resumeSessionAt?: string;
+  forkSession?: boolean;
+}
+
+export interface ResumableSession {
+  sessionId: string;
+  project: string;
+  lastModified: number;
+  title: string;
+}
+
+export interface BackendInfo {
+  id: string;
+  name: string;
+  available: boolean;
+}
+
+export interface BackendModelInfo {
+  value: string;
+  label: string;
+  description: string;
+}
+
+export interface ClaudeDiscoveredSession {
+  sessionId: string;
+  cwd: string;
+  gitBranch?: string;
+  slug?: string;
+  lastActivityAt: number;
+  sourceFile: string;
+}
+
+export interface ClaudeSessionHistoryMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  contentBlocks?: ContentBlock[];
+  timestamp: number;
+  model?: string;
+  stopReason?: string | null;
+}
+
+export interface ClaudeSessionHistoryPage {
+  sourceFile: string;
+  messages: ClaudeSessionHistoryMessage[];
+  nextCursor: number;
+  hasMore: boolean;
+  totalMessages: number;
+}
+
+export interface GitRepoInfo {
+  repoRoot: string;
+  repoName: string;
+  currentBranch: string;
+  defaultBranch: string;
+  isWorktree: boolean;
+}
+
+export interface GitBranchInfo {
+  name: string;
+  isCurrent: boolean;
+  isRemote: boolean;
+  worktreePath: string | null;
+  ahead: number;
+  behind: number;
+}
+
+export interface GitWorktreeInfo {
+  path: string;
+  branch: string;
+  head: string;
+  isMainWorktree: boolean;
+  isDirty: boolean;
+}
+
+export interface WorktreeCreateResult {
+  worktreePath: string;
+  branch: string;
+  isNew: boolean;
+}
+
+export interface CompanionEnv {
+  name: string;
+  slug: string;
+  variables: Record<string, string>;
+  dockerfile?: string;
+  imageTag?: string;
+  baseImage?: string;
+  buildStatus?: "idle" | "building" | "success" | "error";
+  buildError?: string;
+  lastBuiltAt?: number;
+  ports?: number[];
+  volumes?: string[];
+  initScript?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ImagePullState {
+  image: string;
+  status: "idle" | "pulling" | "ready" | "error";
+  progress: string[];
+  error?: string;
+  startedAt?: number;
+  completedAt?: number;
+}
+
+export interface DirEntry {
+  name: string;
+  path: string;
+}
+
+export interface DirListResult {
+  path: string;
+  dirs: DirEntry[];
+  home: string;
+  error?: string;
+}
+
+export interface TreeNode {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  children?: TreeNode[];
+}
+
+export interface PanelInfo {
+  slug: string;
+  name: string;
+  description: string;
+  path?: string;
+  icon?: string;
+  refreshInterval?: number | null;
+  type?: "html" | "markdown";
+}
+
+export interface UpdateInfo {
+  currentVersion: string;
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  isServiceMode: boolean;
+  updateInProgress: boolean;
+  lastChecked: number;
+  channel: "stable" | "prerelease";
+}
+
+export interface UsageLimits {
+  five_hour: { utilization: number; resets_at: string | null } | null;
+  seven_day: { utilization: number; resets_at: string | null } | null;
+  extra_usage: {
+    is_enabled: boolean;
+    monthly_limit: number;
+    used_credits: number;
+    utilization: number | null;
+  } | null;
+}
+
+export interface EditorStartResult {
+  available: boolean;
+  installed: boolean;
+  mode: "host" | "container";
+  url?: string;
+  message?: string;
+}
+
+export interface AppSettings {
+  anthropicApiKeyConfigured: boolean;
+  anthropicModel: string;
+  linearApiKeyConfigured: boolean;
+  linearAutoTransition: boolean;
+  linearAutoTransitionStateName: string;
+  linearArchiveTransition: boolean;
+  linearArchiveTransitionStateName: string;
+  editorTabEnabled: boolean;
+  aiValidationEnabled: boolean;
+  aiValidationAutoApprove: boolean;
+  aiValidationAutoDeny: boolean;
+  updateChannel: "stable" | "prerelease";
+  aiProvider?: "openrouter" | "claude";
+}
+
+export interface ArchiveInfo {
+  hasLinkedIssue: boolean;
+  issueNotDone: boolean;
+  issue?: {
+    id: string;
+    identifier: string;
+    stateName: string;
+    stateType: string;
+    teamId: string;
+  };
+  hasBacklogState?: boolean;
+  archiveTransitionConfigured?: boolean;
+  archiveTransitionStateName?: string;
+}
+
+export interface LinearWorkflowState {
+  id: string;
+  name: string;
+  type: string;
+}
+
+export interface LinearTeamStates {
+  id: string;
+  key: string;
+  name: string;
+  states: LinearWorkflowState[];
+}
+
+export interface LinearIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string;
+  url: string;
+  branchName: string;
+  priorityLabel: string;
+  stateName: string;
+  stateType: string;
+  teamName: string;
+  teamKey: string;
+  teamId: string;
+  assigneeName?: string;
+  updatedAt?: string;
+}
+
+export interface LinearConnectionInfo {
+  connected: boolean;
+  viewerId: string;
+  viewerName: string;
+  viewerEmail: string;
+  teamName: string;
+  teamKey: string;
+}
+
+export interface LinearComment {
+  id: string;
+  body: string;
+  createdAt: string;
+  userName: string;
+  userAvatarUrl?: string | null;
+}
+
+export interface LinearIssueDetail {
+  issue: LinearIssue | null;
+  comments?: LinearComment[];
+  assignee?: { name: string; avatarUrl?: string | null } | null;
+  labels?: { id: string; name: string; color: string }[];
+}
+
+export interface LinearProject {
+  id: string;
+  name: string;
+  state: string;
+}
+
+export interface LinearProjectMapping {
+  repoRoot: string;
+  projectId: string;
+  projectName: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CreateLinearIssueInput {
+  title: string;
+  description?: string;
+  teamId: string;
+  priority?: number;
+  projectId?: string;
+  assigneeId?: string;
+  stateId?: string;
+}
+
+export interface GitHubPRInfo {
+  number: number;
+  title: string;
+  url: string;
+  state: "OPEN" | "CLOSED" | "MERGED";
+  isDraft: boolean;
+  reviewDecision: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  checks: { name: string; status: string; conclusion: string | null }[];
+  checksSummary: { total: number; success: number; failure: number; pending: number };
+  reviewThreads: { total: number; resolved: number; unresolved: number };
+}
+
+export interface PRStatusResponse {
+  available: boolean;
+  pr: GitHubPRInfo | null;
+}
+
+export interface CronJobInfo {
+  id: string;
+  name: string;
+  prompt: string;
+  schedule: string;
+  recurring: boolean;
+  backendType: "claude" | "codex";
+  model: string;
+  cwd: string;
+  envSlug?: string;
+  enabled: boolean;
+  permissionMode: string;
+  codexInternetAccess?: boolean;
+  createdAt: number;
+  updatedAt: number;
+  lastRunAt?: number;
+  lastSessionId?: string;
+  consecutiveFailures: number;
+  totalRuns: number;
+  nextRunAt?: number | null;
+}
+
+export interface CronJobExecution {
+  sessionId: string;
+  jobId: string;
+  startedAt: number;
+  completedAt?: number;
+  success?: boolean;
+  error?: string;
+  costUsd?: number;
+}
+
+export interface McpServerConfigAgent {
+  type: "stdio" | "sse" | "http";
+  command?: string;
+  args?: string[];
+  url?: string;
+  env?: Record<string, string>;
+}
+
+export interface AgentInfo {
+  id: string;
+  version: 1;
+  name: string;
+  description: string;
+  icon?: string;
+  backendType: "claude" | "codex";
+  model: string;
+  permissionMode: string;
+  cwd: string;
+  envSlug?: string;
+  env?: Record<string, string>;
+  allowedTools?: string[];
+  codexInternetAccess?: boolean;
+  prompt: string;
+  mcpServers?: Record<string, McpServerConfigAgent>;
+  skills?: string[];
+  container?: {
+    image?: string;
+    ports?: number[];
+    volumes?: string[];
+    initScript?: string;
+  };
+  branch?: string;
+  createBranch?: boolean;
+  useWorktree?: boolean;
+  triggers?: {
+    webhook?: {
+      enabled: boolean;
+      secret: string;
+    };
+    schedule?: {
+      enabled: boolean;
+      expression: string;
+      recurring: boolean;
+    };
+    chat?: {
+      enabled: boolean;
+      platforms: Array<{
+        adapter: "linear" | "github" | "slack" | "discord";
+        mentionPattern?: string;
+        autoSubscribe: boolean;
+      }>;
+    };
+  };
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+  lastRunAt?: number;
+  lastSessionId?: string;
+  totalRuns: number;
+  consecutiveFailures: number;
+  nextRunAt?: number | null;
+}
+
+export interface AgentExecution {
+  sessionId: string;
+  agentId: string;
+  triggerType: "manual" | "webhook" | "schedule" | "chat";
+  startedAt: number;
+  completedAt?: number;
+  success?: boolean;
+  error?: string;
+}
+
+export interface ExecutionListResult {
+  executions: AgentExecution[];
+  total: number;
+}
+
+/** Portable export format (no internal tracking fields) */
+export type AgentExport = Omit<
+  AgentInfo,
+  "id" | "createdAt" | "updatedAt" | "totalRuns" | "consecutiveFailures" | "lastRunAt" | "lastSessionId" | "enabled" | "nextRunAt"
+>;
+
+// LOCAL: File-based prompts — global: ~/.claude/prompts/*.md, project: {cwd}/.claude/commands/*.md
+export interface SavedPrompt {
+  id: string;
+  name: string;
+  content: string;
+  scope: "global" | "project";
+  projectPath?: string;
+  projectPaths?: string[];
+}
+
+// ─── Claude Config Browser ──────────────────────────────────────────────────
+
+export interface ClaudeConfigResponse {
+  project: {
+    root: string;
+    claudeMd: { path: string; content: string }[];
+    settings: { path: string; content: string } | null;
+    settingsLocal: { path: string; content: string } | null;
+    commands: { name: string; path: string }[];
+  };
+  user: {
+    root: string;
+    claudeMd: { path: string; content: string } | null;
+    skills: { slug: string; name: string; description: string; path: string }[];
+    agents: { name: string; path: string }[];
+    settings: { path: string; content: string } | null;
+    commands: { name: string; path: string }[];
+  };
+}
+
+// ─── SSE Session Creation ────────────────────────────────────────────────────
+
+export interface CreationProgressEvent {
+  step: string;
+  label: string;
+  status: "in_progress" | "done" | "error";
+  detail?: string;
+}
+
+export interface CreateSessionStreamResult {
+  sessionId: string;
+  state: string;
+  cwd: string;
+  backendType?: "claude" | "codex";
+  resumeSessionAt?: string;
+  forkSession?: boolean;
+}
+
+/**
+ * Create a session with real-time progress streaming via SSE.
+ * Uses fetch + ReadableStream (EventSource is GET-only, this is POST).
+ */
+export async function createSessionStream(
+  opts: CreateSessionOpts | undefined,
+  onProgress: (progress: CreationProgressEvent) => void,
+): Promise<CreateSessionStreamResult> {
+  const res = await fetch(`${BASE}/sessions/create-stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify(opts ?? {}),
+  });
+
+  if (!res.ok || !res.body) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error || res.statusText);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: CreateSessionStreamResult | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    // Parse SSE events: split on double newlines
+    const chunks = buffer.split("\n\n");
+    buffer = chunks.pop() || "";
+
+    for (const chunk of chunks) {
+      if (!chunk.trim()) continue;
+      let eventType = "";
+      let data = "";
+      for (const line of chunk.split("\n")) {
+        if (line.startsWith("event:")) eventType = line.slice(6).trim();
+        else if (line.startsWith("data:")) data = line.slice(5).trim();
+      }
+      if (!data) continue;
+
+      const parsed = JSON.parse(data);
+      if (eventType === "progress") {
+        onProgress(parsed as CreationProgressEvent);
+      } else if (eventType === "done") {
+        result = parsed as CreateSessionStreamResult;
+      } else if (eventType === "error") {
+        throw new Error((parsed as { error: string }).error || "Session creation failed");
+      }
+    }
+  }
+
+  if (!result) {
+    throw new Error("Stream ended without session creation result");
+  }
+
+  return result;
+}
+
+/**
+ * Verify an auth token with the server.
+ * This does NOT use the auth header helpers since it's called before auth is established.
+ */
+/**
+ * Attempt auto-authentication for localhost users.
+ * The server returns the token if the request comes from 127.0.0.1/::1.
+ * No auth header needed — this is a pre-auth endpoint.
+ */
+export async function autoAuth(): Promise<string | null> {
+  try {
+    const res = await fetch(`${BASE}/auth/auto`);
+    if (res.ok) {
+      const data = await res.json() as { ok: boolean; token?: string };
+      if (data.ok && data.token) return data.token;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function verifyAuthToken(token: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${BASE}/auth/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return !!(data as { ok?: boolean }).ok;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export const api = {
+  // Auth
+  getAuthQr: () =>
+    get<{ qrCodes: { label: string; url: string; qrDataUrl: string }[] }>("/auth/qr"),
+  getAuthToken: () =>
+    get<{ token: string }>("/auth/token"),
+  regenerateAuthToken: () =>
+    post<{ token: string }>("/auth/regenerate"),
+
+  createSession: (opts?: CreateSessionOpts) =>
+    post<{ sessionId: string; state: string; cwd: string }>(
+      "/sessions/create",
+      opts,
+    ),
+
+  listSessions: () => get<SdkSessionInfo[]>("/sessions"),
+  discoverClaudeSessions: (limit = 200) =>
+    get<{ sessions: ClaudeDiscoveredSession[] }>(
+      `/claude/sessions/discover?limit=${encodeURIComponent(String(limit))}`,
+    ),
+  getClaudeSessionHistory: (sessionId: string, opts?: { cursor?: number; limit?: number }) => {
+    const cursor = Math.max(0, Math.floor(opts?.cursor ?? 0));
+    const limit = Math.max(1, Math.floor(opts?.limit ?? 40));
+    return get<ClaudeSessionHistoryPage>(
+      `/claude/sessions/${encodeURIComponent(sessionId)}/history?cursor=${encodeURIComponent(String(cursor))}&limit=${encodeURIComponent(String(limit))}`,
+    );
+  },
+
+  cleanupSessions: () =>
+    post<{ success: boolean }>("/sessions/cleanup"),
+
+  // Input completion — uses ANTHROPIC_API_KEY on the server to predict the next user message.
+  // Accepts an AbortSignal so callers can cancel in-flight requests.
+  completeInput: async (sessionId: string, partial: string, signal?: AbortSignal): Promise<{ suggestion: string | null }> => {
+    try {
+      const res = await fetch(`${BASE}/sessions/${encodeURIComponent(sessionId)}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ partial }),
+        signal,
+      });
+      if (!res.ok) return { suggestion: null };
+      return res.json() as Promise<{ suggestion: string | null }>;
+    } catch {
+      return { suggestion: null };
+    }
+  },
+
+  killSession: (sessionId: string) =>
+    post(`/sessions/${encodeURIComponent(sessionId)}/kill`),
+
+  deleteSession: (sessionId: string) =>
+    del(`/sessions/${encodeURIComponent(sessionId)}`),
+
+  cancelQueuedMessage: (sessionId: string, msgId: string) =>
+    del<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/pending-input/${encodeURIComponent(msgId)}`),
+
+  flushQueuedMessage: (sessionId: string, msgId: string) =>
+    post<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/pending-input/${encodeURIComponent(msgId)}/flush`),
+
+  relaunchSession: (sessionId: string) =>
+    post(`/sessions/${encodeURIComponent(sessionId)}/relaunch`),
+
+  archiveSession: (sessionId: string, opts?: { force?: boolean; linearTransition?: "none" | "backlog" | "configured" }) =>
+    post(`/sessions/${encodeURIComponent(sessionId)}/archive`, opts),
+
+  getArchiveInfo: (sessionId: string) =>
+    get<ArchiveInfo>(`/sessions/${encodeURIComponent(sessionId)}/archive-info`),
+
+  unarchiveSession: (sessionId: string) =>
+    post(`/sessions/${encodeURIComponent(sessionId)}/unarchive`),
+
+  setSessionTitle: (sessionId: string, title: string) =>
+    post(`/sessions/${encodeURIComponent(sessionId)}/title`, { title }),
+
+  /** Fetch a tool_result on demand (stripped from subagent messages to save memory) */
+  getToolResult: (sessionId: string, toolUseId: string) =>
+    get<{ content: string; is_error: boolean }>(
+      `/sessions/${encodeURIComponent(sessionId)}/tool-result/${encodeURIComponent(toolUseId)}`,
+    ),
+
+  listResumableSessions: () =>
+    get<ResumableSession[]>("/sessions/resumable"),
+
+  renameSession: (sessionId: string, name: string) =>
+    patch<{ ok: boolean; name: string }>(
+      `/sessions/${encodeURIComponent(sessionId)}/name`,
+      { name },
+    ),
+
+  listDirs: (path?: string) =>
+    get<DirListResult>(
+      `/fs/list${path ? `?path=${encodeURIComponent(path)}` : ""}`,
+    ),
+
+  getHome: () => get<{ home: string; cwd: string }>("/fs/home"),
+
+  findFiles: (name: string, cwd: string) =>
+    get<{ matches: string[] }>(
+      `/fs/find?name=${encodeURIComponent(name)}&cwd=${encodeURIComponent(cwd)}`,
+    ),
+
+  getRecentProjects: () =>
+    get<{ projects: string[] }>("/fs/recent-projects"),
+
+  // Environments
+  listEnvs: () => get<CompanionEnv[]>("/envs"),
+  getEnv: (slug: string) =>
+    get<CompanionEnv>(`/envs/${encodeURIComponent(slug)}`),
+  createEnv: (name: string, variables: Record<string, string>, docker?: {
+    dockerfile?: string;
+    baseImage?: string;
+    ports?: number[];
+    volumes?: string[];
+    initScript?: string;
+  }) =>
+    post<CompanionEnv>("/envs", { name, variables, ...docker }),
+  updateEnv: (
+    slug: string,
+    data: {
+      name?: string;
+      variables?: Record<string, string>;
+      dockerfile?: string;
+      baseImage?: string;
+      ports?: number[];
+      volumes?: string[];
+      initScript?: string;
+    },
+  ) => put<CompanionEnv>(`/envs/${encodeURIComponent(slug)}`, data),
+  deleteEnv: (slug: string) => del(`/envs/${encodeURIComponent(slug)}`),
+
+  // Environment Docker builds
+  buildEnvImage: (slug: string) =>
+    post<{ ok: boolean; imageTag: string }>(`/envs/${encodeURIComponent(slug)}/build`),
+  getEnvBuildStatus: (slug: string) =>
+    get<{ buildStatus: string; buildError?: string; lastBuiltAt?: number; imageTag?: string }>(
+      `/envs/${encodeURIComponent(slug)}/build-status`,
+    ),
+  buildBaseImage: () =>
+    post<{ ok: boolean; tag: string }>("/docker/build-base"),
+  getBaseImageStatus: () =>
+    get<{ exists: boolean; tag: string }>("/docker/base-image"),
+
+  // Settings
+  getSettings: () => get<AppSettings>("/settings"),
+  updateSettings: (data: {
+    anthropicApiKey?: string;
+    anthropicModel?: string;
+    linearApiKey?: string;
+    linearAutoTransition?: boolean;
+    linearAutoTransitionStateId?: string;
+    linearAutoTransitionStateName?: string;
+    linearArchiveTransition?: boolean;
+    linearArchiveTransitionStateId?: string;
+    linearArchiveTransitionStateName?: string;
+    editorTabEnabled?: boolean;
+    aiValidationEnabled?: boolean;
+    aiValidationAutoApprove?: boolean;
+    aiValidationAutoDeny?: boolean;
+    updateChannel?: "stable" | "prerelease";
+    aiProvider?: "openrouter" | "claude";
+  }) => put<AppSettings>("/settings", data),
+  verifyAnthropicKey: (apiKey: string) =>
+    post<{ valid: boolean; error?: string }>("/settings/anthropic/verify", { apiKey }),
+  searchLinearIssues: (query: string, limit = 8) =>
+    get<{ issues: LinearIssue[] }>(
+      `/linear/issues?query=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}`,
+    ),
+  getLinearConnection: () => get<LinearConnectionInfo>("/linear/connection"),
+  getLinearStates: () => get<{ teams: LinearTeamStates[] }>("/linear/states"),
+  transitionLinearIssue: (issueId: string) =>
+    post<{ ok: boolean; skipped: boolean }>(
+      `/linear/issues/${encodeURIComponent(issueId)}/transition`,
+      {},
+    ),
+  listLinearProjects: () => get<{ projects: LinearProject[] }>("/linear/projects"),
+  getLinearProjectIssues: (projectId: string, limit = 15) =>
+    get<{ issues: LinearIssue[] }>(
+      `/linear/project-issues?projectId=${encodeURIComponent(projectId)}&limit=${encodeURIComponent(String(limit))}`,
+    ),
+  getLinearProjectMapping: (repoRoot: string) =>
+    get<{ mapping: LinearProjectMapping | null }>(
+      `/linear/project-mappings?repoRoot=${encodeURIComponent(repoRoot)}`,
+    ),
+  upsertLinearProjectMapping: (data: {
+    repoRoot: string;
+    projectId: string;
+    projectName: string;
+  }) => put<{ mapping: LinearProjectMapping }>("/linear/project-mappings", data),
+  removeLinearProjectMapping: (repoRoot: string) =>
+    del<{ ok: boolean }>("/linear/project-mappings", { repoRoot }),
+
+  // Linear issue <-> session association
+  linkLinearIssue: (sessionId: string, issue: LinearIssue) =>
+    put<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/linear-issue`, issue),
+  unlinkLinearIssue: (sessionId: string) =>
+    del<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/linear-issue`),
+  getLinkedLinearIssue: (sessionId: string, refresh = false) =>
+    get<LinearIssueDetail>(
+      `/sessions/${encodeURIComponent(sessionId)}/linear-issue${refresh ? "?refresh=true" : ""}`,
+    ),
+  createLinearIssue: (input: CreateLinearIssueInput) =>
+    post<{ ok: boolean; issue: LinearIssue }>("/linear/issues", input),
+  addLinearComment: (issueId: string, body: string) =>
+    post<{ ok: boolean; comment: LinearComment }>(
+      `/linear/issues/${encodeURIComponent(issueId)}/comments`,
+      { body },
+    ),
+
+  // Git operations
+  getRepoInfo: (path: string) =>
+    get<GitRepoInfo>(`/git/repo-info?path=${encodeURIComponent(path)}`),
+  listBranches: (repoRoot: string) =>
+    get<GitBranchInfo[]>(
+      `/git/branches?repoRoot=${encodeURIComponent(repoRoot)}`,
+    ),
+  gitFetch: (repoRoot: string) =>
+    post<{ success: boolean; output: string }>("/git/fetch", { repoRoot }),
+  gitPull: (cwd: string) =>
+    post<{
+      success: boolean;
+      output: string;
+      git_ahead: number;
+      git_behind: number;
+    }>("/git/pull", { cwd }),
+
+  // Git worktrees
+  listWorktrees: (repoRoot: string) =>
+    get<GitWorktreeInfo[]>(
+      `/git/worktrees?repoRoot=${encodeURIComponent(repoRoot)}`,
+    ),
+  createWorktree: (
+    repoRoot: string,
+    branch: string,
+    opts?: { baseBranch?: string; createBranch?: boolean },
+  ) =>
+    post<WorktreeCreateResult>("/git/worktree", {
+      repoRoot,
+      branch,
+      ...opts,
+    }),
+  removeWorktree: (repoRoot: string, worktreePath: string, force?: boolean) =>
+    del("/git/worktree", { repoRoot, worktreePath, force }),
+
+  // GitHub PR status
+  getPRStatus: (cwd: string, branch: string) =>
+    get<PRStatusResponse>(
+      `/git/pr-status?cwd=${encodeURIComponent(cwd)}&branch=${encodeURIComponent(branch)}`,
+    ),
+
+  // Backends
+  getBackends: () => get<BackendInfo[]>("/backends"),
+  getBackendModels: (backendId: string) =>
+    get<BackendModelInfo[]>(`/backends/${encodeURIComponent(backendId)}/models`),
+
+  // Containers
+  getContainerStatus: () => get<ContainerStatus>("/containers/status"),
+  getContainerImages: () => get<string[]>("/containers/images"),
+
+  // Image pull manager
+  getImageStatus: (tag: string) =>
+    get<ImagePullState>(`/images/${encodeURIComponent(tag)}/status`),
+  pullImage: (tag: string) =>
+    post<{ ok: boolean; state: ImagePullState }>(`/images/${encodeURIComponent(tag)}/pull`),
+  getCloudProviderPlan: (provider: "modal", cwd: string, sessionId: string) =>
+    get<CloudProviderPlan>(
+      `/cloud/providers/${encodeURIComponent(provider)}/plan?cwd=${encodeURIComponent(cwd)}&sessionId=${encodeURIComponent(sessionId)}`,
+    ),
+
+  // Editor
+  startEditor: (sessionId: string) =>
+    post<EditorStartResult>(
+      `/sessions/${encodeURIComponent(sessionId)}/editor/start`,
+    ),
+
+  // Editor filesystem
+  getFileTree: (path: string) =>
+    get<{ path: string; tree: TreeNode[] }>(
+      `/fs/tree?path=${encodeURIComponent(path)}`,
+    ),
+  statFile: (path: string) =>
+    get<{ path: string; size: number; isFile: boolean; isDirectory: boolean }>(
+      `/fs/stat?path=${encodeURIComponent(path)}`,
+    ),
+  revealInFinder: (path: string) =>
+    post<{ ok: boolean }>("/fs/reveal", { path }),
+  readFile: (path: string) =>
+    get<{ path: string; content: string }>(
+      `/fs/read?path=${encodeURIComponent(path)}`,
+    ),
+  getFileBlob: async (path: string): Promise<string> => {
+    const res = await fetch(`${BASE}/fs/raw?path=${encodeURIComponent(path)}`, {
+      headers: { ...getAuthHeaders() },
+    });
+    if (!res.ok) {
+      handle401(res.status);
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error((err as { error?: string }).error || res.statusText);
+    }
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  },
+  writeFile: (path: string, content: string) =>
+    put<{ ok: boolean; path: string }>("/fs/write", { path, content }),
+  getFileDiff: (path: string, base?: "last-commit" | "default-branch") =>
+    get<{ path: string; diff: string }>(
+      `/fs/diff?path=${encodeURIComponent(path)}${base ? `&base=${encodeURIComponent(base)}` : ""}`,
+    ),
+  getChangedFiles: (cwd: string, base?: "last-commit" | "default-branch") =>
+    get<{ files: Array<{ path: string; status: string }> }>(
+      `/fs/changed-files?cwd=${encodeURIComponent(cwd)}${base ? `&base=${encodeURIComponent(base)}` : ""}`,
+    ),
+  getClaudeMdFiles: (cwd: string) =>
+    get<{ cwd: string; files: { path: string; content: string }[] }>(
+      `/fs/claude-md?cwd=${encodeURIComponent(cwd)}`,
+    ),
+  saveClaudeMd: (path: string, content: string) =>
+    put<{ ok: boolean; path: string }>("/fs/claude-md", { path, content }),
+  getClaudeConfig: (cwd: string) =>
+    get<ClaudeConfigResponse>(`/fs/claude-config?cwd=${encodeURIComponent(cwd)}`),
+
+  // Usage limits
+  getUsageLimits: () => get<UsageLimits>("/usage-limits"),
+  getSessionUsageLimits: (sessionId: string) =>
+    get<UsageLimits>(`/sessions/${encodeURIComponent(sessionId)}/usage-limits`),
+
+  // HTML Panels
+  listPanels: () => get<PanelInfo[]>("/panels"),
+  getPanelUrl: (slug: string) => `/api/panels/${encodeURIComponent(slug)}/panel`,
+
+  // Terminal
+  spawnTerminal: (cwd: string, cols?: number, rows?: number, opts?: { containerId?: string }) =>
+    post<{ terminalId: string }>("/terminal/spawn", { cwd, cols, rows, containerId: opts?.containerId }),
+  killTerminal: (terminalId: string) =>
+    post<{ ok: boolean }>("/terminal/kill", { terminalId }),
+  getTerminal: (terminalId?: string) =>
+    get<{ active: boolean; terminalId?: string; cwd?: string }>(
+      terminalId
+        ? `/terminal?terminalId=${encodeURIComponent(terminalId)}`
+        : "/terminal",
+    ),
+
+  // Update checking
+  checkForUpdate: () => get<UpdateInfo>("/update-check"),
+  forceCheckForUpdate: () => post<UpdateInfo>("/update-check"),
+  triggerUpdate: () =>
+    post<{ ok: boolean; message: string }>("/update"),
+
+  // Cron jobs
+  listCronJobs: () => get<CronJobInfo[]>("/cron/jobs"),
+  getCronJob: (id: string) => get<CronJobInfo>(`/cron/jobs/${encodeURIComponent(id)}`),
+  createCronJob: (data: Partial<CronJobInfo>) => post<CronJobInfo>("/cron/jobs", data),
+  updateCronJob: (id: string, data: Partial<CronJobInfo>) =>
+    put<CronJobInfo>(`/cron/jobs/${encodeURIComponent(id)}`, data),
+  deleteCronJob: (id: string) => del(`/cron/jobs/${encodeURIComponent(id)}`),
+  toggleCronJob: (id: string) => post<CronJobInfo>(`/cron/jobs/${encodeURIComponent(id)}/toggle`),
+  runCronJob: (id: string) => post(`/cron/jobs/${encodeURIComponent(id)}/run`),
+  getCronJobExecutions: (id: string) =>
+    get<CronJobExecution[]>(`/cron/jobs/${encodeURIComponent(id)}/executions`),
+
+  // Background process management
+  killProcess: (sessionId: string, taskId: string) =>
+    post<{ ok: boolean; taskId: string }>(
+      `/sessions/${encodeURIComponent(sessionId)}/processes/${encodeURIComponent(taskId)}/kill`,
+    ),
+  killAllProcesses: (sessionId: string, taskIds: string[]) =>
+    post<{ ok: boolean; results: { taskId: string; ok: boolean; error?: string }[] }>(
+      `/sessions/${encodeURIComponent(sessionId)}/processes/kill-all`,
+      { taskIds },
+    ),
+
+  // System dev process scanning
+  getSystemProcesses: (sessionId: string) =>
+    get<{ ok: boolean; processes: { pid: number; command: string; fullCommand: string; ports: number[]; cwd?: string; startedAt?: number }[] }>(
+      `/sessions/${encodeURIComponent(sessionId)}/processes/system`,
+    ),
+  killSystemProcess: (sessionId: string, pid: number) =>
+    post<{ ok: boolean; pid: number }>(
+      `/sessions/${encodeURIComponent(sessionId)}/processes/system/${pid}/kill`,
+    ),
+
+  // Agents
+  listAgents: () => get<AgentInfo[]>("/agents"),
+  getAgent: (id: string) => get<AgentInfo>(`/agents/${encodeURIComponent(id)}`),
+  createAgent: (data: Partial<AgentInfo>) => post<AgentInfo>("/agents", data),
+  updateAgent: (id: string, data: Partial<AgentInfo>) =>
+    put<AgentInfo>(`/agents/${encodeURIComponent(id)}`, data),
+  deleteAgent: (id: string) => del(`/agents/${encodeURIComponent(id)}`),
+  toggleAgent: (id: string) => post<AgentInfo>(`/agents/${encodeURIComponent(id)}/toggle`),
+  runAgent: (id: string, input?: string) =>
+    post<{ ok: boolean; message: string; sessionId?: string }>(`/agents/${encodeURIComponent(id)}/run`, { input }),
+  getAgentExecutions: (id: string) =>
+    get<AgentExecution[]>(`/agents/${encodeURIComponent(id)}/executions`),
+  importAgent: (data: AgentExport) => post<AgentInfo>("/agents/import", data),
+  exportAgent: (id: string) => get<AgentExport>(`/agents/${encodeURIComponent(id)}/export`),
+  regenerateAgentWebhookSecret: (id: string) =>
+    post<AgentInfo>(`/agents/${encodeURIComponent(id)}/regenerate-secret`),
+
+  // Executions (cross-agent, for Runs view)
+  listExecutions: (opts?: { agentId?: string; triggerType?: string; status?: string; limit?: number; offset?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.agentId) params.set("agentId", opts.agentId);
+    if (opts?.triggerType) params.set("triggerType", opts.triggerType);
+    if (opts?.status) params.set("status", opts.status);
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    if (opts?.offset) params.set("offset", String(opts.offset));
+    const qs = params.toString();
+    return get<ExecutionListResult>(`/executions${qs ? `?${qs}` : ""}`);
+  },
+
+  // Chat platforms
+  listChatPlatforms: () => get<{ platforms: string[] }>("/chat/platforms"),
+
+  // Skills
+  listSkills: () =>
+    get<{ slug: string; name: string; description: string; path: string }[]>("/skills"),
+
+  // Cross-session messaging
+  sendSessionMessage: (sessionId: string, content: string) =>
+    post<{ ok: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/message`, { content }),
+
+  // Saved prompts — global: ~/.claude/prompts/*.md, project: {cwd}/.claude/commands/*.md
+  listPrompts: (cwd?: string, scope?: "global" | "project" | "all") => {
+    const params = new URLSearchParams();
+    if (cwd) params.set("cwd", cwd);
+    if (scope) params.set("scope", scope);
+    const query = params.toString();
+    return get<SavedPrompt[]>(`/prompts${query ? `?${query}` : ""}`);
+  },
+  createPrompt: (data: { name: string; content: string; scope?: "global" | "project"; cwd?: string; projectPaths?: string[] }) =>
+    post<SavedPrompt>("/prompts", data),
+  updatePrompt: (name: string, content: string, scope: "global" | "project", cwd?: string) =>
+    put<SavedPrompt>(`/prompts/${encodeURIComponent(name)}`, { content, scope, cwd }),
+  // cwd present → project prompt in {cwd}/.claude/commands/; absent → global in ~/.claude/prompts/
+  deletePrompt: (id: string, cwd?: string) => {
+    const scope = cwd ? "project" : "global";
+    const params = new URLSearchParams({ scope });
+    if (cwd) params.set("cwd", cwd);
+    return del<{ ok: boolean }>(`/prompts/${encodeURIComponent(id)}?${params.toString()}`);
+  },
+
+  // Tunnel
+  getTunnelStatus: () =>
+    get<{ state: string; url: string | null; provider: string | null; error: string | null }>("/tunnel/status"),
+  startTunnel: () =>
+    post<{ url: string; provider: string }>("/tunnel/start"),
+  stopTunnel: () =>
+    post<{ ok: boolean }>("/tunnel/stop"),
+  getTunnelQr: () =>
+    get<{ url: string; qrDataUrl: string }>("/tunnel/qr"),
+};
