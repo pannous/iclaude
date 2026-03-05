@@ -1109,11 +1109,21 @@ export const api = {
     post<{ ok: boolean }>("/tunnel/stop"),
   getTunnelQr: () =>
     get<{ url: string; qrDataUrl: string }>("/tunnel/qr"),
-  downloadTunnelShortcut: () => {
+  downloadTunnelShortcut: async () => {
+    const res = await fetch(`${BASE}/tunnel/shortcut`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      handle401(res.status);
+      throw new Error(res.statusText);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = `${BASE}/tunnel/shortcut`;
+    a.href = url;
     a.download = "Companion.shortcut";
     a.click();
+    URL.revokeObjectURL(url);
   },
   getNamedTunnelInfo: () =>
     get<{ loggedIn: boolean; tunnelId: string | null; hostname: string | null; credentialsPath: string | null }>("/tunnel/named/info"),
