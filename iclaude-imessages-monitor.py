@@ -101,7 +101,8 @@ class iMessageMonitorUnified:
                 AND (m.text IS NOT NULL OR m.ROWID IN (
                     SELECT message_id FROM message_attachment_join
                 ))
-            ORDER BY m.date ASC
+            ORDER BY m.date DESC
+            LIMIT 10
         """
 
         max_retries = 3

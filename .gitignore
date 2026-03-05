@@ -1,26 +1,19 @@
-# Environment variables
-.env
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-
-# State files
-state.txt
-sessions/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
+node_modules/
+dist/
+*.tsbuildinfo
 .DS_Store
-Thumbs.db
-
-old
+bun.lockb
+bun.lock
+package-lock.json
+test-live.ts
+web/dist/
+.env
+web/.env.local
+.dev-*.pid
+.dev-*.log
+.error-monitor*
+.error-monitor-logs/
+docs/mocks/
+docs/repo-only/
+scripts/test-codex-*.ts
+web/dev-dist/
