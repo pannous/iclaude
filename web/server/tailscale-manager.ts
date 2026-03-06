@@ -83,7 +83,7 @@ function execAsync(binary: string, args: string[]): Promise<string> {
       if (code === 0) {
         resolve(stdout.trim());
       } else {
-        reject(new Error(stderr.trim() || `Process exited with code ${code}`));
+        reject(new Error(stderr.trim() || stdout.trim() || `Process exited with code ${code}`));
       }
     });
   });
@@ -248,9 +248,21 @@ export async function startFunnel(port: number): Promise<TailscaleStatus> {
   }
 
   try {
-    await execAsync(binary, ["funnel", "--bg", String(port)]);
+    const output = await execAsync(binary, ["funnel", "--bg", String(port)]);
+    // The command may succeed but print a message about enabling Funnel
+    if (output.includes("not enabled") || output.includes("login.tailscale.com")) {
+      const urlMatch = output.match(/(https:\/\/login\.tailscale\.com\/\S+)/);
+      const enableUrl = urlMatch ? ` Visit ${urlMatch[1]} to enable it.` : "";
+      return { installed: true, binaryPath: binary, connected: true, dnsName, funnelActive: false, funnelUrl: null, error: `Funnel is not enabled on your tailnet.${enableUrl}` };
+    }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    // Detect "Funnel not enabled" from stderr/timeout output
+    if (message.includes("not enabled") || message.includes("login.tailscale.com")) {
+      const urlMatch = message.match(/(https:\/\/login\.tailscale\.com\/\S+)/);
+      const enableUrl = urlMatch ? ` Visit ${urlMatch[1]} to enable it.` : "";
+      return { installed: true, binaryPath: binary, connected: true, dnsName, funnelActive: false, funnelUrl: null, error: `Funnel is not enabled on your tailnet.${enableUrl}` };
+    }
     // Check for common permission error patterns
     const hint = message.includes("permission") || message.includes("sudo") || message.includes("access denied")
       ? " You may need to run `tailscale up --operator=$USER` or use sudo."

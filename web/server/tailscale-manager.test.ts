@@ -265,6 +265,31 @@ describe("startFunnel", () => {
     expect(result.funnelActive).toBe(false);
   });
 
+  it("returns descriptive error when Funnel is not enabled on tailnet", async () => {
+    mockResolveBinary.mockReturnValue("/usr/bin/tailscale");
+    enqueueSpawnSuccess(CONNECTED_STATUS_JSON);
+    // funnel command outputs the "not enabled" message to stdout and exits non-zero (timeout/kill)
+    enqueueSpawnFailure("Funnel is not enabled on your tailnet.\nTo enable, visit:\n\n         https://login.tailscale.com/f/funnel?node=abc123\n");
+
+    const result = await startFunnel(3456);
+
+    expect(result.error).toContain("not enabled");
+    expect(result.error).toContain("login.tailscale.com");
+    expect(result.funnelActive).toBe(false);
+  });
+
+  it("returns funnel-not-enabled error from stdout when stderr is empty", async () => {
+    mockResolveBinary.mockReturnValue("/usr/bin/tailscale");
+    enqueueSpawnSuccess(CONNECTED_STATUS_JSON);
+    // The "not enabled" message comes via stdout (captured in error thanks to fallback)
+    spawnQueue.push({ stdout: "Funnel is not enabled on your tailnet.\nTo enable, visit:\n\n         https://login.tailscale.com/f/funnel?node=xyz\n", code: 1 });
+
+    const result = await startFunnel(3456);
+
+    expect(result.error).toContain("not enabled");
+    expect(result.funnelActive).toBe(false);
+  });
+
   it("constructs URL from DNS name when serve status is empty", async () => {
     mockResolveBinary.mockReturnValue("/usr/bin/tailscale");
     enqueueSpawnSuccess(CONNECTED_STATUS_JSON);
