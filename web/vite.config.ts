@@ -75,10 +75,17 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:3456",
         configure: (proxy) => {
-          proxy.on("error", (err) => {
-            const code = (err as NodeJS.ErrnoException).code;
-            if (code === "ECONNRESET" || code === "EPIPE" || err.message === "socket hang up") return;
-            console.error("[api proxy]", err.message);
+          // Replace Vite's verbose multi-line error handler with a quiet one-liner
+          process.nextTick(() => {
+            proxy.removeAllListeners("error");
+            proxy.on("error", (err, _req, res) => {
+              const code = (err as NodeJS.ErrnoException).code;
+              if (code === "ECONNRESET" || code === "EPIPE" || err.message === "socket hang up") return;
+              console.error("[api proxy]", err.message);
+              if (res && "writeHead" in res && !res.headersSent) {
+                (res as import("http").ServerResponse).writeHead(502).end();
+              }
+            });
           });
         },
       },
@@ -88,11 +95,13 @@ export default defineConfig({
         rewriteWsOrigin: true,
         changeOrigin: true,
         configure: (proxy) => {
-          proxy.on("error", (err) => {
-            // Suppress noisy connection-reset errors from normal browser disconnects
-            const code = (err as NodeJS.ErrnoException).code;
-            if (code === "ECONNRESET" || code === "EPIPE" || err.message === "socket hang up") return;
-            console.error("[ws proxy]", err.message);
+          process.nextTick(() => {
+            proxy.removeAllListeners("error");
+            proxy.on("error", (err) => {
+              const code = (err as NodeJS.ErrnoException).code;
+              if (code === "ECONNRESET" || code === "EPIPE" || err.message === "socket hang up") return;
+              console.error("[ws proxy]", err.message);
+            });
           });
         },
       },
