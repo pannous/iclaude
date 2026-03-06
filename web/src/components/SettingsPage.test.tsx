@@ -199,7 +199,6 @@ describe("SettingsPage", () => {
 
     expect(mockApi.getSettings).toHaveBeenCalledTimes(1);
     await screen.findByText("Preferred: OpenRouter");
-    expect(screen.getByDisplayValue("claude-sonnet-4.6")).toBeInTheDocument();
     // Anthropic key is configured — should show "configured" badge
     expect(screen.getByText("configured")).toBeInTheDocument();
   });
@@ -252,16 +251,12 @@ describe("SettingsPage", () => {
     fireEvent.change(document.getElementById("key-anthropic")!, {
       target: { value: "  or-key  " },
     });
-    fireEvent.change(screen.getByLabelText("Anthropic Model"), {
-      target: { value: "  openai/gpt-4o-mini  " },
-    });
-
     fireEvent.click(screen.getAllByRole("button", { name: "Save" }).find(b => b.getAttribute("type") === "submit")!);
 
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
         anthropicApiKey: "or-key",
-        anthropicModel: "openai/gpt-4o-mini",
+        anthropicModel: "claude-sonnet-4.6",
         editorTabEnabled: false,
       });
     });
@@ -269,12 +264,9 @@ describe("SettingsPage", () => {
     expect(await screen.findByText("Settings saved.")).toBeInTheDocument();
   });
 
-  it("falls back model to claude-sonnet-4.6 when blank", async () => {
+  it("sends default model claude-sonnet-4.6 in save payload", async () => {
     render(<SettingsPage />);
     await screen.findByText("Preferred: OpenRouter");
-    fireEvent.change(screen.getByLabelText("Anthropic Model"), {
-      target: { value: "   " },
-    });
 
     fireEvent.click(screen.getAllByRole("button", { name: "Save" }).find(b => b.getAttribute("type") === "submit")!);
 
@@ -290,14 +282,11 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
     await screen.findByText("Preferred: OpenRouter");
 
-    fireEvent.change(screen.getByLabelText("Anthropic Model"), {
-      target: { value: "openai/gpt-4o-mini" },
-    });
     fireEvent.click(screen.getAllByRole("button", { name: "Save" }).find(b => b.getAttribute("type") === "submit")!);
 
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
-        anthropicModel: "openai/gpt-4o-mini",
+        anthropicModel: "claude-sonnet-4.6",
         editorTabEnabled: false,
       });
     });
