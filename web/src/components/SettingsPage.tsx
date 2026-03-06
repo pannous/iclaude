@@ -12,6 +12,7 @@ const CATEGORIES = [
   { id: "general", label: "General" },
   { id: "connection", label: "Connection" },
   { id: "authentication", label: "Authentication" },
+  { id: "local-network", label: "Local Network" },
   { id: "tunnel", label: "Tunnel" },
   { id: "notifications", label: "Notifications" },
   { id: "anthropic", label: "Anthropic" },
@@ -75,6 +76,10 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [qrLoading, setQrLoading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
+
+  // Local Network section state
+  const [networkInfo, setNetworkInfo] = useState<{ port: number; hostname: string; addresses: { label: string; ip: string }[]; token: string | null } | null>(null);
+  const [networkCopied, setNetworkCopied] = useState<string | null>(null);
 
   // Tunnel section state
   const [tunnelState, setTunnelState] = useState<string>("stopped");
@@ -161,8 +166,9 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
 
-    // Fetch auth token and tunnel status in parallel (non-blocking)
+    // Fetch auth token, network info, and tunnel status in parallel (non-blocking)
     api.getAuthToken().then((res) => setAuthToken(res.token)).catch(() => {});
+    api.getNetworkInfo().then(setNetworkInfo).catch(() => {});
     api.getTunnelStatus().then((s) => {
       setTunnelState(s.state);
       setTunnelUrl(s.url);
@@ -630,6 +636,66 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                   )}
                 </div>
 
+              </div>
+            </section>
+
+            {/* Local Network */}
+            <section id="local-network" ref={setSectionRef("local-network")}>
+              <h2 className="text-sm font-semibold text-cc-fg mb-4">Local Network</h2>
+              <div className="space-y-2">
+                {networkInfo ? (
+                  <>
+                    <p className="text-xs text-cc-muted mb-3">
+                      Access this instance from other devices on your network.
+                      {networkInfo.hostname && <> Hostname: <span className="text-cc-fg font-mono">{networkInfo.hostname}</span></>}
+                    </p>
+                    {networkInfo.addresses.map((addr) => {
+                      const url = `http://${addr.ip}:${networkInfo.port}${networkInfo.token ? `/?token=${networkInfo.token}` : ""}`;
+                      const isCopied = networkCopied === addr.ip;
+                      return (
+                        <div key={addr.ip} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cc-hover">
+                          <span className="text-[10px] text-cc-muted w-16 shrink-0">{addr.label}</span>
+                          <span className="text-xs text-cc-fg font-mono truncate flex-1">
+                            {addr.ip}:{networkInfo.port}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(url);
+                              setNetworkCopied(addr.ip);
+                              setTimeout(() => setNetworkCopied(null), 1500);
+                            }}
+                            className="text-xs text-cc-muted hover:text-cc-fg shrink-0 cursor-pointer"
+                          >
+                            {isCopied ? "Copied" : "Copy URL"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                    {networkInfo.hostname && networkInfo.hostname !== "localhost" && (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cc-hover">
+                        <span className="text-[10px] text-cc-muted w-16 shrink-0">Hostname</span>
+                        <span className="text-xs text-cc-fg font-mono truncate flex-1">
+                          {networkInfo.hostname}:{networkInfo.port}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const url = `http://${networkInfo.hostname}:${networkInfo.port}${networkInfo.token ? `/?token=${networkInfo.token}` : ""}`;
+                            await navigator.clipboard.writeText(url);
+                            setNetworkCopied("hostname");
+                            setTimeout(() => setNetworkCopied(null), 1500);
+                          }}
+                          className="text-xs text-cc-muted hover:text-cc-fg shrink-0 cursor-pointer"
+                        >
+                          {networkCopied === "hostname" ? "Copied" : "Copy URL"}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs text-cc-muted">Loading network info...</p>
+                )}
               </div>
             </section>
 

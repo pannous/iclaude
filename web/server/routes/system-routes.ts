@@ -3,6 +3,9 @@ import type { CliLauncher } from "../cli-launcher.js";
 import type { WsBridge } from "../ws-bridge.js";
 import type { TerminalManager } from "../terminal-manager.js";
 import { getUsageLimits } from "../usage-limits.js";
+import { getAllAddresses, getToken, isAuthEnabled } from "../auth-manager.js";
+import { DEFAULT_PORT_DEV } from "../constants.js";
+import { hostname } from "os";
 import {
   getUpdateState,
   checkForUpdate,
@@ -206,6 +209,14 @@ export function registerSystemRoutes(
     if (!terminalId) return c.json({ error: "terminalId is required" }, 400);
     deps.terminalManager.kill(terminalId);
     return c.json({ ok: true });
+  });
+
+  api.get("/network-info", (c) => {
+    const port = Number(process.env.PORT) || DEFAULT_PORT_DEV;
+    const addresses = getAllAddresses();
+    const host = hostname();
+    const token = isAuthEnabled() ? getToken() : null;
+    return c.json({ port, hostname: host, addresses, token });
   });
 
   api.post("/sessions/:id/message", async (c) => {

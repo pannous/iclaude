@@ -1100,6 +1100,10 @@ export const api = {
     return del<{ ok: boolean }>(`/prompts/${encodeURIComponent(id)}?${params.toString()}`);
   },
 
+  // Network
+  getNetworkInfo: () =>
+    get<{ port: number; hostname: string; addresses: { label: string; ip: string }[]; token: string | null }>("/network-info"),
+
   // Tunnel
   getTunnelStatus: () =>
     get<{ state: string; url: string | null; provider: string | null; mode: string; error: string | null }>("/tunnel/status"),

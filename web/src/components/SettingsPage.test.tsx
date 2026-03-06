@@ -64,6 +64,7 @@ const mockApi = {
   regenerateAuthToken: vi.fn(),
   getAuthQr: vi.fn(),
   verifyAnthropicKey: vi.fn(),
+  getNetworkInfo: vi.fn(),
   getTunnelStatus: vi.fn(),
   startTunnel: vi.fn(),
   stopTunnel: vi.fn(),
@@ -89,6 +90,7 @@ vi.mock("../api.js", () => ({
     regenerateAuthToken: (...args: unknown[]) => mockApi.regenerateAuthToken(...args),
     getAuthQr: (...args: unknown[]) => mockApi.getAuthQr(...args),
     verifyAnthropicKey: (...args: unknown[]) => mockApi.verifyAnthropicKey(...args),
+    getNetworkInfo: (...args: unknown[]) => mockApi.getNetworkInfo(...args),
     getTunnelStatus: (...args: unknown[]) => mockApi.getTunnelStatus(...args),
     startTunnel: (...args: unknown[]) => mockApi.startTunnel(...args),
     stopTunnel: (...args: unknown[]) => mockApi.stopTunnel(...args),
@@ -155,6 +157,15 @@ beforeEach(() => {
       { label: "LAN", url: "http://192.168.1.10:3456", qrDataUrl: "data:image/png;base64,LAN_QR" },
       { label: "Tailscale", url: "http://100.118.112.23:3456", qrDataUrl: "data:image/png;base64,TS_QR" },
     ],
+  });
+  mockApi.getNetworkInfo.mockResolvedValue({
+    port: 3456,
+    hostname: "mac.fritz.box",
+    addresses: [
+      { label: "Localhost", ip: "localhost" },
+      { label: "LAN", ip: "192.168.1.10" },
+    ],
+    token: "abc123testtoken",
   });
   mockApi.getTunnelStatus.mockResolvedValue({
     state: "stopped",
