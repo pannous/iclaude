@@ -36,6 +36,7 @@ import { TunnelManager, getTunnelPort } from "./tunnel-manager.js";
 import QRCode from "qrcode";
 import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
 import { imagePullManager } from "./image-pull-manager.js";
+import { restoreIfNeeded as restoreTailscaleFunnel, cleanup as cleanupTailscaleFunnel } from "./tailscale-manager.js";
 import { isRunningAsService } from "./service.js";
 import { getToken, verifyToken, isAuthEnabled, getLanAddress } from "./auth-manager.js";
 import { getCookie, setCookie } from "hono/cookie";
@@ -247,7 +248,7 @@ app.use("/*", async (c, next) => {
 });
 
 app.use("/api/*", cors());
-app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, agentExecutor, tunnelManager, chatEnabled ? chatBot : undefined));
+app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, agentExecutor, tunnelManager, chatEnabled ? chatBot : undefined, port));
 
 // Universal Link handler: /auth?token=xxx
 // If Listen app is installed, iOS opens it directly (app reads the token from the URL).
@@ -491,6 +492,11 @@ agentExecutor.startAll();
 // ── Image pull manager — pre-pull missing Docker images for environments ────
 imagePullManager.initFromEnvironments();
 
+// ── Tailscale Funnel restoration ────────────────────────────────────────────
+restoreTailscaleFunnel(port).catch((err) => {
+  console.warn("[server] Tailscale Funnel restoration failed:", err);
+});
+
 // ── Update checker ──────────────────────────────────────────────────────────
 startPeriodicCheck();
 if (isRunningAsService()) {
@@ -503,6 +509,7 @@ function gracefulShutdown() {
   tunnelManager.stop().catch(() => {});
   console.log("[server] Persisting container state before shutdown...");
   containerManager.persistState(CONTAINER_STATE_PATH);
+  cleanupTailscaleFunnel(port);
   process.exit(0);
 }
 process.on("SIGTERM", gracefulShutdown);

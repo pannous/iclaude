@@ -27,6 +27,7 @@ const Playground = lazyNamed(() => import("./components/Playground.js"), "Playgr
 const SettingsPage = lazyNamed(() => import("./components/SettingsPage.js"), "SettingsPage");
 const IntegrationsPage = lazyNamed(() => import("./components/IntegrationsPage.js"), "IntegrationsPage");
 const LinearSettingsPage = lazyNamed(() => import("./components/LinearSettingsPage.js"), "LinearSettingsPage");
+const TailscalePage = lazyNamed(() => import("./components/TailscalePage.js"), "TailscalePage");
 const PromptsPage = lazyNamed(() => import("./components/PromptsPage.js"), "PromptsPage");
 const EnvManager = lazyNamed(() => import("./components/EnvManager.js"), "EnvManager");
 const DockerBuilderPage = lazyNamed(() => import("./components/DockerBuilderPage.js"), "DockerBuilderPage");
@@ -45,6 +46,7 @@ const PAGE_MAP: Partial<Record<Route["page"], { component: ComponentType<any>; p
   prompts: { component: PromptsPage, props: { embedded: true } },
   integrations: { component: IntegrationsPage, props: { embedded: true } },
   "integration-linear": { component: LinearSettingsPage, props: { embedded: true } },
+  "integration-tailscale": { component: TailscalePage, props: { embedded: true } },
   terminal: { component: TerminalPage },
   environments: { component: EnvManager, props: { embedded: true } },
   "docker-builder": { component: DockerBuilderPage },
@@ -283,6 +285,13 @@ export default function App() {
       store.setSdkSessions(list);
     }).catch(() => {});
   }
+
+  // Load publicUrl from settings on mount (used for webhook URL generation)
+  useEffect(() => {
+    api.getSettings().then((s) => {
+      if (s.publicUrl) useStore.getState().setPublicUrl(s.publicUrl);
+    }).catch(() => {});
+  }, []);
 
   // LOCAL: auth gate — show nothing while autoAuth is in flight to avoid login-page flash
   if (authChecking) return null;

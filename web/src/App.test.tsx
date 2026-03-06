@@ -84,7 +84,7 @@ vi.mock("./api.js", () => ({
   api: {
     getChangedFiles: vi.fn().mockResolvedValue({ files: [] }),
     checkForUpdate: vi.fn().mockResolvedValue(null),
-    getSettings: vi.fn().mockResolvedValue({ editorTabEnabled: false }),
+    getSettings: vi.fn().mockResolvedValue({ editorTabEnabled: false, publicUrl: "" }),
     listSessions: vi.fn().mockResolvedValue([]),
     relaunchSession: vi.fn().mockResolvedValue({}),
   },

@@ -141,6 +141,7 @@ interface AppState {
   taskPanelConfig: TaskPanelConfig;
   taskPanelConfigMode: boolean;
   homeResetKey: number;
+  publicUrl: string;
   editorTabEnabled: boolean;
   newSessionCwd: string | null; // LOCAL: custom cwd for new sessions
   activeTab: string; // LOCAL: "chat" | "diff" | "terminal" | "editor" | "processes" | "panel:<slug>"
@@ -167,6 +168,7 @@ interface AppState {
   toggleYoloMode: () => void;
   setNotificationDesktop: (v: boolean) => void;
   toggleNotificationDesktop: () => void;
+  setPublicUrl: (url: string) => void;
   setSidebarOpen: (v: boolean) => void;
   setTaskPanelOpen: (open: boolean) => void;
   setTaskPanelConfigMode: (open: boolean) => void;
@@ -364,6 +366,7 @@ export const useStore = create<AppState>((set) => ({
   taskPanelConfig: getInitialTaskPanelConfig(),
   taskPanelConfigMode: false,
   homeResetKey: 0,
+  publicUrl: "",
   editorTabEnabled: false,
   newSessionCwd: null,
   activeTab: "chat",
@@ -461,6 +464,7 @@ export const useStore = create<AppState>((set) => ({
       safeStorage.setItem("cc-notification-desktop", String(next));
       return { notificationDesktop: next };
     }),
+  setPublicUrl: (url) => set({ publicUrl: url }),
   setSidebarOpen: (v) => set({ sidebarOpen: v }),
   setTaskPanelOpen: (open) => set({ taskPanelOpen: open }),
   setTaskPanelConfigMode: (open) => set({ taskPanelConfigMode: open }),

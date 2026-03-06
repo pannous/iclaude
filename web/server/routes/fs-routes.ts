@@ -300,6 +300,54 @@ export function registerFsRoutes(api: Hono, opts?: { allowedBases?: string[] }):
     }
   });
 
+  /** Search file contents using ripgrep. Returns matching lines grouped by file. */
+  api.get("/fs/grep", (c) => {
+    const query = c.req.query("q");
+    const rawCwd = c.req.query("cwd");
+    if (!query || !rawCwd) return c.json({ error: "q and cwd required" }, 400);
+    const basePath = guardPath(rawCwd, allowedBases());
+    if (!basePath) return c.json({ error: "Path outside allowed directories" }, 403);
+
+    const maxResults = Math.min(Number(c.req.query("limit")) || 200, 500);
+    const caseSensitive = c.req.query("caseSensitive") === "1";
+    const isRegex = c.req.query("regex") === "1";
+
+    const flags = [
+      caseSensitive ? "" : "-i",
+      isRegex ? "" : "--fixed-strings",
+      "--max-count=20",
+      "--max-filesize=1M",
+      "--no-heading",
+      "--line-number",
+      "--color=never",
+      "-g", shellEscapeArg("!node_modules"), "-g", shellEscapeArg("!.git"), "-g", shellEscapeArg("!dist"), "-g", shellEscapeArg("!.build"),
+      "-g", shellEscapeArg("!*.min.js"), "-g", shellEscapeArg("!*.min.css"), "-g", shellEscapeArg("!package-lock.json"),
+      "-g", shellEscapeArg("!bun.lockb"), "-g", shellEscapeArg("!yarn.lock"),
+    ].filter(Boolean);
+
+    try {
+      const result = execCaptureStdout(
+        `rg ${flags.join(" ")} -- ${shellEscapeArg(query)} ${shellEscapeArg(basePath)}`,
+        { cwd: basePath, encoding: "utf-8", timeout: 10000 },
+      );
+      const lines = result.split("\n").filter(Boolean);
+      const matches: { path: string; line: number; text: string }[] = [];
+      for (const raw of lines) {
+        if (matches.length >= maxResults) break;
+        const firstColon = raw.indexOf(":");
+        if (firstColon < 0) continue;
+        const secondColon = raw.indexOf(":", firstColon + 1);
+        if (secondColon < 0) continue;
+        const filePath = raw.slice(0, firstColon);
+        const lineNum = parseInt(raw.slice(firstColon + 1, secondColon), 10);
+        const text = raw.slice(secondColon + 1);
+        if (!isNaN(lineNum)) matches.push({ path: filePath, line: lineNum, text: text.slice(0, 500) });
+      }
+      return c.json({ matches, truncated: lines.length > maxResults });
+    } catch {
+      return c.json({ matches: [], truncated: false });
+    }
+  });
 
   api.put("/fs/write", async (c) => {
     const body = await c.req.json().catch(() => ({}));

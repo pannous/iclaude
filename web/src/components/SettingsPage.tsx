@@ -11,11 +11,12 @@ interface SettingsPageProps {
 const CATEGORIES = [
   { id: "general", label: "General" },
   { id: "connection", label: "Connection" },
+  { id: "webhooks", label: "Webhooks" },
   { id: "authentication", label: "Authentication" },
   { id: "local-network", label: "Local Network" },
   { id: "tunnel", label: "Tunnel" },
   { id: "notifications", label: "Notifications" },
-  { id: "anthropic", label: "Anthropic" },
+  { id: "anthropic", label: "AI Provider" },
   { id: "ai-validation", label: "AI Validation" },
   { id: "updates", label: "Updates" },
   { id: "telemetry", label: "Telemetry" },
@@ -60,6 +61,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [aiValidationEnabled, setAiValidationEnabled] = useState(false);
   const [aiValidationAutoApprove, setAiValidationAutoApprove] = useState(true);
   const [aiValidationAutoDeny, setAiValidationAutoDeny] = useState(true);
+  const [publicUrl, setPublicUrl] = useState("");
   const [activeSection, setActiveSection] = useState<CategoryId>("general");
   const [apiKeyFocused, setApiKeyFocused] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
@@ -168,6 +170,10 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
         if (typeof s.aiValidationAutoApprove === "boolean") setAiValidationAutoApprove(s.aiValidationAutoApprove);
         if (typeof s.aiValidationAutoDeny === "boolean") setAiValidationAutoDeny(s.aiValidationAutoDeny);
         if (s.updateChannel === "stable" || s.updateChannel === "prerelease") setUpdateChannel(s.updateChannel);
+        if (typeof s.publicUrl === "string") {
+          setPublicUrl(s.publicUrl);
+          useStore.getState().setPublicUrl(s.publicUrl);
+        }
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -475,6 +481,69 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 {connError && (
                   <p className="text-xs text-red-500 px-1">{connError}</p>
                 )}
+              </div>
+            </section>
+
+
+            {/* Webhooks */}
+            <section id="webhooks" ref={setSectionRef("webhooks")}>
+              <h2 className="text-sm font-semibold text-cc-fg mb-4">Webhooks</h2>
+              <div className="space-y-4">
+                <p className="text-xs text-cc-muted">
+                  The public URL is used for webhook URLs that external services (Linear, GitHub) send events to.
+                  Set this to the externally-reachable address of your Companion instance.
+                </p>
+                <p className="text-xs text-cc-muted">
+                  Tip:{" "}
+                  <a
+                    href="#/integrations/tailscale"
+                    className="text-cc-primary hover:underline"
+                  >
+                    Use the Tailscale integration
+                  </a>{" "}
+                  to get an HTTPS URL automatically.
+                </p>
+                <div>
+                  <label className="block text-xs font-medium text-cc-fg mb-1.5" htmlFor="public-url">
+                    Public URL
+                  </label>
+                  <input
+                    id="public-url"
+                    type="url"
+                    aria-label="Public URL"
+                    value={publicUrl}
+                    onChange={(e) => setPublicUrl(e.target.value)}
+                    placeholder="https://your-domain.example.com"
+                    className="w-full px-3 py-2.5 min-h-[44px] text-sm bg-cc-bg rounded-lg border border-cc-border text-cc-fg placeholder:text-cc-muted focus:outline-none focus:ring-1 focus:ring-cc-primary font-mono-code"
+                  />
+                  <p className="mt-1.5 text-[10px] text-cc-muted">
+                    {publicUrl
+                      ? `Using: ${publicUrl}`
+                      : `Fallback: ${typeof window !== "undefined" ? window.location.origin : "http://localhost:3456"}`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setSaving(true);
+                    setError("");
+                    try {
+                      const res = await api.updateSettings({ publicUrl: publicUrl.trim() });
+                      setPublicUrl(res.publicUrl);
+                      useStore.getState().setPublicUrl(res.publicUrl);
+                      setSaved(true);
+                      setTimeout(() => setSaved(false), 1800);
+                    } catch (err: unknown) {
+                      setError(err instanceof Error ? err.message : String(err));
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  disabled={saving}
+                  className="px-4 py-2 min-h-[44px] rounded-lg text-sm font-medium bg-cc-primary text-white hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
+                >
+                  {saving ? "Saving..." : saved ? "Saved!" : "Save Public URL"}
+                </button>
               </div>
             </section>
 

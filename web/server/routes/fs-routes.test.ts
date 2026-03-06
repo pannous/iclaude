@@ -2303,3 +2303,56 @@ describe("GET /fs/claude-config", () => {
     rmSync(nonGitDir, { recursive: true, force: true });
   });
 });
+
+describe("GET /fs/grep", () => {
+  it("returns 400 when q or cwd is missing", async () => {
+    const res1 = await app.request("/fs/grep?cwd=/tmp");
+    expect(res1.status).toBe(400);
+
+    const res2 = await app.request("/fs/grep?q=hello");
+    expect(res2.status).toBe(400);
+  });
+
+  it("searches file contents and returns matching lines", async () => {
+    writeFileSync(join(tempDir, "hello.txt"), "line one\nhello world\nline three\n");
+    writeFileSync(join(tempDir, "other.txt"), "no match here\n");
+
+    const res = await app.request(
+      `/fs/grep?cwd=${encodeURIComponent(tempDir)}&q=hello`
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { matches: Array<{ path: string; line: number; text: string }>; truncated: boolean };
+    expect(body.matches.length).toBeGreaterThanOrEqual(1);
+    expect(body.matches[0].text).toContain("hello world");
+    expect(body.matches[0].line).toBe(2);
+    expect(body.matches[0].path).toContain("hello.txt");
+  });
+
+  it("respects caseSensitive flag", async () => {
+    writeFileSync(join(tempDir, "case.txt"), "Hello\nhello\nHELLO\n");
+
+    const insensitive = await app.request(
+      `/fs/grep?cwd=${encodeURIComponent(tempDir)}&q=hello`
+    );
+    const insBody = await insensitive.json() as { matches: Array<{ path: string; line: number; text: string }> };
+    expect(insBody.matches.length).toBe(3);
+
+    const sensitive = await app.request(
+      `/fs/grep?cwd=${encodeURIComponent(tempDir)}&q=hello&caseSensitive=1`
+    );
+    const senBody = await sensitive.json() as { matches: Array<{ path: string; line: number; text: string }> };
+    expect(senBody.matches.length).toBe(1);
+    expect(senBody.matches[0].text).toBe("hello");
+  });
+
+  it("returns empty matches for no results", async () => {
+    writeFileSync(join(tempDir, "empty.txt"), "nothing here\n");
+    const res = await app.request(
+      `/fs/grep?cwd=${encodeURIComponent(tempDir)}&q=zzzznotfound`
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { matches: Array<unknown>; truncated: boolean };
+    expect(body.matches).toEqual([]);
+    expect(body.truncated).toBe(false);
+  });
+});

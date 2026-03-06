@@ -276,21 +276,29 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     setRefreshKey((k) => k + 1);
   }, []);
 
-  // ── Fuzzy file search state ──
+  // ── Search state (file search + find in files) ──
+  type SearchMode = "files" | "content";
   const [searchActive, setSearchActive] = useState(false);
+  const [searchMode, setSearchMode] = useState<SearchMode>("files");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchSelectedIndex, setSearchSelectedIndex] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // Content search (grep) state
+  const [grepResults, setGrepResults] = useState<Array<{ path: string; line: number; text: string }>>([]);
+  const [grepLoading, setGrepLoading] = useState(false);
+  const [grepTruncated, setGrepTruncated] = useState(false);
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [useRegex, setUseRegex] = useState(false);
+  const grepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const flatFiles = useMemo(() => (cwd ? flattenTree(tree, cwd) : []), [tree, cwd]);
 
   const searchResults = useMemo(() => {
+    if (searchMode !== "files") return [];
     const q = searchQuery.trim();
     if (!q) return flatFiles.slice(0, 50);
 
-    // Glob filter: queries containing * or ? are treated as glob patterns.
-    // Patterns without "/" match against filenames only (e.g. "*.ts" matches all .ts files).
-    // Patterns with "/" match against the full relative path (e.g. "src/*.ts").
     if (q.includes("*") || q.includes("?")) {
       const matchFullPath = q.includes("/");
       const escaped = q.replace(/[.+^${}()|[\]\\]/g, "\\$&");
@@ -302,50 +310,104 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
           return re.test(target);
         }).slice(0, 50);
       } catch {
-        // If the glob produces an invalid regex, fall through to fuzzy
+        // fall through to fuzzy
       }
     }
 
     const fzf = new Fzf(flatFiles, { selector: (item) => item.relPath, limit: 50 });
     return fzf.find(q).map((r) => r.item);
-  }, [flatFiles, searchQuery]);
+  }, [flatFiles, searchQuery, searchMode]);
+
+  // Debounced grep when in content mode
+  useEffect(() => {
+    if (searchMode !== "content" || !cwd) return;
+    const q = searchQuery.trim();
+    if (!q) {
+      setGrepResults([]);
+      setGrepTruncated(false);
+      return;
+    }
+    if (grepTimerRef.current) clearTimeout(grepTimerRef.current);
+    grepTimerRef.current = setTimeout(() => {
+      setGrepLoading(true);
+      api.grepFiles(cwd, q, { caseSensitive, regex: useRegex }).then((res) => {
+        setGrepResults(res.matches);
+        setGrepTruncated(res.truncated);
+      }).catch(() => {
+        setGrepResults([]);
+        setGrepTruncated(false);
+      }).finally(() => setGrepLoading(false));
+    }, 300);
+    return () => { if (grepTimerRef.current) clearTimeout(grepTimerRef.current); };
+  }, [searchQuery, searchMode, cwd, caseSensitive, useRegex]);
+
+  // Group grep results by file
+  const grepGrouped = useMemo(() => {
+    const groups = new Map<string, Array<{ line: number; text: string }>>();
+    for (const m of grepResults) {
+      let arr = groups.get(m.path);
+      if (!arr) { arr = []; groups.set(m.path, arr); }
+      arr.push({ line: m.line, text: m.text });
+    }
+    return groups;
+  }, [grepResults]);
+
+  // Flatten grep groups for keyboard navigation
+  const grepFlatList = useMemo(() => {
+    const items: Array<{ path: string; line: number }>[] = [];
+    for (const [path, lines] of grepGrouped) {
+      for (const l of lines) items.push([{ path, line: l.line }]);
+    }
+    return items.flat();
+  }, [grepGrouped]);
 
   // Reset selection index when results change
   useEffect(() => {
     setSearchSelectedIndex(0);
-  }, [searchResults]);
+  }, [searchResults, grepResults]);
 
-  const openSearch = useCallback(() => {
+  const openSearch = useCallback((mode: SearchMode = "files") => {
     setSearchActive(true);
+    setSearchMode(mode);
     setSearchQuery("");
     setSearchSelectedIndex(0);
+    setGrepResults([]);
+    setGrepTruncated(false);
   }, []);
 
   const closeSearch = useCallback(() => {
     setSearchActive(false);
     setSearchQuery("");
     setSearchSelectedIndex(0);
+    setGrepResults([]);
+    setGrepTruncated(false);
   }, []);
 
-  // Focus the search input when search opens
+  // Focus the search input when search opens or mode changes
   useEffect(() => {
     if (searchActive) {
-      // Defer focus to next frame so the input is mounted
       requestAnimationFrame(() => searchInputRef.current?.focus());
     }
-  }, [searchActive]);
+  }, [searchActive, searchMode]);
 
-  // Cmd/Ctrl+P to toggle search
+  // Cmd/Ctrl+P = find file, Cmd/Ctrl+F = find in files
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "p") return;
-      event.preventDefault();
-      if (searchActive) closeSearch();
-      else openSearch();
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === "p") {
+        event.preventDefault();
+        if (searchActive && searchMode === "files") closeSearch();
+        else openSearch("files");
+      } else if (key === "f") {
+        event.preventDefault();
+        if (searchActive && searchMode === "content") closeSearch();
+        else openSearch("content");
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [searchActive, openSearch, closeSearch]);
+  }, [searchActive, searchMode, openSearch, closeSearch]);
 
   // Load file tree and git status when cwd changes, when Claude edits files, or on manual refresh
   useEffect(() => {
@@ -547,18 +609,21 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
     if (e.key === "Escape") {
       e.preventDefault();
       closeSearch();
-    } else if (e.key === "ArrowDown") {
+      return;
+    }
+    const list = searchMode === "files" ? searchResults : grepFlatList;
+    if (e.key === "ArrowDown") {
       e.preventDefault();
-      setSearchSelectedIndex((i) => Math.min(i + 1, searchResults.length - 1));
+      setSearchSelectedIndex((i) => Math.min(i + 1, list.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSearchSelectedIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const item = searchResults[searchSelectedIndex];
+      const item = list[searchSelectedIndex];
       if (item) selectSearchResult(item.path);
     }
-  }, [closeSearch, searchResults, searchSelectedIndex, selectSearchResult]);
+  }, [closeSearch, searchMode, searchResults, grepFlatList, searchSelectedIndex, selectSearchResult]);
 
   // ── Tree panel (reused in both desktop sidebar and mobile master view) ──
   const treePanel = (
@@ -568,17 +633,34 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
         <div className="flex items-center gap-0.5">
           <button
             type="button"
-            onClick={searchActive ? closeSearch : openSearch}
+            onClick={() => searchActive && searchMode === "files" ? closeSearch() : openSearch("files")}
             className={`flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer ${
-              searchActive
+              searchActive && searchMode === "files"
                 ? "text-cc-fg bg-cc-hover"
                 : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
             }`}
             aria-label="Search files"
-            title="Search files (Ctrl+P)"
+            title="Find file (⌘P)"
           >
             <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
               <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85zm-5.242.156a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => searchActive && searchMode === "content" ? closeSearch() : openSearch("content")}
+            className={`flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer ${
+              searchActive && searchMode === "content"
+                ? "text-cc-fg bg-cc-hover"
+                : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+            }`}
+            aria-label="Find in files"
+            title="Find in files (⌘F)"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3 h-3">
+              <path d="M2 3h7M2 6.5h5M2 10h6" strokeLinecap="round" />
+              <circle cx="12" cy="10" r="2.5" fill="none" />
+              <path d="M14 12l1.5 1.5" strokeLinecap="round" />
             </svg>
           </button>
           <button
@@ -597,40 +679,143 @@ export function SessionEditorPane({ sessionId }: SessionEditorPaneProps) {
       </div>
       {searchActive && (
         <div className="shrink-0 border-b border-cc-border">
-          <div className="px-2 py-1.5">
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              placeholder="Search files..."
-              aria-label="Search files"
-              className="w-full px-2 py-1 text-xs rounded bg-cc-bg border border-cc-border text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary"
-            />
+          {/* Mode tabs */}
+          <div className="flex border-b border-cc-border">
+            <button
+              type="button"
+              onClick={() => { setSearchMode("files"); setSearchQuery(""); }}
+              className={`flex-1 px-2 py-1.5 text-[10px] font-medium transition-colors cursor-pointer ${
+                searchMode === "files" ? "text-cc-fg border-b-2 border-cc-primary" : "text-cc-muted hover:text-cc-fg"
+              }`}
+            >
+              Files
+            </button>
+            <button
+              type="button"
+              onClick={() => { setSearchMode("content"); setSearchQuery(""); }}
+              className={`flex-1 px-2 py-1.5 text-[10px] font-medium transition-colors cursor-pointer ${
+                searchMode === "content" ? "text-cc-fg border-b-2 border-cc-primary" : "text-cc-muted hover:text-cc-fg"
+              }`}
+            >
+              In Files
+            </button>
           </div>
-          <div className="max-h-[300px] overflow-auto p-1">
-            {searchResults.length === 0 && searchQuery.trim() && (
-              <div className="px-2 py-2 text-xs text-cc-muted">No files found.</div>
+          <div className="px-2 py-1.5">
+            <div className="flex items-center gap-1">
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                placeholder={searchMode === "files" ? "Search files..." : "Search in files..."}
+                aria-label={searchMode === "files" ? "Search files" : "Search in files"}
+                className="flex-1 min-w-0 px-2 py-1 text-xs rounded bg-cc-bg border border-cc-border text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary"
+              />
+              {searchMode === "content" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setCaseSensitive((v) => !v)}
+                    className={`shrink-0 w-6 h-6 flex items-center justify-center rounded text-[10px] font-bold transition-colors cursor-pointer ${
+                      caseSensitive ? "bg-cc-primary text-white" : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                    }`}
+                    title="Match case"
+                    aria-label="Toggle case sensitivity"
+                  >
+                    Aa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUseRegex((v) => !v)}
+                    className={`shrink-0 w-6 h-6 flex items-center justify-center rounded text-[10px] font-bold transition-colors cursor-pointer ${
+                      useRegex ? "bg-cc-primary text-white" : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                    }`}
+                    title="Use regex"
+                    aria-label="Toggle regex"
+                  >
+                    .*
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="max-h-[400px] overflow-auto p-1">
+            {/* File search results */}
+            {searchMode === "files" && (
+              <>
+                {searchResults.length === 0 && searchQuery.trim() && (
+                  <div className="px-2 py-2 text-xs text-cc-muted">No files found.</div>
+                )}
+                {searchResults.map((item, i) => {
+                  const sColor = gitStatusColor(gitStatus.get(item.path));
+                  return (
+                    <button
+                      key={item.path}
+                      type="button"
+                      onClick={() => selectSearchResult(item.path)}
+                      className={`w-full text-left px-2 py-1.5 text-xs rounded truncate cursor-pointer ${
+                        i === searchSelectedIndex
+                          ? "bg-cc-active text-cc-fg"
+                          : sColor || "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                      }`}
+                      title={item.relPath}
+                    >
+                      {item.relPath}
+                    </button>
+                  );
+                })}
+              </>
             )}
-            {searchResults.map((item, i) => {
-              const sColor = gitStatusColor(gitStatus.get(item.path));
-              return (
-              <button
-                key={item.path}
-                type="button"
-                onClick={() => selectSearchResult(item.path)}
-                className={`w-full text-left px-2 py-1.5 text-xs rounded truncate cursor-pointer ${
-                  i === searchSelectedIndex
-                    ? "bg-cc-active text-cc-fg"
-                    : sColor || "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
-                }`}
-                title={item.relPath}
-              >
-                {item.relPath}
-              </button>
-              );
-            })}
+            {/* Content search results */}
+            {searchMode === "content" && (
+              <>
+                {grepLoading && (
+                  <div className="px-2 py-2 text-xs text-cc-muted flex items-center gap-2">
+                    <span className="w-3 h-3 border border-cc-muted border-t-transparent rounded-full animate-spin" />
+                    Searching...
+                  </div>
+                )}
+                {!grepLoading && grepResults.length === 0 && searchQuery.trim() && (
+                  <div className="px-2 py-2 text-xs text-cc-muted">No matches found.</div>
+                )}
+                {!grepLoading && (() => {
+                  let flatIdx = 0;
+                  return [...grepGrouped.entries()].map(([filePath, lines]) => (
+                    <div key={filePath} className="mb-1">
+                      <div
+                        className="px-2 py-1 text-[10px] font-medium text-cc-fg truncate cursor-pointer hover:bg-cc-hover rounded"
+                        title={cwd ? relPath(cwd, filePath) : filePath}
+                        onClick={() => selectSearchResult(filePath)}
+                      >
+                        {cwd ? relPath(cwd, filePath) : filePath}
+                      </div>
+                      {lines.map((match) => {
+                        const idx = flatIdx++;
+                        return (
+                          <button
+                            key={`${filePath}:${match.line}`}
+                            type="button"
+                            onClick={() => selectSearchResult(filePath)}
+                            className={`w-full text-left pl-4 pr-2 py-1 text-[11px] font-mono-code rounded truncate cursor-pointer ${
+                              idx === searchSelectedIndex
+                                ? "bg-cc-active text-cc-fg"
+                                : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+                            }`}
+                          >
+                            <span className="text-cc-muted/60 mr-2">{match.line}</span>
+                            {match.text.trim()}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ));
+                })()}
+                {grepTruncated && (
+                  <div className="px-2 py-1.5 text-[10px] text-cc-warning">Results truncated — refine your search.</div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

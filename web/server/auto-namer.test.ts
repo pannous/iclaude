@@ -39,6 +39,7 @@ beforeEach(() => {
     aiValidationAutoApprove: true,
     aiValidationAutoDeny: true,
     aiProvider: "openrouter",
+    publicUrl: "",
     updateChannel: "stable",
     updatedAt: 0,
   });
@@ -82,6 +83,7 @@ describe("generateSessionTitle", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       aiProvider: "openrouter",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -135,6 +137,7 @@ describe("generateSessionTitle", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       aiProvider: "openrouter",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -214,6 +217,7 @@ describe("generateSessionTitle", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       aiProvider: "openrouter",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -280,6 +284,7 @@ describe("generateSessionTitle", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       aiProvider: "openrouter",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -321,6 +326,7 @@ describe("generateSessionTitle", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       aiProvider: "openrouter",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });
@@ -364,6 +370,7 @@ describe("generateSessionTitle", () => {
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
       aiProvider: "openrouter",
+      publicUrl: "",
       updateChannel: "stable",
       updatedAt: 0,
     });

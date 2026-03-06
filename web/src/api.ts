@@ -264,6 +264,17 @@ export interface EditorStartResult {
   message?: string;
 }
 
+/** Keep in sync with web/server/tailscale-manager.ts TailscaleStatus */
+export interface TailscaleStatus {
+  installed: boolean;
+  binaryPath: string | null;
+  connected: boolean;
+  dnsName: string | null;
+  funnelActive: boolean;
+  funnelUrl: string | null;
+  error: string | null;
+}
+
 export interface AppSettings {
   authEnabled: boolean;
   anthropicApiKeyConfigured: boolean;
@@ -279,6 +290,7 @@ export interface AppSettings {
   aiValidationEnabled: boolean;
   aiValidationAutoApprove: boolean;
   aiValidationAutoDeny: boolean;
+  publicUrl: string;
   updateChannel: "stable" | "prerelease";
   aiProvider?: "anthropic" | "openai" | "openrouter";
 }
@@ -478,6 +490,7 @@ export interface AgentInfo {
         adapter: "linear" | "github" | "slack" | "discord";
         mentionPattern?: string;
         autoSubscribe: boolean;
+        credentials?: Record<string, string>;
       }>;
     };
   };
@@ -822,11 +835,18 @@ export const api = {
     aiValidationEnabled?: boolean;
     aiValidationAutoApprove?: boolean;
     aiValidationAutoDeny?: boolean;
+    publicUrl?: string;
     updateChannel?: "stable" | "prerelease";
     aiProvider?: "anthropic" | "openai" | "openrouter";
   }) => put<AppSettings>("/settings", data),
   verifyAnthropicKey: (apiKey: string) =>
     post<{ valid: boolean; error?: string }>("/settings/anthropic/verify", { apiKey }),
+
+  // Tailscale
+  getTailscaleStatus: () => get<TailscaleStatus>("/tailscale/status"),
+  startTailscaleFunnel: () => post<TailscaleStatus>("/tailscale/funnel/start"),
+  stopTailscaleFunnel: () => post<TailscaleStatus>("/tailscale/funnel/stop"),
+
   searchLinearIssues: (query: string, limit = 8) =>
     get<{ issues: LinearIssue[] }>(
       `/linear/issues?query=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}`,
@@ -946,6 +966,10 @@ export const api = {
   statFile: (path: string) =>
     get<{ path: string; size: number; isFile: boolean; isDirectory: boolean }>(
       `/fs/stat?path=${encodeURIComponent(path)}`,
+    ),
+  grepFiles: (cwd: string, query: string, opts?: { caseSensitive?: boolean; regex?: boolean; limit?: number }) =>
+    get<{ matches: Array<{ path: string; line: number; text: string }>; truncated: boolean }>(
+      `/fs/grep?cwd=${encodeURIComponent(cwd)}&q=${encodeURIComponent(query)}${opts?.caseSensitive ? "&caseSensitive=1" : ""}${opts?.regex ? "&regex=1" : ""}${opts?.limit ? `&limit=${opts.limit}` : ""}`,
     ),
   revealInFinder: (path: string) =>
     post<{ ok: boolean }>("/fs/reveal", { path }),

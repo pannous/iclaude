@@ -11,6 +11,8 @@ export interface ChatPlatformBinding {
   mentionPattern?: string;
   /** Auto-subscribe to threads for multi-turn conversations */
   autoSubscribe: boolean;
+  /** Per-platform credentials (API keys, tokens, secrets, etc.) */
+  credentials?: Record<string, string>;
 }
 
 export interface McpServerConfigAgent {

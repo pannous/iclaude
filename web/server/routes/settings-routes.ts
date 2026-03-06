@@ -26,6 +26,7 @@ export function registerSettingsRoutes(api: Hono): void {
       aiValidationAutoApprove: settings.aiValidationAutoApprove,
       aiValidationAutoDeny: settings.aiValidationAutoDeny,
       aiProvider: settings.aiProvider,
+      publicUrl: settings.publicUrl,
       updateChannel: settings.updateChannel,
     });
   });
@@ -83,6 +84,15 @@ export function registerSettingsRoutes(api: Hono): void {
     if (body.aiProvider !== undefined && body.aiProvider !== "anthropic" && body.aiProvider !== "openai" && body.aiProvider !== "openrouter") {
       return c.json({ error: "aiProvider must be 'anthropic', 'openai', or 'openrouter'" }, 400);
     }
+    if (body.publicUrl !== undefined) {
+      if (typeof body.publicUrl !== "string") {
+        return c.json({ error: "publicUrl must be a string" }, 400);
+      }
+      const trimmed = body.publicUrl.trim().replace(/\/+$/, "");
+      if (trimmed !== "" && !/^https?:\/\/.+/.test(trimmed)) {
+        return c.json({ error: "publicUrl must be a valid http/https URL" }, 400);
+      }
+    }
     if (body.updateChannel !== undefined && body.updateChannel !== "stable" && body.updateChannel !== "prerelease") {
       return c.json({ error: "updateChannel must be 'stable' or 'prerelease'" }, 400);
     }
@@ -96,6 +106,7 @@ export function registerSettingsRoutes(api: Hono): void {
       || body.aiValidationEnabled !== undefined || body.aiValidationAutoApprove !== undefined
       || body.aiValidationAutoDeny !== undefined
       || body.aiProvider !== undefined
+      || body.publicUrl !== undefined
       || body.updateChannel !== undefined;
     if (!hasAnyField) {
       return c.json({ error: "At least one settings field is required" }, 400);
@@ -174,6 +185,10 @@ export function registerSettingsRoutes(api: Hono): void {
         body.aiProvider === "anthropic" || body.aiProvider === "openai" || body.aiProvider === "openrouter"
           ? (body.aiProvider as AiProvider)
           : undefined,
+      publicUrl:
+        typeof body.publicUrl === "string"
+          ? body.publicUrl.trim().replace(/\/+$/, "")
+          : undefined,
       updateChannel:
         body.updateChannel === "stable" || body.updateChannel === "prerelease"
           ? (body.updateChannel as UpdateChannel)
@@ -201,6 +216,7 @@ export function registerSettingsRoutes(api: Hono): void {
       aiValidationAutoApprove: settings.aiValidationAutoApprove,
       aiValidationAutoDeny: settings.aiValidationAutoDeny,
       aiProvider: settings.aiProvider,
+      publicUrl: settings.publicUrl,
       updateChannel: settings.updateChannel,
     });
   });

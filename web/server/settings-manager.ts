@@ -36,6 +36,7 @@ export interface CompanionSettings {
   tunnelHostname: string;
   tunnelCredentialsPath: string;
   aiProvider: AiProvider;
+  publicUrl: string;
   updateChannel: UpdateChannel;
   updatedAt: number;
 }
@@ -67,6 +68,7 @@ let settings: CompanionSettings = {
   aiValidationAutoApprove: true,
   aiValidationAutoDeny: true,
   aiProvider: "openrouter",
+  publicUrl: "",
   updateChannel: "stable",
   updatedAt: 0,
 };
@@ -100,6 +102,7 @@ function normalize(raw: Partial<CompanionSettings> | null | undefined): Companio
     aiProvider: raw?.aiProvider === "anthropic" || (raw as Record<string, string>)?.aiProvider === "claude" ? "anthropic"
       : raw?.aiProvider === "openai" ? "openai"
       : "openrouter",
+    publicUrl: typeof raw?.publicUrl === "string" ? raw.publicUrl.trim().replace(/\/+$/, "") : "",
     updateChannel: raw?.updateChannel === "prerelease" ? "prerelease" : "stable",
     updatedAt: typeof raw?.updatedAt === "number" ? raw.updatedAt : 0,
   };
@@ -129,7 +132,7 @@ export function getSettings(): CompanionSettings {
 }
 
 export function updateSettings(
-  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "openrouterApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "editorTabEnabled" | "tunnelEnabled" | "tunnelMode" | "tunnelId" | "tunnelHostname" | "tunnelCredentialsPath" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "updateChannel">>,
+  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "openrouterApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "editorTabEnabled" | "tunnelEnabled" | "tunnelMode" | "tunnelId" | "tunnelHostname" | "tunnelCredentialsPath" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "publicUrl" | "updateChannel">>,
 ): CompanionSettings {
   ensureLoaded();
   settings = normalize({
@@ -155,6 +158,7 @@ export function updateSettings(
     aiValidationAutoApprove: patch.aiValidationAutoApprove ?? settings.aiValidationAutoApprove,
     aiValidationAutoDeny: patch.aiValidationAutoDeny ?? settings.aiValidationAutoDeny,
     aiProvider: patch.aiProvider ?? settings.aiProvider,
+    publicUrl: patch.publicUrl ?? settings.publicUrl,
     updateChannel: patch.updateChannel ?? settings.updateChannel,
     updatedAt: Date.now(),
   });
