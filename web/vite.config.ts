@@ -65,7 +65,7 @@ export default defineConfig({
     port: 2345,
     strictPort: true,
     // LOCAL: dynamically include all local network IPs so LAN access works
-    allowedHosts: [".trycloudflare.com",".ngrok-free.app",".ngrok.io","mac.fritz.box","companion.pannous.com","claude.pannous.com", ...getLocalIPs()],
+    allowedHosts: [".trycloudflare.com",".ngrok-free.app",".ngrok.io","mac.fritz.box","companion.pannous.com","claude.pannous.com","iclaude.pannous.com", ...getLocalIPs()],
     watch: {
       // Vitest writes coverage files here during test runs; exclude them
       // so Vite doesn't trigger spurious HMR reloads.
