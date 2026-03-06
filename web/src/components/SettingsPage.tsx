@@ -11,7 +11,6 @@ interface SettingsPageProps {
 const CATEGORIES = [
   { id: "general", label: "General" },
   { id: "connection", label: "Connection" },
-  { id: "webhooks", label: "Webhooks" },
   { id: "authentication", label: "Authentication" },
   { id: "local-network", label: "Local Network" },
   { id: "tunnel", label: "Tunnel" },
@@ -484,69 +483,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
               </div>
             </section>
 
-
-            {/* Webhooks */}
-            <section id="webhooks" ref={setSectionRef("webhooks")}>
-              <h2 className="text-sm font-semibold text-cc-fg mb-4">Webhooks</h2>
-              <div className="space-y-4">
-                <p className="text-xs text-cc-muted">
-                  The public URL is used for webhook URLs that external services (Linear, GitHub) send events to.
-                  Set this to the externally-reachable address of your Companion instance.
-                </p>
-                <p className="text-xs text-cc-muted">
-                  Tip:{" "}
-                  <a
-                    href="#/integrations/tailscale"
-                    className="text-cc-primary hover:underline"
-                  >
-                    Use the Tailscale integration
-                  </a>{" "}
-                  to get an HTTPS URL automatically.
-                </p>
-                <div>
-                  <label className="block text-xs font-medium text-cc-fg mb-1.5" htmlFor="public-url">
-                    Public URL
-                  </label>
-                  <input
-                    id="public-url"
-                    type="url"
-                    aria-label="Public URL"
-                    value={publicUrl}
-                    onChange={(e) => setPublicUrl(e.target.value)}
-                    placeholder="https://your-domain.example.com"
-                    className="w-full px-3 py-2.5 min-h-[44px] text-sm bg-cc-bg rounded-lg border border-cc-border text-cc-fg placeholder:text-cc-muted focus:outline-none focus:ring-1 focus:ring-cc-primary font-mono-code"
-                  />
-                  <p className="mt-1.5 text-[10px] text-cc-muted">
-                    {publicUrl
-                      ? `Using: ${publicUrl}`
-                      : `Fallback: ${typeof window !== "undefined" ? window.location.origin : "http://localhost:3456"}`}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setSaving(true);
-                    setError("");
-                    try {
-                      const res = await api.updateSettings({ publicUrl: publicUrl.trim() });
-                      setPublicUrl(res.publicUrl);
-                      useStore.getState().setPublicUrl(res.publicUrl);
-                      setSaved(true);
-                      setTimeout(() => setSaved(false), 1800);
-                    } catch (err: unknown) {
-                      setError(err instanceof Error ? err.message : String(err));
-                    } finally {
-                      setSaving(false);
-                    }
-                  }}
-                  disabled={saving}
-                  className="px-4 py-2 min-h-[44px] rounded-lg text-sm font-medium bg-cc-primary text-white hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
-                >
-                  {saving ? "Saving..." : saved ? "Saved!" : "Save Public URL"}
-                </button>
-              </div>
-            </section>
-
             {/* Authentication */}
             <section id="authentication" ref={setSectionRef("authentication")}>
               <h2 className="text-sm font-semibold text-cc-fg mb-4">Authentication</h2>
@@ -788,7 +724,10 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
               <h2 className="text-sm font-semibold text-cc-fg mb-4">Tunnel</h2>
               <div className="space-y-3">
                 <p className="text-xs text-cc-muted">
-                  Expose this instance to the internet via cloudflared or ngrok. Auth is automatically enabled when a tunnel is active.
+                  Expose this instance to the internet via{" "}
+                  <a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/" target="_blank" rel="noopener noreferrer" className="text-cc-primary hover:underline">cloudflared</a>,{" "}
+                  <a href="#/integrations/tailscale" className="text-cc-primary hover:underline">Tailscale</a>{" "}
+                  or ngrok. Auth is automatically enabled when a tunnel is active.
                 </p>
 
                 <button
@@ -810,6 +749,13 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                         setTunnelState("running");
                         setTunnelUrl(res.url);
                         setTunnelProvider(res.provider);
+                        // Auto-fill public URL from tunnel URL
+                        if (!publicUrl && res.url) {
+                          setPublicUrl(res.url);
+                          api.updateSettings({ publicUrl: res.url }).then((s) => {
+                            useStore.getState().setPublicUrl(s.publicUrl);
+                          }).catch(() => {});
+                        }
                         // Auto-fetch QR code for the tunnel URL
                         api.getTunnelQr().then(setTunnelQr).catch(() => {});
                       }
@@ -945,6 +891,52 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     )}
                   </div>
                 )}
+                {/* Public URL for webhooks — auto-filled from tunnel, editable */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-cc-fg" htmlFor="public-url">
+                    Public URL
+                    <span className="ml-1.5 font-normal text-cc-muted">(for webhooks from Linear, GitHub, etc.)</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      id="public-url"
+                      type="url"
+                      aria-label="Public URL"
+                      value={publicUrl}
+                      onChange={(e) => setPublicUrl(e.target.value)}
+                      placeholder={tunnelUrl || "https://your-domain.example.com"}
+                      className="flex-1 px-3 py-2 min-h-[40px] text-xs bg-cc-bg rounded-lg border border-cc-border text-cc-fg placeholder:text-cc-muted focus:outline-none focus:ring-1 focus:ring-cc-primary/40 font-mono-code"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setSaving(true);
+                        setError("");
+                        try {
+                          const res = await api.updateSettings({ publicUrl: publicUrl.trim() });
+                          setPublicUrl(res.publicUrl);
+                          useStore.getState().setPublicUrl(res.publicUrl);
+                          setSaved(true);
+                          setTimeout(() => setSaved(false), 1800);
+                        } catch (err: unknown) {
+                          setError(err instanceof Error ? err.message : String(err));
+                        } finally {
+                          setSaving(false);
+                        }
+                      }}
+                      disabled={saving}
+                      className="shrink-0 px-3 py-2 min-h-[40px] rounded-lg text-xs font-medium bg-cc-primary text-white hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
+                    >
+                      {saving ? "..." : saved ? "Saved!" : "Save"}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-cc-muted">
+                    {publicUrl
+                      ? `Using: ${publicUrl}`
+                      : `Fallback: ${typeof window !== "undefined" ? window.location.origin : "http://localhost:3456"}`}
+                  </p>
+                </div>
+
                 {tunnelState === "running" && tunnelUrl && (
                   <div className="space-y-2">
                     {tunnelQr ? (

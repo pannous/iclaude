@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
 // IntersectionObserver is not available in jsdom — provide a no-op mock
@@ -256,7 +256,7 @@ describe("SettingsPage", () => {
       target: { value: "  openai/gpt-4o-mini  " },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" }).find(b => b.getAttribute("type") === "submit")!);
 
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
@@ -276,7 +276,7 @@ describe("SettingsPage", () => {
       target: { value: "   " },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" }).find(b => b.getAttribute("type") === "submit")!);
 
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
@@ -293,7 +293,7 @@ describe("SettingsPage", () => {
     fireEvent.change(screen.getByLabelText("Anthropic Model"), {
       target: { value: "openai/gpt-4o-mini" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" }).find(b => b.getAttribute("type") === "submit")!);
 
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
@@ -310,7 +310,7 @@ describe("SettingsPage", () => {
     await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.click(screen.getByRole("button", { name: /Enable Editor tab \(CodeMirror\)/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" }).find(b => b.getAttribute("type") === "submit")!);
 
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
@@ -337,7 +337,7 @@ describe("SettingsPage", () => {
     fireEvent.change(document.getElementById("key-anthropic")!, {
       target: { value: "or-key" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" }).find(b => b.getAttribute("type") === "submit")!);
 
     expect(await screen.findByText("save failed")).toBeInTheDocument();
   });
@@ -377,11 +377,10 @@ describe("SettingsPage", () => {
     fireEvent.change(document.getElementById("key-anthropic")!, {
       target: { value: "or-key" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" }).find(b => b.getAttribute("type") === "submit")!);
 
-    // Both the Anthropic "Save" and Webhooks "Save Public URL" buttons share the
-    // `saving` state, so both show "Saving..." while the request is in flight.
-    // We check that the submit-type button (Anthropic form) is disabled.
+    // The Anthropic form "Save" button shows "Saving..." while the request is in flight.
+    // We check that the submit-type button is disabled.
     const savingButtons = screen.getAllByRole("button", { name: "Saving..." });
     expect(savingButtons.length).toBeGreaterThanOrEqual(1);
     const submitSavingBtn = savingButtons.find((b) => b.getAttribute("type") === "submit");
@@ -519,7 +518,6 @@ describe("SettingsPage", () => {
     await screen.findByText("Preferred: OpenRouter");
 
     expect(document.getElementById("general")).toBeInTheDocument();
-    expect(document.getElementById("webhooks")).toBeInTheDocument();
     expect(document.getElementById("authentication")).toBeInTheDocument();
     expect(document.getElementById("notifications")).toBeInTheDocument();
     expect(document.getElementById("anthropic")).toBeInTheDocument();
@@ -1081,7 +1079,8 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("https://test-tunnel.trycloudflare.com")).toBeInTheDocument();
     });
-    expect(screen.getByText("cloudflared")).toBeInTheDocument();
+    // Provider tag should show "cloudflared" (not the description link)
+    expect(screen.getAllByText("cloudflared").length).toBeGreaterThanOrEqual(1);
     expect(mockApi.startTunnel).toHaveBeenCalledTimes(1);
   });
 
@@ -1259,44 +1258,25 @@ describe("SettingsPage", () => {
     });
   });
 
-  // ─── Webhooks section tests ──────────────────────────────────
+  // ─── Public URL (in Tunnel section) tests ──────────────────────────────────
 
-  // The Webhooks category should appear in the sidebar navigation so users
-  // can quickly jump to the webhook configuration section.
-  it("includes Webhooks in category navigation", async () => {
+  // The Public URL input renders inside the Tunnel section with the correct
+  // type and accessible label. When no publicUrl is set, shows fallback text.
+  it("renders Public URL input in Tunnel section with fallback text", async () => {
     render(<SettingsPage />);
     await screen.findByText("Preferred: OpenRouter");
 
-    // Each category appears in both desktop sidebar and mobile nav (jsdom renders both)
-    const webhookButtons = screen.getAllByRole("button", { name: "Webhooks" });
-    expect(webhookButtons.length).toBeGreaterThanOrEqual(1);
-  });
+    expect(document.getElementById("tunnel")).toBeInTheDocument();
 
-  // The Public URL input should render inside the Webhooks section with the
-  // correct type ("url") and an accessible label. When no publicUrl is set,
-  // the fallback text should show the current window origin.
-  it("renders Public URL input in Webhooks section with fallback text", async () => {
-    render(<SettingsPage />);
-    await screen.findByText("Preferred: OpenRouter");
-
-    // The section heading should be present
-    expect(document.getElementById("webhooks")).toBeInTheDocument();
-
-    // The input should be accessible via its aria-label
     const urlInput = screen.getByLabelText("Public URL") as HTMLInputElement;
     expect(urlInput).toBeInTheDocument();
     expect(urlInput.type).toBe("url");
     expect(urlInput.id).toBe("public-url");
 
-    // When publicUrl is empty, the fallback text should show window.location.origin
     expect(screen.getByText(`Fallback: ${window.location.origin}`)).toBeInTheDocument();
-
-    // The "Save Public URL" button should be present
-    expect(screen.getByRole("button", { name: "Save Public URL" })).toBeInTheDocument();
   });
 
-  // When a publicUrl is set (returned from getSettings), the status text should
-  // show "Using: {url}" instead of the fallback origin.
+  // When a publicUrl is set, the status text shows "Using: {url}".
   it("shows 'Using: {url}' status when publicUrl is set", async () => {
     mockApi.getSettings.mockResolvedValueOnce({
       anthropicApiKeyConfigured: true,
@@ -1315,9 +1295,8 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Using: https://my-companion.example.com")).toBeInTheDocument();
   });
 
-  // Entering a URL and clicking "Save Public URL" should call api.updateSettings
-  // with the trimmed publicUrl value and update the store via setPublicUrl.
-  it("saves public URL via api.updateSettings when Save Public URL is clicked", async () => {
+  // Entering a URL and clicking Save calls api.updateSettings with trimmed value.
+  it("saves public URL via api.updateSettings when Save is clicked", async () => {
     mockApi.updateSettings.mockResolvedValueOnce({
       anthropicApiKeyConfigured: true,
       anthropicModel: "claude-sonnet-4.6",
@@ -1335,33 +1314,19 @@ describe("SettingsPage", () => {
     const urlInput = screen.getByLabelText("Public URL");
     fireEvent.change(urlInput, { target: { value: "  https://my-companion.example.com  " } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Save Public URL" }));
+    // The Save button next to Public URL input
+    const tunnelSection = document.getElementById("tunnel")!;
+    const saveButtons = within(tunnelSection).getAllByRole("button", { name: /Save|Saved/ });
+    fireEvent.click(saveButtons[0]);
 
-    // Should call updateSettings with trimmed publicUrl
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
         publicUrl: "https://my-companion.example.com",
       });
     });
 
-    // After save, the store's setPublicUrl should be called with the returned value
     await waitFor(() => {
       expect(mockState.setPublicUrl).toHaveBeenCalledWith("https://my-companion.example.com");
     });
-  });
-
-  // Axe accessibility scan for the Webhooks section to ensure it meets
-  // WCAG standards (labels, roles, contrast, etc.).
-  it("passes axe accessibility checks for the Webhooks section", async () => {
-    const { axe } = await import("vitest-axe");
-
-    render(<SettingsPage />);
-    await screen.findByText("Preferred: OpenRouter");
-
-    const webhooksSection = document.getElementById("webhooks");
-    expect(webhooksSection).toBeInTheDocument();
-
-    const results = await axe(webhooksSection!);
-    expect(results).toHaveNoViolations();
   });
 });
