@@ -1,5 +1,5 @@
 import { spawn, execSync, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { getToken } from "./auth-manager.js";
@@ -26,7 +26,15 @@ const NGROK_URL_RE = /https:\/\/[a-zA-Z0-9-]+\.ngrok-free\.app/;
 const URL_TIMEOUT_MS = 25_000;
 const CONNECTED_RE = /Registered tunnel connection/;
 const COMPANION_TUNNEL_DIR = join(homedir(), ".companion", "tunnel");
+const TUNNEL_STATE_FILE = join(COMPANION_TUNNEL_DIR, "state.json");
 const CLOUDFLARED_CERT = join(homedir(), ".cloudflared", "cert.pem");
+
+interface TunnelState {
+  pid: number;
+  url: string;
+  provider: "cloudflared" | "ngrok";
+  mode: "quick" | "named";
+}
 
 /**
  * Manages a tunnel subprocess (cloudflared or ngrok) that exposes the local
@@ -67,6 +75,18 @@ export class TunnelManager {
       return { url: this._url, provider: this._provider!, mode: this._mode };
     }
 
+    // Reuse an existing tunnel process that survived a server reload (bun --watch)
+    const existing = this.adoptExistingTunnel();
+    if (existing) {
+      this._url = existing.url;
+      this._provider = existing.provider;
+      this._mode = existing.mode;
+      this._state = "running";
+      process.env.COMPANION_AUTH = "1";
+      console.log(`[tunnel] Reusing existing tunnel (pid ${existing.pid}): ${existing.url} (${existing.mode})`);
+      return { url: existing.url, provider: existing.provider, mode: existing.mode };
+    }
+
     const s = getSettings();
     this._mode = s.tunnelMode === "named" && s.tunnelId && s.tunnelHostname ? "named" : "quick";
 
@@ -90,6 +110,7 @@ export class TunnelManager {
       this._url = url;
       this._state = "running";
       process.env.COMPANION_AUTH = "1";
+      this.saveTunnelState();
 
       console.log(`[tunnel] Public URL: ${url} (${this._mode})`);
       console.log(`[tunnel] Auth URL:   ${url}/?token=${getToken()}`);
@@ -104,6 +125,7 @@ export class TunnelManager {
   }
 
   async stop(): Promise<void> {
+    this.killStaleProcess();
     this.killProc();
     this._state = "stopped";
     this._url = null;
@@ -223,11 +245,70 @@ export class TunnelManager {
 
   // ── Private ──────────────────────────────────────────────────────────
 
+  /** Check if a tunnel process from a previous server reload is still alive and reuse it. */
+  private adoptExistingTunnel(): TunnelState | null {
+    // Try state file first (fast path)
+    try {
+      if (existsSync(TUNNEL_STATE_FILE)) {
+        const raw = readFileSync(TUNNEL_STATE_FILE, "utf-8").trim();
+        if (raw) {
+          const state: TunnelState = JSON.parse(raw);
+          process.kill(state.pid, 0); // throws if dead
+          return state;
+        }
+      }
+    } catch {
+      this.clearTunnelState();
+    }
+
+    // Fallback: detect orphaned cloudflared matching our config path
+    try {
+      const configPath = join(COMPANION_TUNNEL_DIR, "config.yml");
+      const out = execSync(`pgrep -f "cloudflared tunnel --config ${configPath}"`, { encoding: "utf-8", timeout: 3000 }).trim();
+      const pid = parseInt(out.split("\n")[0], 10);
+      if (!pid || isNaN(pid)) return null;
+
+      const s = getSettings();
+      if (s.tunnelHostname) {
+        const state: TunnelState = { pid, url: `https://${s.tunnelHostname}`, provider: "cloudflared", mode: "named" };
+        this.saveTunnelStateData(state);
+        return state;
+      }
+    } catch { /* no matching process */ }
+
+    return null;
+  }
+
+  /** Kill a tunnel process tracked by state file but not by this.proc (orphan from previous reload). */
+  private killStaleProcess(): void {
+    try {
+      if (!existsSync(TUNNEL_STATE_FILE)) return;
+      const state: TunnelState = JSON.parse(readFileSync(TUNNEL_STATE_FILE, "utf-8"));
+      process.kill(state.pid, "SIGTERM");
+    } catch { /* already dead or no state file */ }
+    this.clearTunnelState();
+  }
+
+  private saveTunnelState(): void {
+    if (!this.proc?.pid || !this._url || !this._provider) return;
+    this.saveTunnelStateData({ pid: this.proc.pid, url: this._url, provider: this._provider, mode: this._mode });
+  }
+
+  private saveTunnelStateData(state: TunnelState): void {
+    mkdirSync(COMPANION_TUNNEL_DIR, { recursive: true });
+    writeFileSync(TUNNEL_STATE_FILE, JSON.stringify(state), "utf-8");
+  }
+
+  private clearTunnelState(): void {
+    try { if (existsSync(TUNNEL_STATE_FILE)) unlinkSync(TUNNEL_STATE_FILE); } catch { /* ignore */ }
+  }
+
   private killProc(): void {
     if (this.proc) {
       try { this.proc.kill(); } catch { /* already dead */ }
       this.proc = null;
     }
+    this.clearTunnelState();
   }
 
   private startNamedTunnel(port: number, tunnelId: string, hostname: string, credentialsPath: string): Promise<string> {
