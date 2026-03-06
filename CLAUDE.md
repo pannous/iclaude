@@ -10,7 +10,7 @@ It reverse-engineers the undocumented `--sdk-url` WebSocket protocol in the Clau
 ## Development Commands
 
 ```bash
-# Dev server (Hono backend on :3456 + Vite HMR on :5174)
+# Dev server (Hono backend on :3456 + Vite HMR on :2345)
 cd web && bun install && bun run dev
 
 # Or from repo root
@@ -54,7 +54,10 @@ All UI components used in the message/chat flow **must** be represented in the P
 
 ```
 Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket (NDJSON) ←→ Claude Code CLI
-     :5174              /ws/browser/:id        :3456        /ws/cli/:id         (--sdk-url)
+     :2345             /ws/browser/:id        :3456        /ws/cli/:id         (--sdk-url)
+
+2345 → 3456: Vite proxies /api/* and /ws/* to the backend                                                                         
+3456 → 2345: Backend proxies all non-API requests (HTML, JS, CSS, HMR) back to Vite
 ```
 
 1. Browser sends a "create session" REST call to the server
@@ -62,6 +65,8 @@ Browser (React) ←→ WebSocket ←→ Hono Server (Bun) ←→ WebSocket (NDJS
 3. CLI connects back to the server over WebSocket using NDJSON protocol
 4. Server bridges messages between CLI WebSocket and browser WebSocket
 5. Tool calls arrive as `control_request` (subtype `can_use_tool`) — browser renders approval UI, server relays `control_response` back
+
+Why? Vite is a dev tool — it provides HMR, TypeScript transpilation, and module resolution on-the-fly. In production, bun run build pre-compiles everything into static JS/CSS/HTML in dist/. No need for a second server — bun just serves those files directly. One port is simpler to deploy, tunnel, and secure.
 
 ### All code lives under `web/`
 
@@ -262,12 +267,12 @@ See git history (`git log --grep=panel`) for full implementation details.
 ## Cursor Cloud specific instructions
 
 ### Services
-- **Hono backend** (port 3457 in dev): `cd web && bun run dev:api` or via `./scripts/dev-start.sh`
-- **Vite frontend** (port 5174 in dev): `cd web && bun run dev:vite` or via `./scripts/dev-start.sh`
+- **Hono backend** (port 3456 in dev): `cd web && bun run dev:api` or via `./scripts/dev-start.sh`
+- **Vite frontend** (port 2345 in dev): `cd web && bun run dev:vite` or via `./scripts/dev-start.sh`
 - Both start together with `cd web && bun run dev` (or `make dev`), but that runs in foreground. Use `./scripts/dev-start.sh` for background mode.
 
 ### Caveats
-- `./scripts/dev-start.sh` health-checks the backend on `/` which returns 404. If the script times out, the backend is still running — verify with `curl http://localhost:3457/api/sessions`. You can start the servers manually as background processes instead.
+- `./scripts/dev-start.sh` health-checks the backend on `/` which returns 404. If the script times out, the backend is still running — verify with `curl http://localhost:3456/api/sessions`. You can start the servers manually as background processes instead.
 - The app requires Claude Code CLI or Codex CLI to create functional sessions. Without them, the UI loads but session creation will fail. The component playground at `#/playground` works without any CLI.
 - No external databases or services are needed. Session state persists to `$TMPDIR/vibe-sessions/` as JSON files.
 - The pre-commit hook (`.husky/pre-commit`) runs `cd web && bun run typecheck && bun run test -- --coverage`. Run these before committing.

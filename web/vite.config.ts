@@ -64,6 +64,9 @@ export default defineConfig({
     // LOCAL: custom port and allowed hosts for our dev setup
     port: 2345,
     strictPort: true,
+    // HMR client connects directly to Vite so hot reload works even when
+    // the browser loads the app through the Hono proxy on :3456
+    hmr: { clientPort: 2345 },
     // LOCAL: dynamically include all local network IPs so LAN access works
     allowedHosts: [".trycloudflare.com",".ngrok-free.app",".ngrok.io","mac.fritz.box","companion.pannous.com","claude.pannous.com","iclaude.pannous.com", ...getLocalIPs()],
     watch: {
