@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.73.0](https://github.com/pannous/iclaude/compare/iclaude-v0.72.13...iclaude-v0.73.0) (2026-03-06)
+
+
+### Features
+
+* **agents:** add per-agent chat platform credentials ([#477](https://github.com/pannous/iclaude/issues/477)) ([afb9557](https://github.com/pannous/iclaude/commit/afb95575615516600a284666f6f55c5c121e9650))
+* **integrations:** add Tailscale Funnel integration for one-click HTTPS ([#482](https://github.com/pannous/iclaude/issues/482)) ([a79f1fd](https://github.com/pannous/iclaude/commit/a79f1fd4f45dad176a2f718029e4c6625cdd7f02))
+* **minor:** add Local Network section to Settings page ([8e6c326](https://github.com/pannous/iclaude/commit/8e6c326d053c4c3e62aba8685d4b2293a644c77b))
+* **minor:** add persistent named Cloudflare tunnels ([1b0991f](https://github.com/pannous/iclaude/commit/1b0991f0575e3dc10a773f6f488a3b16a2f425c7))
+* **minor:** show orange "error" badge for API keys that fail at runtime ([f8b4f9c](https://github.com/pannous/iclaude/commit/f8b4f9cae85e1c1883bf7d017fcd452354968fb8))
+* **settings:** add public URL config + guided Linear webhook setup ([#478](https://github.com/pannous/iclaude/issues/478)) ([18f08d3](https://github.com/pannous/iclaude/commit/18f08d35ea412c5a81f0918197ea23a90f485a97))
+
+
+### Bug Fixes
+
+* listen on IPv4 (0.0.0.0) instead of IPv6-only default ([94421d0](https://github.com/pannous/iclaude/commit/94421d0ec938c5fef9a6f06eddf499450d995793))
+* **minor:** add iclaude.pannous.com SSL cert and Vite allowedHosts ([b9cbcf3](https://github.com/pannous/iclaude/commit/b9cbcf34a0fadea2271acfee8b69507d01f97652))
+* **minor:** add openrouterApiKey to test fixtures and fix API key focus masking ([dcb0913](https://github.com/pannous/iclaude/commit/dcb09138248bd1304a474b2595f359b38f344780))
+* **minor:** detect Tailscale Funnel not enabled on tailnet ([262a01f](https://github.com/pannous/iclaude/commit/262a01f991b8dd7746bf9bd708082e1e63c60e0c))
+* **minor:** include auth header in tunnel shortcut download ([cd62184](https://github.com/pannous/iclaude/commit/cd62184314528b4ba7c245cfe0e7279721ca117f))
+* **minor:** increase padding between hook messages in chat feed ([332ee8c](https://github.com/pannous/iclaude/commit/332ee8c2247db1d35a55d497372da33b86a87379))
+* **minor:** move Persistent URL box below Public Tunnel toggle in settings ([aacd989](https://github.com/pannous/iclaude/commit/aacd989fbafdcae009d1bb6c4f82646a706f7e4a))
+* **minor:** proxy Vite HMR WebSocket through API port for remote dev access ([0019b63](https://github.com/pannous/iclaude/commit/0019b63f6d7472f12fe29d9038071b43bfdcb70f))
+* **minor:** reuse existing cloudflared tunnel across bun --watch reloads ([aeb2c8a](https://github.com/pannous/iclaude/commit/aeb2c8a85c624382a1e4af73630e36fa6914905d))
+* **minor:** suppress Vite's verbose proxy error stack traces ([10fa736](https://github.com/pannous/iclaude/commit/10fa736bdbd50e74218195c51b4858f763a63265))
+* **minor:** update SettingsPage test to match button label "New" ([d108076](https://github.com/pannous/iclaude/commit/d108076f3697b0a06ee71fb6bf14c18813dc0be8))
+* **test:** handle API billing/auth errors gracefully in auto-namer integration test ([317ef69](https://github.com/pannous/iclaude/commit/317ef695fb652d2df375833d43603bf8adbed617))
+
 ## [0.72.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.71.0...iclaude-v0.72.0) (2026-03-04)
 
 
