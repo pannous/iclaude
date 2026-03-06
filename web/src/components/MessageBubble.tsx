@@ -594,8 +594,11 @@ function LazyToolResult({ toolUseId, toolName }: { toolUseId: string; toolName?:
   }, [expanded, load]);
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={handleClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleClick(); }}
       className="w-full text-left text-[10px] text-cc-muted hover:text-cc-primary cursor-pointer py-1 transition-colors"
     >
       {!expanded && (loading ? "Loading output..." : "Show output")}
@@ -608,7 +611,7 @@ function LazyToolResult({ toolUseId, toolName }: { toolUseId: string; toolName?:
       )}
       {expanded && loading && <span className="animate-pulse">Loading output...</span>}
       {expanded && !loading && !data && "Show output"}
-    </button>
+    </div>
   );
 }
 
