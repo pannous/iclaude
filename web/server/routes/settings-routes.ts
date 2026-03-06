@@ -10,6 +10,7 @@ export function registerSettingsRoutes(api: Hono): void {
       anthropicApiKeyConfigured: !!settings.anthropicApiKey.trim(),
       anthropicModel: settings.anthropicModel || DEFAULT_ANTHROPIC_MODEL,
       openaiApiKeyConfigured: !!settings.openaiApiKey.trim(),
+      openrouterApiKeyConfigured: !!settings.openrouterApiKey.trim(),
       linearApiKeyConfigured: !!settings.linearApiKey.trim(),
       linearAutoTransition: settings.linearAutoTransition,
       linearAutoTransitionStateName: settings.linearAutoTransitionStateName,
@@ -42,6 +43,9 @@ export function registerSettingsRoutes(api: Hono): void {
     }
     if (body.openaiApiKey !== undefined && typeof body.openaiApiKey !== "string") {
       return c.json({ error: "openaiApiKey must be a string" }, 400);
+    }
+    if (body.openrouterApiKey !== undefined && typeof body.openrouterApiKey !== "string") {
+      return c.json({ error: "openrouterApiKey must be a string" }, 400);
     }
     if (body.linearApiKey !== undefined && typeof body.linearApiKey !== "string") {
       return c.json({ error: "linearApiKey must be a string" }, 400);
@@ -76,15 +80,15 @@ export function registerSettingsRoutes(api: Hono): void {
     if (body.aiValidationAutoDeny !== undefined && typeof body.aiValidationAutoDeny !== "boolean") {
       return c.json({ error: "aiValidationAutoDeny must be a boolean" }, 400);
     }
-    if (body.aiProvider !== undefined && body.aiProvider !== "openrouter" && body.aiProvider !== "claude") {
-      return c.json({ error: "aiProvider must be 'openrouter' or 'claude'" }, 400);
+    if (body.aiProvider !== undefined && body.aiProvider !== "anthropic" && body.aiProvider !== "openai" && body.aiProvider !== "openrouter") {
+      return c.json({ error: "aiProvider must be 'anthropic', 'openai', or 'openrouter'" }, 400);
     }
     if (body.updateChannel !== undefined && body.updateChannel !== "stable" && body.updateChannel !== "prerelease") {
       return c.json({ error: "updateChannel must be 'stable' or 'prerelease'" }, 400);
     }
     const hasAnyField = body.authEnabled !== undefined
       || body.anthropicApiKey !== undefined || body.anthropicModel !== undefined
-      || body.openaiApiKey !== undefined || body.linearApiKey !== undefined || body.linearAutoTransition !== undefined
+      || body.openaiApiKey !== undefined || body.openrouterApiKey !== undefined || body.linearApiKey !== undefined || body.linearAutoTransition !== undefined
       || body.linearAutoTransitionStateId !== undefined || body.linearAutoTransitionStateName !== undefined
       || body.linearArchiveTransition !== undefined || body.linearArchiveTransitionStateId !== undefined
       || body.linearArchiveTransitionStateName !== undefined
@@ -117,6 +121,10 @@ export function registerSettingsRoutes(api: Hono): void {
       openaiApiKey:
         typeof body.openaiApiKey === "string"
           ? body.openaiApiKey.trim()
+          : undefined,
+      openrouterApiKey:
+        typeof body.openrouterApiKey === "string"
+          ? body.openrouterApiKey.trim()
           : undefined,
       linearApiKey:
         typeof body.linearApiKey === "string"
@@ -163,7 +171,7 @@ export function registerSettingsRoutes(api: Hono): void {
           ? body.aiValidationAutoDeny
           : undefined,
       aiProvider:
-        body.aiProvider === "openrouter" || body.aiProvider === "claude"
+        body.aiProvider === "anthropic" || body.aiProvider === "openai" || body.aiProvider === "openrouter"
           ? (body.aiProvider as AiProvider)
           : undefined,
       updateChannel:
@@ -177,6 +185,7 @@ export function registerSettingsRoutes(api: Hono): void {
       anthropicApiKeyConfigured: !!settings.anthropicApiKey.trim(),
       anthropicModel: settings.anthropicModel || DEFAULT_ANTHROPIC_MODEL,
       openaiApiKeyConfigured: !!settings.openaiApiKey.trim(),
+      openrouterApiKeyConfigured: !!settings.openrouterApiKey.trim(),
       linearApiKeyConfigured: !!settings.linearApiKey.trim(),
       linearAutoTransition: settings.linearAutoTransition,
       linearAutoTransitionStateName: settings.linearAutoTransitionStateName,

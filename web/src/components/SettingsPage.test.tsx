@@ -192,8 +192,10 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
 
     expect(mockApi.getSettings).toHaveBeenCalledTimes(1);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
     expect(screen.getByDisplayValue("claude-sonnet-4.6")).toBeInTheDocument();
+    // Anthropic key is configured — should show "configured" badge
+    expect(screen.getByText("configured")).toBeInTheDocument();
   });
 
   // When a key is already configured, the input shows masked dots (••••) to
@@ -201,9 +203,10 @@ describe("SettingsPage", () => {
   // can type a replacement key.
   it("shows masked dots in API key field when key is configured", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
-    const input = screen.getByLabelText("Anthropic API Key") as HTMLInputElement;
+    // The label now includes "configured" badge, use the input's id
+    const input = document.getElementById("key-anthropic") as HTMLInputElement;
     expect(input.value).toBe("••••••••••••••••");
 
     // On focus the dots clear to allow entering a new key
@@ -224,39 +227,23 @@ describe("SettingsPage", () => {
 
     render(<SettingsPage />);
 
-    await screen.findByText("Anthropic key not configured");
+    await screen.findByText("Preferred: OpenRouter");
+    // No "configured" badge when no key is set
+    expect(screen.queryByText("configured")).not.toBeInTheDocument();
   });
 
-  it("shows optional auto-renaming hint when OpenRouter selected and key not configured", async () => {
-    mockApi.getSettings.mockResolvedValueOnce({
-      anthropicApiKeyConfigured: false,
-      anthropicModel: "claude-sonnet-4.6",
-      linearApiKeyConfigured: false,
-      linearAutoTransition: false,
-      linearAutoTransitionStateName: "",
-      editorTabEnabled: false,
-      updateChannel: "stable",
-    });
+  it("shows provider description text", async () => {
     render(<SettingsPage />);
-
-    // Default provider is OpenRouter — should show the optional hint
-    expect(await screen.findByText("Optional — enables automatic session renaming.")).toBeInTheDocument();
-  });
-
-  it("hides auto-renaming hint when key is already configured", async () => {
-    render(<SettingsPage />);
-
-    // Default mock has anthropicApiKeyConfigured: true — hint should be hidden
-    await screen.findByText("Anthropic key configured");
-    expect(screen.queryByText(/auto-renaming/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/enables automatic session renaming/i)).not.toBeInTheDocument();
+    await screen.findByText("Preferred: OpenRouter");
+    expect(screen.getByText(/Used for auto-naming sessions and AI validation/)).toBeInTheDocument();
   });
 
   it("saves settings with trimmed values", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
-    fireEvent.change(screen.getByLabelText("Anthropic API Key"), {
+    fireEvent.focus(document.getElementById("key-anthropic")!);
+    fireEvent.change(document.getElementById("key-anthropic")!, {
       target: { value: "  or-key  " },
     });
     fireEvent.change(screen.getByLabelText("Anthropic Model"), {
@@ -278,7 +265,7 @@ describe("SettingsPage", () => {
 
   it("falls back model to claude-sonnet-4.6 when blank", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
     fireEvent.change(screen.getByLabelText("Anthropic Model"), {
       target: { value: "   " },
     });
@@ -295,7 +282,7 @@ describe("SettingsPage", () => {
 
   it("does not send key when left empty", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.change(screen.getByLabelText("Anthropic Model"), {
       target: { value: "openai/gpt-4o-mini" },
@@ -314,7 +301,7 @@ describe("SettingsPage", () => {
   // which is then included in the Anthropic form's save payload.
   it("saves editor tab toggle in settings payload", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.click(screen.getByRole("button", { name: /Enable Editor tab \(CodeMirror\)/i }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -339,9 +326,9 @@ describe("SettingsPage", () => {
     mockApi.updateSettings.mockRejectedValueOnce(new Error("save failed"));
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
-    fireEvent.change(screen.getByLabelText("Anthropic API Key"), {
+    fireEvent.change(document.getElementById("key-anthropic")!, {
       target: { value: "or-key" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -351,7 +338,7 @@ describe("SettingsPage", () => {
 
   it("navigates back when Back button is clicked", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(window.location.hash).toBe("");
@@ -359,7 +346,7 @@ describe("SettingsPage", () => {
 
   it("hides Back button in embedded mode", async () => {
     render(<SettingsPage embedded />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
     expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
   });
 
@@ -379,9 +366,9 @@ describe("SettingsPage", () => {
     );
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
-    fireEvent.change(screen.getByLabelText("Anthropic API Key"), {
+    fireEvent.change(document.getElementById("key-anthropic")!, {
       target: { value: "or-key" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -402,7 +389,7 @@ describe("SettingsPage", () => {
 
   it("toggles sound notifications from settings", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.click(screen.getByRole("button", { name: /Sound/i }));
     expect(mockState.toggleNotificationSound).toHaveBeenCalledTimes(1);
@@ -412,7 +399,7 @@ describe("SettingsPage", () => {
   it("cycles theme from settings", async () => {
     mockState = createMockState({ theme: "system" });
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.click(screen.getByRole("button", { name: /Theme/i }));
     expect(mockState.cycleTheme).toHaveBeenCalledTimes(1);
@@ -420,7 +407,7 @@ describe("SettingsPage", () => {
 
   it("toggles telemetry preference from settings", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.click(screen.getByRole("button", { name: /Usage analytics and errors/i }));
     expect(mockTelemetry.setTelemetryPreferenceEnabled).toHaveBeenCalledWith(false);
@@ -428,7 +415,7 @@ describe("SettingsPage", () => {
 
   it("navigates to environments page from settings", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.click(screen.getByRole("button", { name: "Open Environments Page" }));
     expect(window.location.hash).toBe("#/environments");
@@ -442,7 +429,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
     fireEvent.click(screen.getByRole("button", { name: /Desktop Alerts/i }));
 
     await waitFor(() => {
@@ -464,7 +451,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
     fireEvent.click(screen.getByRole("button", { name: "Check for updates" }));
 
     await waitFor(() => {
@@ -489,7 +476,7 @@ describe("SettingsPage", () => {
       },
     });
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.click(screen.getByRole("button", { name: "Update & Restart" }));
 
@@ -503,7 +490,7 @@ describe("SettingsPage", () => {
   // Verify left sidebar nav renders category labels for quick navigation
   it("renders category navigation with all section labels", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     // Each category appears in both desktop sidebar and mobile nav (jsdom renders both)
     const generalButtons = screen.getAllByRole("button", { name: "General" });
@@ -516,7 +503,7 @@ describe("SettingsPage", () => {
   // Verify section headings have correct IDs for anchor-based scrolling
   it("renders section headings with anchor IDs", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     expect(document.getElementById("general")).toBeInTheDocument();
     expect(document.getElementById("authentication")).toBeInTheDocument();
@@ -532,7 +519,7 @@ describe("SettingsPage", () => {
   // The auth section fetches the token on mount and displays it masked.
   it("fetches and displays the auth token masked by default", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     // Token should be fetched
     expect(mockApi.getAuthToken).toHaveBeenCalledTimes(1);
@@ -547,7 +534,7 @@ describe("SettingsPage", () => {
   // Clicking "Show" reveals the actual token value.
   it("reveals the token when Show is clicked", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     await waitFor(() => {
       expect(screen.getByText("\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022")).toBeInTheDocument();
@@ -560,7 +547,7 @@ describe("SettingsPage", () => {
   // Clicking "Show QR Code" loads and displays QR with address tabs.
   it("shows QR code with address tabs when button is clicked", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.click(screen.getByRole("button", { name: "Show QR Code" }));
 
@@ -589,7 +576,7 @@ describe("SettingsPage", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.click(screen.getByRole("button", { name: "New" }));
 
@@ -608,7 +595,7 @@ describe("SettingsPage", () => {
     vi.spyOn(window, "confirm").mockReturnValue(false);
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.click(screen.getByRole("button", { name: "New" }));
 
@@ -620,7 +607,7 @@ describe("SettingsPage", () => {
   // The Authentication navigation item appears in the sidebar.
   it("includes Authentication in category navigation", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     const authButtons = screen.getAllByRole("button", { name: "Authentication" });
     expect(authButtons.length).toBeGreaterThanOrEqual(1);
@@ -631,7 +618,7 @@ describe("SettingsPage", () => {
   // The Verify button is disabled when the API key input is empty.
   it("disables Verify button when anthropic key input is empty", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     const verifyBtn = screen.getByRole("button", { name: "Verify" });
     expect(verifyBtn).toBeDisabled();
@@ -640,9 +627,9 @@ describe("SettingsPage", () => {
   // The Verify button is enabled when the user types a new key.
   it("enables Verify button when user types a key", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
-    const keyInput = screen.getByLabelText("Anthropic API Key");
+    const keyInput = document.getElementById("key-anthropic")!;
     fireEvent.focus(keyInput);
     fireEvent.change(keyInput, { target: { value: "sk-ant-test-key" } });
 
@@ -655,9 +642,9 @@ describe("SettingsPage", () => {
     mockApi.verifyAnthropicKey.mockResolvedValueOnce({ valid: true });
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
-    const keyInput = screen.getByLabelText("Anthropic API Key");
+    const keyInput = document.getElementById("key-anthropic")!;
     fireEvent.focus(keyInput);
     fireEvent.change(keyInput, { target: { value: "sk-ant-test-key" } });
 
@@ -665,7 +652,7 @@ describe("SettingsPage", () => {
     fireEvent.click(verifyBtn);
 
     expect(mockApi.verifyAnthropicKey).toHaveBeenCalledWith("sk-ant-test-key");
-    await screen.findByText("API key is valid.");
+    await screen.findByText("Anthropic API key is valid.");
   });
 
   // Clicking Verify shows error state when verification fails.
@@ -673,9 +660,9 @@ describe("SettingsPage", () => {
     mockApi.verifyAnthropicKey.mockResolvedValueOnce({ valid: false, error: "API returned 401" });
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
-    const keyInput = screen.getByLabelText("Anthropic API Key");
+    const keyInput = document.getElementById("key-anthropic")!;
     fireEvent.focus(keyInput);
     fireEvent.change(keyInput, { target: { value: "sk-ant-bad-key" } });
 
@@ -692,16 +679,16 @@ describe("SettingsPage", () => {
     mockApi.verifyAnthropicKey.mockResolvedValueOnce({ valid: true });
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
-    const keyInput = screen.getByLabelText("Anthropic API Key");
+    const keyInput = document.getElementById("key-anthropic")!;
     fireEvent.focus(keyInput);
     fireEvent.change(keyInput, { target: { value: "sk-ant-test-key" } });
 
     const verifyBtn = screen.getByRole("button", { name: "Verify" });
     fireEvent.click(verifyBtn);
 
-    await screen.findByText("API key is valid.");
+    await screen.findByText("Anthropic API key is valid.");
 
     // Advance past the 5s auto-dismiss
     act(() => {
@@ -709,7 +696,7 @@ describe("SettingsPage", () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText("API key is valid.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Anthropic API key is valid.")).not.toBeInTheDocument();
     });
 
     vi.useRealTimers();
@@ -720,22 +707,22 @@ describe("SettingsPage", () => {
     mockApi.verifyAnthropicKey.mockResolvedValueOnce({ valid: true });
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
-    const keyInput = screen.getByLabelText("Anthropic API Key");
+    const keyInput = document.getElementById("key-anthropic")!;
     fireEvent.focus(keyInput);
     fireEvent.change(keyInput, { target: { value: "sk-ant-test-key" } });
 
     const verifyBtn = screen.getByRole("button", { name: "Verify" });
     fireEvent.click(verifyBtn);
 
-    await screen.findByText("API key is valid.");
+    await screen.findByText("Anthropic API key is valid.");
 
     // Changing the key should clear the verify result
     fireEvent.change(keyInput, { target: { value: "sk-ant-test-key-changed" } });
 
     await waitFor(() => {
-      expect(screen.queryByText("API key is valid.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Anthropic API key is valid.")).not.toBeInTheDocument();
     });
   });
 
@@ -745,7 +732,7 @@ describe("SettingsPage", () => {
   // when an Anthropic key is configured (configured === true).
   it("renders AI Validation section with toggle when Anthropic key is configured", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     // Section heading should be present inside the #ai-validation section
     const section = document.getElementById("ai-validation");
@@ -774,7 +761,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key not configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     const toggleBtn = screen.getByRole("button", { name: /AI Validation Mode/i });
     expect(toggleBtn).toBeDisabled();
@@ -802,7 +789,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.click(screen.getByRole("button", { name: /AI Validation Mode/i }));
 
@@ -830,7 +817,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     // Sub-toggles should be visible
     expect(screen.getByRole("button", { name: /Auto-approve safe tools/i })).toBeInTheDocument();
@@ -854,7 +841,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     expect(screen.queryByRole("button", { name: /Auto-approve safe tools/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Auto-deny dangerous tools/i })).not.toBeInTheDocument();
@@ -890,7 +877,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     // Auto-approve is currently "On" (true), clicking should toggle to false
     fireEvent.click(screen.getByRole("button", { name: /Auto-approve safe tools/i }));
@@ -930,7 +917,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     // Auto-deny is currently "On" (true), clicking should toggle to false
     fireEvent.click(screen.getByRole("button", { name: /Auto-deny dangerous tools/i }));
@@ -946,7 +933,7 @@ describe("SettingsPage", () => {
     mockApi.updateSettings.mockRejectedValueOnce(new Error("network error"));
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     const toggleBtn = screen.getByRole("button", { name: /AI Validation Mode/i });
     // Initially off
@@ -964,7 +951,7 @@ describe("SettingsPage", () => {
   // The AI Validation section includes its anchor ID for sidebar navigation.
   it("renders AI Validation section with anchor ID for navigation", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     expect(document.getElementById("ai-validation")).toBeInTheDocument();
   });
@@ -972,7 +959,7 @@ describe("SettingsPage", () => {
   // The AI Validation category appears in the sidebar navigation.
   it("includes AI Validation in category navigation", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     const aiValButtons = screen.getAllByRole("button", { name: "AI Validation" });
     expect(aiValButtons.length).toBeGreaterThanOrEqual(1);
@@ -983,7 +970,7 @@ describe("SettingsPage", () => {
   // The update channel selector renders with Stable selected by default.
   it("renders update channel selector with Stable selected by default", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     expect(screen.getByText("Stable")).toBeInTheDocument();
     expect(screen.getByText("Prerelease")).toBeInTheDocument();
@@ -1003,7 +990,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     expect(screen.getByText(/Tracking prerelease channel/)).toBeInTheDocument();
   });
@@ -1030,7 +1017,7 @@ describe("SettingsPage", () => {
     });
 
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.click(screen.getByText("Prerelease"));
 
@@ -1045,7 +1032,7 @@ describe("SettingsPage", () => {
   // Clicking Stable when already on stable is a no-op (doesn't call updateSettings).
   it("does not call updateSettings when clicking already-selected channel", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     fireEvent.click(screen.getByText("Stable"));
 
@@ -1217,7 +1204,7 @@ describe("SettingsPage", () => {
   // Verifies the connection section renders with the test button and idle status indicator
   it("renders connection test button with idle status", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     expect(screen.getByText("Test Connection")).toBeInTheDocument();
     expect(screen.getByText("Not tested")).toBeInTheDocument();
@@ -1227,7 +1214,7 @@ describe("SettingsPage", () => {
   // Verifies a successful connection test shows latency and green status
   it("shows connected status with latency after successful test", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     await act(async () => {
       fireEvent.click(screen.getByText("Test Connection"));
@@ -1243,7 +1230,7 @@ describe("SettingsPage", () => {
   // Verifies a failed connection test shows error message
   it("shows error status when connection test fails", async () => {
     render(<SettingsPage />);
-    await screen.findByText("Anthropic key configured");
+    await screen.findByText("Preferred: OpenRouter");
 
     // Make the next getSettings call fail (first one on mount already resolved)
     mockApi.getSettings.mockRejectedValueOnce(new Error("Network error"));

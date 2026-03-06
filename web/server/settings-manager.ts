@@ -11,13 +11,14 @@ export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4.6";
 
 export type UpdateChannel = "stable" | "prerelease";
 
-export type AiProvider = "openrouter" | "claude";
+export type AiProvider = "anthropic" | "openai" | "openrouter";
 
 export interface CompanionSettings {
   authEnabled: boolean;
   anthropicApiKey: string;
   anthropicModel: string;
   openaiApiKey: string;
+  openrouterApiKey: string;
   linearApiKey: string;
   linearAutoTransition: boolean;
   linearAutoTransitionStateId: string;
@@ -48,6 +49,7 @@ let settings: CompanionSettings = {
   anthropicApiKey: "",
   anthropicModel: DEFAULT_ANTHROPIC_MODEL,
   openaiApiKey: "",
+  openrouterApiKey: "",
   linearApiKey: "",
   linearAutoTransition: false,
   linearAutoTransitionStateId: "",
@@ -78,6 +80,7 @@ function normalize(raw: Partial<CompanionSettings> | null | undefined): Companio
         ? raw.anthropicModel
         : DEFAULT_ANTHROPIC_MODEL,
     openaiApiKey: typeof raw?.openaiApiKey === "string" ? raw.openaiApiKey : "",
+    openrouterApiKey: typeof raw?.openrouterApiKey === "string" ? raw.openrouterApiKey : "",
     linearApiKey: typeof raw?.linearApiKey === "string" ? raw.linearApiKey : "",
     linearAutoTransition: typeof raw?.linearAutoTransition === "boolean" ? raw.linearAutoTransition : false,
     linearAutoTransitionStateId: typeof raw?.linearAutoTransitionStateId === "string" ? raw.linearAutoTransitionStateId : "",
@@ -94,7 +97,9 @@ function normalize(raw: Partial<CompanionSettings> | null | undefined): Companio
     aiValidationEnabled: typeof raw?.aiValidationEnabled === "boolean" ? raw.aiValidationEnabled : false,
     aiValidationAutoApprove: typeof raw?.aiValidationAutoApprove === "boolean" ? raw.aiValidationAutoApprove : true,
     aiValidationAutoDeny: typeof raw?.aiValidationAutoDeny === "boolean" ? raw.aiValidationAutoDeny : true,
-    aiProvider: raw?.aiProvider === "claude" ? "claude" : "openrouter",
+    aiProvider: raw?.aiProvider === "anthropic" || (raw as Record<string, string>)?.aiProvider === "claude" ? "anthropic"
+      : raw?.aiProvider === "openai" ? "openai"
+      : "openrouter",
     updateChannel: raw?.updateChannel === "prerelease" ? "prerelease" : "stable",
     updatedAt: typeof raw?.updatedAt === "number" ? raw.updatedAt : 0,
   };
@@ -124,7 +129,7 @@ export function getSettings(): CompanionSettings {
 }
 
 export function updateSettings(
-  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "editorTabEnabled" | "tunnelEnabled" | "tunnelMode" | "tunnelId" | "tunnelHostname" | "tunnelCredentialsPath" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "updateChannel">>,
+  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "openrouterApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "editorTabEnabled" | "tunnelEnabled" | "tunnelMode" | "tunnelId" | "tunnelHostname" | "tunnelCredentialsPath" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "updateChannel">>,
 ): CompanionSettings {
   ensureLoaded();
   settings = normalize({
@@ -132,6 +137,7 @@ export function updateSettings(
     anthropicApiKey: patch.anthropicApiKey ?? settings.anthropicApiKey,
     anthropicModel: patch.anthropicModel ?? settings.anthropicModel,
     openaiApiKey: patch.openaiApiKey ?? settings.openaiApiKey,
+    openrouterApiKey: patch.openrouterApiKey ?? settings.openrouterApiKey,
     linearApiKey: patch.linearApiKey ?? settings.linearApiKey,
     linearAutoTransition: patch.linearAutoTransition ?? settings.linearAutoTransition,
     linearAutoTransitionStateId: patch.linearAutoTransitionStateId ?? settings.linearAutoTransitionStateId,

@@ -268,6 +268,8 @@ export interface AppSettings {
   authEnabled: boolean;
   anthropicApiKeyConfigured: boolean;
   anthropicModel: string;
+  openaiApiKeyConfigured: boolean;
+  openrouterApiKeyConfigured: boolean;
   linearApiKeyConfigured: boolean;
   linearAutoTransition: boolean;
   linearAutoTransitionStateName: string;
@@ -278,7 +280,7 @@ export interface AppSettings {
   aiValidationAutoApprove: boolean;
   aiValidationAutoDeny: boolean;
   updateChannel: "stable" | "prerelease";
-  aiProvider?: "openrouter" | "claude";
+  aiProvider?: "anthropic" | "openai" | "openrouter";
 }
 
 export interface ArchiveInfo {
@@ -807,6 +809,8 @@ export const api = {
     authEnabled?: boolean;
     anthropicApiKey?: string;
     anthropicModel?: string;
+    openaiApiKey?: string;
+    openrouterApiKey?: string;
     linearApiKey?: string;
     linearAutoTransition?: boolean;
     linearAutoTransitionStateId?: string;
@@ -819,7 +823,7 @@ export const api = {
     aiValidationAutoApprove?: boolean;
     aiValidationAutoDeny?: boolean;
     updateChannel?: "stable" | "prerelease";
-    aiProvider?: "openrouter" | "claude";
+    aiProvider?: "anthropic" | "openai" | "openrouter";
   }) => put<AppSettings>("/settings", data),
   verifyAnthropicKey: (apiKey: string) =>
     post<{ valid: boolean; error?: string }>("/settings/anthropic/verify", { apiKey }),

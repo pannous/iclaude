@@ -187,7 +187,7 @@ wsBridge.onFirstTurnCompletedCallback(async (sessionId, firstUserMessage) => {
   // Don't overwrite a name that was already set via manual rename
   if (sessionNames.getName(sessionId)) return;
   const s = getSettings();
-  if (!s.anthropicApiKey.trim() && !s.openaiApiKey.trim()) return;
+  if (!s.anthropicApiKey.trim() && !s.openaiApiKey.trim() && !s.openrouterApiKey.trim()) return;
   console.log(`[server] Auto-naming session ${sessionId}...`);
   const title = await generateSessionTitle(firstUserMessage);
   // Re-check: a manual rename may have occurred while we were generating

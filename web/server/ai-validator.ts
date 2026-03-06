@@ -155,7 +155,7 @@ export async function aiEvaluate(
   const apiKey = settings.anthropicApiKey.trim();
 
   if (!apiKey) {
-    return { verdict: "uncertain", reason: "No Anthropic API key configured", ruleBasedOnly: false };
+    return { verdict: "uncertain", reason: "No Anthropic API key configured (required for AI validation)", ruleBasedOnly: false };
   }
 
   const model = settings.anthropicModel?.trim() || DEFAULT_ANTHROPIC_MODEL;

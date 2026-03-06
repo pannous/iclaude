@@ -2,7 +2,9 @@ import { DEFAULT_ANTHROPIC_MODEL, getSettings } from "./settings-manager.js";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENAI_MODEL = "gpt-4o-mini";
+const OPENROUTER_MODEL = "anthropic/claude-haiku-4-5";
 const TITLE_PROMPT = "Generate a concise 3-5 word session title for this user request. Output only the title.";
 
 function sanitizeTitle(raw: string): string | null {
@@ -82,8 +84,42 @@ async function generateViaOpenAI(
   return sanitizeTitle(raw);
 }
 
+async function generateViaOpenRouter(
+  apiKey: string,
+  prompt: string,
+  signal: AbortSignal,
+): Promise<string | null> {
+  const res = await fetch(OPENROUTER_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      max_tokens: 256,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+    }),
+    signal,
+  });
+
+  if (!res.ok) {
+    console.warn(`[auto-namer] OpenRouter request failed: ${res.status} ${res.statusText}`);
+    return null;
+  }
+
+  const data = await res.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const raw = data.choices?.[0]?.message?.content ?? "";
+  return sanitizeTitle(raw);
+}
+
+type GeneratorFn = (signal: AbortSignal) => Promise<string | null>;
+
 /**
- * Generates a short session title using Anthropic API, falling back to OpenAI.
+ * Generates a short session title using the preferred AI provider, falling back to others.
  * Returns null if no provider is configured or all attempts fail.
  */
 export async function generateSessionTitle(
@@ -96,8 +132,9 @@ export async function generateSessionTitle(
   const settings = getSettings();
   const anthropicKey = settings.anthropicApiKey.trim();
   const openaiKey = settings.openaiApiKey.trim();
+  const openrouterKey = settings.openrouterApiKey.trim();
 
-  if (!anthropicKey && !openaiKey) {
+  if (!anthropicKey && !openaiKey && !openrouterKey) {
     return null;
   }
 
@@ -105,19 +142,32 @@ export async function generateSessionTitle(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
-  try {
+  // Build ordered list: preferred provider first, then fallbacks
+  const generators: GeneratorFn[] = [];
+  const addAnthropic = () => {
     if (anthropicKey) {
       const model = settings.anthropicModel?.trim() || DEFAULT_ANTHROPIC_MODEL;
-      const title = await generateViaAnthropic(anthropicKey, model, prompt, controller.signal);
+      generators.push((sig) => generateViaAnthropic(anthropicKey, model, prompt, sig));
+    }
+  };
+  const addOpenAI = () => {
+    if (openaiKey) generators.push((sig) => generateViaOpenAI(openaiKey, prompt, sig));
+  };
+  const addOpenRouter = () => {
+    if (openrouterKey) generators.push((sig) => generateViaOpenRouter(openrouterKey, prompt, sig));
+  };
+
+  // Preferred provider first
+  const preferred = settings.aiProvider;
+  if (preferred === "anthropic") { addAnthropic(); addOpenRouter(); addOpenAI(); }
+  else if (preferred === "openai") { addOpenAI(); addAnthropic(); addOpenRouter(); }
+  else { addOpenRouter(); addAnthropic(); addOpenAI(); }
+
+  try {
+    for (const gen of generators) {
+      const title = await gen(controller.signal);
       if (title) return title;
-      // Anthropic failed — fall through to OpenAI if available
     }
-
-    if (openaiKey) {
-      console.log("[auto-namer] Falling back to OpenAI for title generation");
-      return await generateViaOpenAI(openaiKey, prompt, controller.signal);
-    }
-
     return null;
   } catch (err) {
     console.warn("[auto-namer] Failed to generate session title:", err);
