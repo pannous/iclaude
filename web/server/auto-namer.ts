@@ -7,6 +7,30 @@ const OPENAI_MODEL = "gpt-4o-mini";
 const OPENROUTER_MODEL = "anthropic/claude-haiku-4-5";
 const TITLE_PROMPT = "Generate a concise 3-5 word session title for this user request. Output only the title.";
 
+export type ProviderKeyStatus = "ok" | "error" | "unknown";
+export interface KeyHealthEntry { status: ProviderKeyStatus; error?: string; at: number }
+type ProviderId = "anthropic" | "openai" | "openrouter";
+
+const keyHealth: Record<ProviderId, KeyHealthEntry | null> = {
+  anthropic: null,
+  openai: null,
+  openrouter: null,
+};
+
+function recordKeyHealth(provider: ProviderId, status: ProviderKeyStatus, error?: string) {
+  keyHealth[provider] = { status, error, at: Date.now() };
+}
+
+/** Clear health entry for a provider (e.g. when the key is changed) */
+export function clearKeyHealth(provider: ProviderId) {
+  keyHealth[provider] = null;
+}
+
+/** Get current health status for all providers */
+export function getKeyHealth(): Record<ProviderId, KeyHealthEntry | null> {
+  return { ...keyHealth };
+}
+
 function sanitizeTitle(raw: string): string | null {
   const title = raw.replace(/^"|"$/g, "").replace(/^'|'$/g, "").trim();
   if (!title || title.length >= 100) return null;
@@ -42,6 +66,7 @@ async function generateViaAnthropic(
 
   if (!res.ok) {
     console.warn(`[auto-namer] Anthropic request failed: ${res.status} ${res.statusText}`);
+    recordKeyHealth("anthropic", "error", `${res.status} ${res.statusText}`);
     return null;
   }
 
@@ -49,7 +74,9 @@ async function generateViaAnthropic(
     content?: Array<{ type: string; text?: string }>;
   };
   const raw = data.content?.[0]?.type === "text" ? (data.content[0].text ?? "") : "";
-  return sanitizeTitle(raw);
+  const title = sanitizeTitle(raw);
+  if (title) recordKeyHealth("anthropic", "ok");
+  return title;
 }
 
 async function generateViaOpenAI(
@@ -74,6 +101,7 @@ async function generateViaOpenAI(
 
   if (!res.ok) {
     console.warn(`[auto-namer] OpenAI request failed: ${res.status} ${res.statusText}`);
+    recordKeyHealth("openai", "error", `${res.status} ${res.statusText}`);
     return null;
   }
 
@@ -81,7 +109,9 @@ async function generateViaOpenAI(
     choices?: Array<{ message?: { content?: string } }>;
   };
   const raw = data.choices?.[0]?.message?.content ?? "";
-  return sanitizeTitle(raw);
+  const title = sanitizeTitle(raw);
+  if (title) recordKeyHealth("openai", "ok");
+  return title;
 }
 
 async function generateViaOpenRouter(
@@ -106,6 +136,7 @@ async function generateViaOpenRouter(
 
   if (!res.ok) {
     console.warn(`[auto-namer] OpenRouter request failed: ${res.status} ${res.statusText}`);
+    recordKeyHealth("openrouter", "error", `${res.status} ${res.statusText}`);
     return null;
   }
 
@@ -113,7 +144,9 @@ async function generateViaOpenRouter(
     choices?: Array<{ message?: { content?: string } }>;
   };
   const raw = data.choices?.[0]?.message?.content ?? "";
-  return sanitizeTitle(raw);
+  const title = sanitizeTitle(raw);
+  if (title) recordKeyHealth("openrouter", "ok");
+  return title;
 }
 
 type GeneratorFn = (signal: AbortSignal) => Promise<string | null>;

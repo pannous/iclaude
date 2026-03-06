@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { api } from "../api.js";
+import { api, type KeyHealthEntry } from "../api.js";
 import { useStore } from "../store.js";
 import { getTelemetryPreferenceEnabled, setTelemetryPreferenceEnabled } from "../analytics.js";
 import { navigateToSession, navigateHome } from "../utils/routing.js";
@@ -65,6 +65,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [apiKeyFocused, setApiKeyFocused] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<{ valid: boolean; error?: string } | null>(null);
+  const [keyHealth, setKeyHealth] = useState<Record<"anthropic" | "openai" | "openrouter", KeyHealthEntry | null>>({ anthropic: null, openai: null, openrouter: null });
 
   // Connection test state
   const [connStatus, setConnStatus] = useState<"idle" | "testing" | "ok" | "error">("idle");
@@ -173,6 +174,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
           setPublicUrl(s.publicUrl);
           useStore.getState().setPublicUrl(s.publicUrl);
         }
+        if (s.keyHealth) setKeyHealth(s.keyHealth);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -220,6 +222,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       setConfigured(res.anthropicApiKeyConfigured);
       setOpenaiConfigured(!!res.openaiApiKeyConfigured);
       setOpenrouterConfigured(!!res.openrouterApiKeyConfigured);
+      if (res.keyHealth) setKeyHealth(res.keyHealth);
       setEditorTabEnabled(res.editorTabEnabled);
       setStoreEditorTabEnabled(res.editorTabEnabled);
       setAnthropicApiKey("");
@@ -1111,9 +1114,18 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     <div className="flex-1 min-w-0">
                       <label className="block text-sm font-medium mb-1" htmlFor={`key-${provider.id}`}>
                         {provider.label}
-                        {provider.isConfigured && (
-                          <span className="ml-2 text-[10px] text-cc-success font-normal">configured</span>
-                        )}
+                        {provider.isConfigured && (() => {
+                          const health = keyHealth[provider.id];
+                          const hasError = health?.status === "error";
+                          return (
+                            <span
+                              className={`ml-2 text-[10px] font-normal ${hasError ? "text-orange-400" : "text-cc-success"}`}
+                              title={hasError ? health.error : undefined}
+                            >
+                              {hasError ? "error" : "configured"}
+                            </span>
+                          );
+                        })()}
                       </label>
                       <input
                         id={`key-${provider.id}`}
@@ -1129,20 +1141,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                   </div>
                 ))}
 
-                <div>
-                  <label className="block text-sm font-medium mb-1.5" htmlFor="anthropic-model">
-                    Anthropic Model
-                  </label>
-                  <input
-                    id="anthropic-model"
-                    type="text"
-                    value={anthropicModel}
-                    onChange={(e) => setAnthropicModel(e.target.value)}
-                    placeholder="claude-sonnet-4.6"
-                    className="w-full px-3 py-2.5 min-h-[44px] text-sm bg-cc-bg rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:ring-1 focus:ring-cc-primary/40 transition-shadow"
-                  />
-                  <p className="mt-1 text-[11px] text-cc-muted">Used when Anthropic is the active provider</p>
-                </div>
 
                 {error && (
                   <div className="px-3 py-2 rounded-lg bg-cc-error/10 border border-cc-error/20 text-xs text-cc-error">

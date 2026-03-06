@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import { DEFAULT_ANTHROPIC_MODEL, getSettings, updateSettings, type UpdateChannel, type AiProvider } from "../settings-manager.js";
 import { linearCache } from "../linear-cache.js";
+import { getKeyHealth, clearKeyHealth } from "../auto-namer.js";
 
 export function registerSettingsRoutes(api: Hono): void {
   api.get("/settings", (c) => {
@@ -28,6 +29,7 @@ export function registerSettingsRoutes(api: Hono): void {
       aiProvider: settings.aiProvider,
       publicUrl: settings.publicUrl,
       updateChannel: settings.updateChannel,
+      keyHealth: getKeyHealth(),
     });
   });
 
@@ -115,6 +117,9 @@ export function registerSettingsRoutes(api: Hono): void {
     if (typeof body.linearApiKey === "string") {
       linearCache.clear();
     }
+    if (typeof body.anthropicApiKey === "string") clearKeyHealth("anthropic");
+    if (typeof body.openaiApiKey === "string") clearKeyHealth("openai");
+    if (typeof body.openrouterApiKey === "string") clearKeyHealth("openrouter");
 
     const settings = updateSettings({
       authEnabled:
@@ -218,6 +223,7 @@ export function registerSettingsRoutes(api: Hono): void {
       aiProvider: settings.aiProvider,
       publicUrl: settings.publicUrl,
       updateChannel: settings.updateChannel,
+      keyHealth: getKeyHealth(),
     });
   });
 

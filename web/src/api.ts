@@ -275,6 +275,12 @@ export interface TailscaleStatus {
   error: string | null;
 }
 
+export interface KeyHealthEntry {
+  status: "ok" | "error" | "unknown";
+  error?: string;
+  at: number;
+}
+
 export interface AppSettings {
   authEnabled: boolean;
   anthropicApiKeyConfigured: boolean;
@@ -293,6 +299,7 @@ export interface AppSettings {
   publicUrl: string;
   updateChannel: "stable" | "prerelease";
   aiProvider?: "anthropic" | "openai" | "openrouter";
+  keyHealth?: Record<"anthropic" | "openai" | "openrouter", KeyHealthEntry | null>;
 }
 
 export interface ArchiveInfo {

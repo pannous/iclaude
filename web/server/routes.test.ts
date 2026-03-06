@@ -2365,6 +2365,7 @@ describe("GET /api/settings", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      keyHealth: { anthropic: null, openai: null, openrouter: null },
     });
   });
 
@@ -2424,6 +2425,7 @@ describe("GET /api/settings", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      keyHealth: { anthropic: null, openai: null, openrouter: null },
     });
   });
 
@@ -2546,6 +2548,7 @@ describe("PUT /api/settings", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      keyHealth: { anthropic: null, openai: null, openrouter: null },
     });
   });
 
