@@ -758,6 +758,7 @@ export class WsBridge {
       autoNamingAttempted: this.autoNamingAttempted,
       assistantMessageListeners: this.assistantMessageListeners,
       resultListeners: this.resultListeners,
+      onCLIRelaunchNeeded: this.onCLIRelaunchNeeded,
     });
   }
 

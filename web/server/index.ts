@@ -93,6 +93,8 @@ containerManager.restoreState(CONTAINER_STATE_PATH);
 // Uses exponential backoff to prevent rapid relaunch loops when a CLI keeps crashing.
 const relaunchCooldowns = new Map<string, { until: number; attempts: number }>();
 const MAX_RELAUNCH_COOLDOWN = 60_000;
+const MAX_AUTO_RELAUNCHES = 3;
+const autoRelaunchCounts = new Map<string, number>();
 
 // When the CLI reports its internal session_id, store it for --resume on relaunch
 // and reset any relaunch backoff since the CLI is now healthy
@@ -157,15 +159,32 @@ wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
     }
   }
 
+  const count = autoRelaunchCounts.get(sessionId) ?? 0;
+  if (count >= MAX_AUTO_RELAUNCHES) {
+    console.warn(`[server] Auto-relaunch limit (${MAX_AUTO_RELAUNCHES}) reached for session ${sessionId}, giving up`);
+    wsBridge.broadcastToSession(sessionId, {
+      type: "error",
+      message: "Session keeps crashing. Please relaunch manually.",
+    });
+    return;
+  }
+
   if (info && info.state !== "starting") {
     const attempts = (cooldown?.attempts ?? 0) + 1;
     const backoff = Math.min(5_000 * 2 ** (attempts - 1), MAX_RELAUNCH_COOLDOWN);
     relaunchCooldowns.set(sessionId, { until: now + backoff, attempts });
+    autoRelaunchCounts.set(sessionId, count + 1);
     console.log(`[server] Auto-relaunching CLI for session ${sessionId} (attempt ${attempts}, cooldown ${backoff}ms)`);
+
     try {
       const result = await launcher.relaunch(sessionId);
       if (!result.ok && result.error) {
         wsBridge.broadcastToSession(sessionId, { type: "error", message: result.error });
+      } else {
+        // Successful relaunch — reset counter so transient failures don't
+        // permanently exhaust the budget.  The counter only accumulates when
+        // the backend keeps dying in rapid succession.
+        autoRelaunchCounts.delete(sessionId);
       }
     } catch (err) {
       console.error(`[server] Relaunch failed for session ${sessionId}:`, err);
