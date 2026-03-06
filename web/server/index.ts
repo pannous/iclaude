@@ -389,6 +389,14 @@ const server = Bun.serve<SocketData>({
       return new Response("WebSocket upgrade failed", { status: 400 });
     }
 
+    // In dev mode, proxy Vite HMR WebSocket so remote access works on the API port
+    if (process.env.NODE_ENV !== "production" && req.headers.get("upgrade")?.toLowerCase() === "websocket") {
+      const upgraded = server.upgrade(req, {
+        data: { kind: "vite-hmr" as const, upstream: null },
+      });
+      if (upgraded) return undefined;
+    }
+
     // Hono handles the rest
     return app.fetch(req, server);
   },
@@ -407,6 +415,16 @@ const server = Bun.serve<SocketData>({
         wsBridge.handleBrowserOpen(ws, data.sessionId);
       } else if (data.kind === "terminal") {
         terminalManager.addBrowserSocket(ws);
+      } else if (data.kind === "vite-hmr") {
+        // Proxy Vite HMR WebSocket: connect upstream to the real Vite dev server
+        const vitePort = Number(process.env.VITE_PORT) || DEFAULT_FRONTEND_PORT_DEV;
+        const upstream = new WebSocket(`ws://localhost:${vitePort}/`);
+        data.upstream = upstream;
+        upstream.addEventListener("message", (e) => {
+          try { ws.send(typeof e.data === "string" ? e.data : new Uint8Array(e.data as ArrayBuffer)); } catch {}
+        });
+        upstream.addEventListener("close", () => { try { ws.close(); } catch {} });
+        upstream.addEventListener("error", () => { try { ws.close(); } catch {} });
       }
     },
     message(ws: ServerWebSocket<SocketData>, msg: string | Buffer) {
@@ -417,6 +435,10 @@ const server = Bun.serve<SocketData>({
         wsBridge.handleBrowserMessage(ws, msg);
       } else if (data.kind === "terminal") {
         terminalManager.handleBrowserMessage(ws, msg);
+      } else if (data.kind === "vite-hmr" && data.upstream) {
+        if (data.upstream.readyState === WebSocket.OPEN) {
+          data.upstream.send(typeof msg === "string" ? msg : new Uint8Array(msg));
+        }
       }
     },
     close(ws: ServerWebSocket<SocketData>) {
@@ -427,6 +449,8 @@ const server = Bun.serve<SocketData>({
         wsBridge.handleBrowserClose(ws);
       } else if (data.kind === "terminal") {
         terminalManager.removeBrowserSocket(ws);
+      } else if (data.kind === "vite-hmr" && data.upstream) {
+        try { data.upstream.close(); } catch {}
       }
     },
   },

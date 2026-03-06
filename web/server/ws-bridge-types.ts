@@ -26,7 +26,12 @@ export interface TerminalSocketData {
   terminalId: string;
 }
 
-export type SocketData = CLISocketData | BrowserSocketData | TerminalSocketData;
+export interface ViteHmrSocketData {
+  kind: "vite-hmr";
+  upstream: WebSocket | null;
+}
+
+export type SocketData = CLISocketData | BrowserSocketData | TerminalSocketData | ViteHmrSocketData;
 
 /** Tracks a pending control_request sent to CLI that expects a control_response. */
 export interface PendingControlRequest {
