@@ -279,9 +279,11 @@ export function createRoutes(
       return next();
     }
 
+    // Accept token from Authorization header or cookie (same as global gate)
     const authHeader = c.req.header("Authorization");
-    const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    if (!verifyToken(token)) {
+    const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    const cookieToken = getCookie(c, "companion_auth");
+    if (!verifyToken(bearer) && !verifyToken(cookieToken)) {
       return c.json({ error: "unauthorized" }, 401);
     }
     return next();

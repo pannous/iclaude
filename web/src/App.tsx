@@ -286,12 +286,13 @@ export default function App() {
     }).catch(() => {});
   }
 
-  // Load publicUrl from settings on mount (used for webhook URL generation)
+  // Load publicUrl from settings (only after auth is confirmed)
   useEffect(() => {
+    if (!isAuthenticated) return;
     api.getSettings().then((s) => {
       if (s.publicUrl) useStore.getState().setPublicUrl(s.publicUrl);
     }).catch(() => {});
-  }, []);
+  }, [isAuthenticated]);
 
   // LOCAL: auth gate — show nothing while autoAuth is in flight to avoid login-page flash
   if (authChecking) return null;
