@@ -154,6 +154,8 @@ jobs:
 
       - name: Publish prerelease to npm
         working-directory: web
-        run: npm publish --access public --tag next
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_PUBLISH_TOKEN}" > .npmrc
+          npm publish --access public --tag next
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+          NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
