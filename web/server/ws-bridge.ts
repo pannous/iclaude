@@ -620,6 +620,12 @@ export class WsBridge {
     return Array.from(this.sessions.values()).map((s) => s.state);
   }
 
+  /** Check if a session has any active browser connections. */
+  hasBrowsers(sessionId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    return !!session && session.browserSockets.size > 0;
+  }
+
   /** Get session title, falling back to first user message content. */
   getSessionTitle(sessionId: string): string | undefined {
     const session = this.sessions.get(sessionId);

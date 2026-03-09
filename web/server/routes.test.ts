@@ -322,6 +322,7 @@ function createMockBridge() {
     getAllFragmentStates: vi.fn(() => ({})),
     getFragmentConsole: vi.fn(() => []),
     getAllFragmentConsole: vi.fn(() => ({})),
+    hasBrowsers: vi.fn(() => false),
 
   } as any;
 }

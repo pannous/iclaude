@@ -172,6 +172,7 @@ export default function App() {
   // Capture the localStorage-restored session ID during render (before any effects run)
   // so the mount logic can use it even if the hash-sync branch would clear it.
   const restoredIdRef = useRef(useStore.getState().currentSessionId);
+  const relaunchingRef = useRef<Set<string>>(new Set());
 
   // Sync hash → store. On mount, restore a localStorage session into the URL first.
   useEffect(() => {
@@ -193,6 +194,8 @@ export default function App() {
       api.listSessions().then((list) => {
         const session = list.find((s: { sessionId: string; archived?: boolean }) => s.sessionId === route.sessionId);
         if (!session) {
+          if (relaunchingRef.current.has(route.sessionId)) return;
+          relaunchingRef.current.add(route.sessionId);
           console.warn(`[app] Session ${route.sessionId} not in API list (${list.length} sessions), attempting relaunch`);
           api.relaunchSession(route.sessionId).then(() => {
             disconnectSession(route.sessionId);
@@ -202,8 +205,10 @@ export default function App() {
             disconnectSession(route.sessionId);
             useStore.getState().newSession();
             navigateHome(true);
-          });
+          }).finally(() => relaunchingRef.current.delete(route.sessionId));
         } else if (session.archived || session.state === "exited") {
+          if (relaunchingRef.current.has(route.sessionId)) return;
+          relaunchingRef.current.add(route.sessionId);
           // LOCAL: auto-reactivate archived/exited sessions when opened via URL
           const reactivate = async () => {
             if (session.archived) await api.unarchiveSession(route.sessionId);
@@ -213,7 +218,9 @@ export default function App() {
             // Refresh session list so sidebar reflects the change
             api.listSessions().then((updated) => useStore.getState().setSdkSessions(updated)).catch(() => {});
           };
-          reactivate().catch((e) => console.warn(`[app] Auto-reactivate failed for ${route.sessionId}`, e));
+          reactivate()
+            .catch((e) => console.warn(`[app] Auto-reactivate failed for ${route.sessionId}`, e))
+            .finally(() => relaunchingRef.current.delete(route.sessionId));
         }
       }).catch((e) => console.warn("[app] listSessions", e));
     } else if (route.page === "home") {

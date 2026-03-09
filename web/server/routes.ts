@@ -948,8 +948,10 @@ export function createRoutes(
     const now = Date.now();
     // Filter out orphaned sessions (connected, 0 turns, no name, no title, age > 2min)
     // Sessions with a title have had real activity and must never be filtered.
+    // Never filter sessions that a browser is actively viewing.
     const sessions = allSessions.filter((s) => {
       if (s.state === "connected" && !s.name && !s.title && !names[s.sessionId]) {
+        if (wsBridge.hasBrowsers(s.sessionId)) return true;
         const bridge = bridgeMap.get(s.sessionId);
         if ((bridge?.num_turns ?? 0) === 0 && now - s.createdAt > 120_000) return false;
       }
