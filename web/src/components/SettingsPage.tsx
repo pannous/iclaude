@@ -41,6 +41,8 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const toggleNotificationSound = useStore((s) => s.toggleNotificationSound);
   const notificationDesktop = useStore((s) => s.notificationDesktop);
   const setNotificationDesktop = useStore((s) => s.setNotificationDesktop);
+  const showDebugMessages = useStore((s) => s.showDebugMessages);
+  const toggleShowDebugMessages = useStore((s) => s.toggleShowDebugMessages);
   const updateInfo = useStore((s) => s.updateInfo);
   const setUpdateInfo = useStore((s) => s.setUpdateInfo);
   const setUpdateOverlayActive = useStore((s) => s.setUpdateOverlayActive);
@@ -1076,6 +1078,14 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     <span className="text-xs text-cc-muted">{notificationDesktop ? "On" : "Off"}</span>
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={toggleShowDebugMessages}
+                  className="w-full flex items-center justify-between px-3 py-3 min-h-[44px] rounded-lg text-sm bg-cc-hover text-cc-fg hover:bg-cc-active transition-colors cursor-pointer"
+                >
+                  <span>Debug Messages</span>
+                  <span className="text-xs text-cc-muted">{showDebugMessages ? "On" : "Off"}</span>
+                </button>
               </div>
             </section>
 

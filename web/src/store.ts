@@ -136,6 +136,7 @@ interface AppState {
   notificationSound: boolean;
   yoloMode: boolean;
   notificationDesktop: boolean;
+  showDebugMessages: boolean;
   sidebarOpen: boolean;
   taskPanelOpen: boolean;
   taskPanelConfig: TaskPanelConfig;
@@ -168,6 +169,7 @@ interface AppState {
   toggleYoloMode: () => void;
   setNotificationDesktop: (v: boolean) => void;
   toggleNotificationDesktop: () => void;
+  toggleShowDebugMessages: () => void;
   setPublicUrl: (url: string) => void;
   setSidebarOpen: (v: boolean) => void;
   setTaskPanelOpen: (open: boolean) => void;
@@ -361,6 +363,7 @@ export const useStore = create<AppState>((set) => ({
   notificationSound: initBool("cc-notification-sound", true),
   yoloMode: initBool("cc-yolo-mode", true),
   notificationDesktop: initBool("cc-notification-desktop", true),
+  showDebugMessages: initBool("cc-show-debug-messages", false),
   sidebarOpen: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
   taskPanelOpen: typeof window !== "undefined" ? window.innerWidth >= 1024 : true,
   taskPanelConfig: getInitialTaskPanelConfig(),
@@ -463,6 +466,12 @@ export const useStore = create<AppState>((set) => ({
       const next = !s.notificationDesktop;
       safeStorage.setItem("cc-notification-desktop", String(next));
       return { notificationDesktop: next };
+    }),
+  toggleShowDebugMessages: () =>
+    set((s) => {
+      const next = !s.showDebugMessages;
+      safeStorage.setItem("cc-show-debug-messages", String(next));
+      return { showDebugMessages: next };
     }),
   setPublicUrl: (url) => set({ publicUrl: url }),
   setSidebarOpen: (v) => set({ sidebarOpen: v }),

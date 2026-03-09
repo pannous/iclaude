@@ -12,13 +12,16 @@ import { FeedSessionIdContext } from "./feed-context.js";
 import { ansiToHtml, hasAnsi } from "../utils/ansi.js";
 
 export function MessageBubble({ message }: { message: ChatMessage }) {
+  const showDebugMessages = useStore((s) => s.showDebugMessages);
   if (message.role === "system") {
-    const isHook = typeof message.content === "string" && message.content.startsWith("Hook ");
-    if (isHook) {
+    const text = typeof message.content === "string" ? message.content : "";
+    const isDebug = text.startsWith("Hook ") || text.startsWith("Task completed:") || text.startsWith("Task failed:") || text.startsWith("Persisted ");
+    if (!showDebugMessages && isDebug) return null;
+    if (text.startsWith("Hook ")) {
       return (
         <div className="-my-1.5 sm:-my-2.5 text-center leading-tight">
           <span className="text-[10px] text-cc-muted/50 font-mono-code">
-            {message.content}
+            {text}
           </span>
         </div>
       );

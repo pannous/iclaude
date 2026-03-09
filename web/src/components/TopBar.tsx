@@ -170,6 +170,23 @@ export function TopBar() {
           </svg>
         </button>
 
+        {/* Mobile-only new session button — always visible on iPhone */}
+        <button
+          onClick={() => {
+            useStore.getState().closeTerminal();
+            window.location.hash = "#/";
+            useStore.getState().newSession();
+            useStore.getState().setSidebarOpen(false);
+          }}
+          className="md:hidden flex items-center justify-center w-8 h-8 rounded-md text-cc-primary hover:bg-cc-hover transition-colors cursor-pointer shrink-0"
+          aria-label="New Session"
+          title="New Session"
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+            <path d="M8 3v10M3 8h10" />
+          </svg>
+        </button>
+
         {showWorkspaceControls && (
           <div className="flex-1 flex items-center justify-center gap-0.5 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <button
