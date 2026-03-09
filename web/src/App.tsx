@@ -195,18 +195,26 @@ export default function App() {
         if (!session) {
           console.warn(`[app] Session ${route.sessionId} not in API list (${list.length} sessions), attempting relaunch`);
           api.relaunchSession(route.sessionId).then(() => {
-            // Relaunch succeeded — reconnect WebSocket
             disconnectSession(route.sessionId);
             connectSession(route.sessionId);
           }).catch(() => {
-            // Relaunch failed — session is truly gone, redirect home
             console.warn(`[app] Relaunch failed for ${route.sessionId}, redirecting home`);
             disconnectSession(route.sessionId);
             useStore.getState().newSession();
             navigateHome(true);
           });
+        } else if (session.archived || session.state === "exited") {
+          // LOCAL: auto-reactivate archived/exited sessions when opened via URL
+          const reactivate = async () => {
+            if (session.archived) await api.unarchiveSession(route.sessionId);
+            await api.relaunchSession(route.sessionId);
+            disconnectSession(route.sessionId);
+            connectSession(route.sessionId);
+            // Refresh session list so sidebar reflects the change
+            api.listSessions().then((updated) => useStore.getState().setSdkSessions(updated)).catch(() => {});
+          };
+          reactivate().catch((e) => console.warn(`[app] Auto-reactivate failed for ${route.sessionId}`, e));
         }
-        // LOCAL: allow viewing archived sessions — do not redirect home
       }).catch((e) => console.warn("[app] listSessions", e));
     } else if (route.page === "home") {
       const store = useStore.getState();
