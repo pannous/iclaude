@@ -26,6 +26,16 @@ export interface CompanionSettings {
   linearArchiveTransition: boolean;
   linearArchiveTransitionStateId: string;
   linearArchiveTransitionStateName: string;
+  /** Linear OAuth app client ID (for Agent Interaction SDK) */
+  linearOAuthClientId: string;
+  /** Linear OAuth app client secret */
+  linearOAuthClientSecret: string;
+  /** Webhook signing secret for the Linear OAuth app */
+  linearOAuthWebhookSecret: string;
+  /** OAuth access token (obtained via actor=app install flow) */
+  linearOAuthAccessToken: string;
+  /** OAuth refresh token (for 24h token rotation) */
+  linearOAuthRefreshToken: string;
   editorTabEnabled: boolean;
   aiValidationEnabled: boolean;
   aiValidationAutoApprove: boolean;
@@ -58,6 +68,11 @@ let settings: CompanionSettings = {
   linearArchiveTransition: false,
   linearArchiveTransitionStateId: "",
   linearArchiveTransitionStateName: "",
+  linearOAuthClientId: "",
+  linearOAuthClientSecret: "",
+  linearOAuthWebhookSecret: "",
+  linearOAuthAccessToken: "",
+  linearOAuthRefreshToken: "",
   editorTabEnabled: false,
   tunnelEnabled: false,
   tunnelMode: "quick",
@@ -90,6 +105,11 @@ function normalize(raw: Partial<CompanionSettings> | null | undefined): Companio
     linearArchiveTransition: typeof raw?.linearArchiveTransition === "boolean" ? raw.linearArchiveTransition : false,
     linearArchiveTransitionStateId: typeof raw?.linearArchiveTransitionStateId === "string" ? raw.linearArchiveTransitionStateId : "",
     linearArchiveTransitionStateName: typeof raw?.linearArchiveTransitionStateName === "string" ? raw.linearArchiveTransitionStateName : "",
+    linearOAuthClientId: typeof raw?.linearOAuthClientId === "string" ? raw.linearOAuthClientId : "",
+    linearOAuthClientSecret: typeof raw?.linearOAuthClientSecret === "string" ? raw.linearOAuthClientSecret : "",
+    linearOAuthWebhookSecret: typeof raw?.linearOAuthWebhookSecret === "string" ? raw.linearOAuthWebhookSecret : "",
+    linearOAuthAccessToken: typeof raw?.linearOAuthAccessToken === "string" ? raw.linearOAuthAccessToken : "",
+    linearOAuthRefreshToken: typeof raw?.linearOAuthRefreshToken === "string" ? raw.linearOAuthRefreshToken : "",
     editorTabEnabled: typeof raw?.editorTabEnabled === "boolean" ? raw.editorTabEnabled : false,
     tunnelEnabled: typeof raw?.tunnelEnabled === "boolean" ? raw.tunnelEnabled : false,
     tunnelMode: raw?.tunnelMode === "named" ? "named" : "quick",
@@ -132,7 +152,7 @@ export function getSettings(): CompanionSettings {
 }
 
 export function updateSettings(
-  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "openrouterApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "editorTabEnabled" | "tunnelEnabled" | "tunnelMode" | "tunnelId" | "tunnelHostname" | "tunnelCredentialsPath" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "publicUrl" | "updateChannel">>,
+  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "openrouterApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "linearOAuthClientId" | "linearOAuthClientSecret" | "linearOAuthWebhookSecret" | "linearOAuthAccessToken" | "linearOAuthRefreshToken" | "editorTabEnabled" | "tunnelEnabled" | "tunnelMode" | "tunnelId" | "tunnelHostname" | "tunnelCredentialsPath" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "publicUrl" | "updateChannel">>,
 ): CompanionSettings {
   ensureLoaded();
   settings = normalize({
@@ -148,6 +168,11 @@ export function updateSettings(
     linearArchiveTransition: patch.linearArchiveTransition ?? settings.linearArchiveTransition,
     linearArchiveTransitionStateId: patch.linearArchiveTransitionStateId ?? settings.linearArchiveTransitionStateId,
     linearArchiveTransitionStateName: patch.linearArchiveTransitionStateName ?? settings.linearArchiveTransitionStateName,
+    linearOAuthClientId: patch.linearOAuthClientId ?? settings.linearOAuthClientId,
+    linearOAuthClientSecret: patch.linearOAuthClientSecret ?? settings.linearOAuthClientSecret,
+    linearOAuthWebhookSecret: patch.linearOAuthWebhookSecret ?? settings.linearOAuthWebhookSecret,
+    linearOAuthAccessToken: patch.linearOAuthAccessToken ?? settings.linearOAuthAccessToken,
+    linearOAuthRefreshToken: patch.linearOAuthRefreshToken ?? settings.linearOAuthRefreshToken,
     editorTabEnabled: patch.editorTabEnabled ?? settings.editorTabEnabled,
     tunnelEnabled: patch.tunnelEnabled ?? settings.tunnelEnabled,
     tunnelMode: patch.tunnelMode ?? settings.tunnelMode,

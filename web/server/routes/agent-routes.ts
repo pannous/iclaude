@@ -105,7 +105,9 @@ export function registerAgentRoutes(
       const agent = agentStore.updateAgent(id, allowed);
       if (!agent) return c.json({ error: "Agent not found" }, 404);
       // Stop old timer (id may differ after a rename)
-      if (agent.id !== id) agentExecutor?.stopAgent(id);
+      if (agent.id !== id) {
+        agentExecutor?.stopAgent(id);
+      }
       // Reschedule if enabled
       if (agent.enabled && agent.triggers?.schedule?.enabled) {
         agentExecutor?.scheduleAgent(agent);

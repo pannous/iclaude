@@ -180,6 +180,8 @@ export function IntegrationsPage({ embedded = false }: IntegrationsPageProps) {
             </button>
           </div>
         </section>
+
+
       </div>
     </div>
   );

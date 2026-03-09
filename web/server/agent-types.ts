@@ -1,20 +1,5 @@
 // ─── Agent Types ─────────────────────────────────────────────────────────────
 
-/** Supported Chat SDK adapter names */
-export type ChatAdapterName = "linear" | "github" | "slack" | "discord";
-
-/** Binding of an agent to a chat platform */
-export interface ChatPlatformBinding {
-  /** Which platform adapter to use */
-  adapter: ChatAdapterName;
-  /** Optional regex to filter which mentions this agent handles */
-  mentionPattern?: string;
-  /** Auto-subscribe to threads for multi-turn conversations */
-  autoSubscribe: boolean;
-  /** Per-platform credentials (API keys, tokens, secrets, etc.) */
-  credentials?: Record<string, string>;
-}
-
 export interface McpServerConfigAgent {
   type: "stdio" | "sse" | "http";
   command?: string;
@@ -95,11 +80,9 @@ export interface AgentConfig {
       /** true = recurring cron, false = one-shot */
       recurring: boolean;
     };
-    /** Chat platform trigger config (Chat SDK) */
-    chat?: {
+    /** Linear Agent Interaction SDK trigger (uses global OAuth app) */
+    linear?: {
       enabled: boolean;
-      /** Which platform adapters this agent responds on */
-      platforms: ChatPlatformBinding[];
     };
   };
 
@@ -131,7 +114,7 @@ export interface AgentExecution {
   /** The agent ID that triggered this */
   agentId: string;
   /** Trigger type that initiated this execution */
-  triggerType: "manual" | "webhook" | "schedule" | "chat";
+  triggerType: "manual" | "webhook" | "schedule" | "linear";
   /** When the execution started */
   startedAt: number;
   /** When the execution completed */

@@ -28,6 +28,13 @@ vi.mock("../store.js", () => {
   return { useStore: useStoreFn };
 });
 
+const mockNavigateHome = vi.fn();
+const mockNavigateToSession = vi.fn();
+vi.mock("../utils/routing.js", () => ({
+  navigateHome: (...args: unknown[]) => mockNavigateHome(...args),
+  navigateToSession: (...args: unknown[]) => mockNavigateToSession(...args),
+}));
+
 import { IntegrationsPage } from "./IntegrationsPage.js";
 
 beforeEach(() => {
@@ -76,6 +83,50 @@ describe("IntegrationsPage", () => {
     await waitFor(() => {
       expect(window.location.hash).toBe("#/integrations/linear");
     });
+  });
+
+  // ------------------------------------------------------------------
+  // Back button (lines 78-87): only shown when embedded=false
+  // ------------------------------------------------------------------
+
+  it("renders Back button when not embedded and navigates home when no session", async () => {
+    // No currentSessionId in state, so clicking Back should call navigateHome
+    mockState = { currentSessionId: null };
+    render(<IntegrationsPage />);
+
+    // Wait for async effects to settle (settings fetch)
+    await screen.findByText("Linear");
+
+    const backBtn = screen.getByRole("button", { name: "Back" });
+    expect(backBtn).toBeInTheDocument();
+
+    fireEvent.click(backBtn);
+
+    expect(mockNavigateHome).toHaveBeenCalledTimes(1);
+    expect(mockNavigateToSession).not.toHaveBeenCalled();
+  });
+
+  it("Back button navigates to session when currentSessionId is set", async () => {
+    // Store has an active session, so Back should navigate to that session
+    mockState = { currentSessionId: "session-xyz" };
+    render(<IntegrationsPage />);
+
+    await screen.findByText("Linear");
+
+    const backBtn = screen.getByRole("button", { name: "Back" });
+    fireEvent.click(backBtn);
+
+    expect(mockNavigateToSession).toHaveBeenCalledWith("session-xyz");
+    expect(mockNavigateHome).not.toHaveBeenCalled();
+  });
+
+  it("does not render Back button when embedded", async () => {
+    // When embedded=true the Back button should be absent
+    render(<IntegrationsPage embedded />);
+
+    await screen.findByText("Linear");
+
+    expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
   });
 
   // ------------------------------------------------------------------

@@ -30,7 +30,7 @@ import { registerPanelRoutes } from "./routes/panels-routes.js";
 import { registerEnvRoutes } from "./routes/env-routes.js";
 import { registerCronRoutes } from "./routes/cron-routes.js";
 import { registerAgentRoutes } from "./routes/agent-routes.js";
-import { registerChatWebhookRoutes, registerChatProtectedRoutes } from "./routes/chat-routes.js";
+import { registerLinearAgentWebhookRoute, registerLinearAgentProtectedRoutes } from "./routes/linear-agent-routes.js";
 import { registerPromptRoutes } from "./routes/prompt-routes.js";
 import { registerSettingsRoutes } from "./routes/settings-routes.js";
 import { registerTailscaleRoutes } from "./routes/tailscale-routes.js";
@@ -162,7 +162,7 @@ export function createRoutes(
   cronScheduler?: import("./cron-scheduler.js").CronScheduler,
   agentExecutor?: import("./agent-executor.js").AgentExecutor,
   tunnelManager?: import("./tunnel-manager.js").TunnelManager,
-  chatBot?: import("./chat-bot.js").ChatBot,
+  linearAgentBridge?: import("./linear-agent-bridge.js").LinearAgentBridge,
   port?: number,
 ) {
   const api = new Hono();
@@ -257,10 +257,10 @@ export function createRoutes(
     return c.json({ enabled: isAuthEnabled() });
   });
 
-  // ─── Chat SDK webhook routes (exempt from auth middleware) ────────
-  // Platform adapters handle their own signature verification (e.g., Linear HMAC).
-  if (chatBot) {
-    registerChatWebhookRoutes(api, chatBot);
+  // ─── Linear Agent SDK webhook route (exempt from auth middleware) ────────
+  // Uses HMAC-SHA256 signature verification, not Companion auth tokens.
+  if (linearAgentBridge) {
+    registerLinearAgentWebhookRoute(api, linearAgentBridge);
   }
 
   // ─── Auth middleware (protects all routes below) ───────────────────
@@ -287,10 +287,8 @@ export function createRoutes(
     return next();
   });
 
-  // ─── Chat platform listing (protected, after auth middleware) ─────
-  if (chatBot) {
-    registerChatProtectedRoutes(api, chatBot);
-  }
+  // ─── Linear Agent SDK protected routes (status, authorize URL, disconnect) ─────
+  registerLinearAgentProtectedRoutes(api);
 
   // ─── Auth management (protected) ──────────────────────────────────
 
