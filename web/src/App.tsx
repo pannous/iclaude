@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState, useMemo, useRef, useSyncExternalStore, type ComponentType } from "react";
 import { useStore } from "./store.js";
 import { connectSession, disconnectSession, sendToSession } from "./ws.js";
-import { api, autoAuth } from "./api.js";
+import { api, autoAuth, verifyAuthToken } from "./api.js";
 import { parseHash, navigateToSession, navigateHome, type Route } from "./utils/routing.js";
 import { handleKeyDown, createMouseHandler } from "./utils/keybindings.js";
 import { LoginPage } from "./components/LoginPage.js";
@@ -98,16 +98,40 @@ export default function App() {
   const isRunsPage = route.page === "runs";
   const isSessionView = route.page === "session" || route.page === "home";
 
-  // LOCAL: On startup, attempt autoAuth so the login page never flashes when auth is disabled
+  // LOCAL: On startup, attempt autoAuth so the login page never flashes when auth is disabled.
+  // Also check ?token= URL parameter first (used by iOS WKWebView and QR code scans).
   useEffect(() => {
     if (isAuthenticated) return; // already logged in (token in localStorage)
-    autoAuth().then((token) => {
-      if (token) {
-        setAuthToken(token);
-      } else {
-        setAuthChecking(false); // no auto-token — show login form
-      }
-    }).catch(() => setAuthChecking(false));
+
+    // Check URL token first — most reliable for WKWebView where cookies may not persist
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get("token");
+    if (urlToken) {
+      verifyAuthToken(urlToken).then((valid) => {
+        if (valid) {
+          setAuthToken(urlToken);
+          const url = new URL(window.location.href);
+          url.searchParams.delete("token");
+          window.history.replaceState({}, "", url.toString());
+        } else {
+          // Invalid URL token — fall through to autoAuth
+          tryAutoAuth();
+        }
+      }).catch(() => tryAutoAuth());
+      return;
+    }
+
+    tryAutoAuth();
+
+    function tryAutoAuth() {
+      autoAuth().then((token) => {
+        if (token) {
+          setAuthToken(token);
+        } else {
+          setAuthChecking(false); // no auto-token — show login form
+        }
+      }).catch(() => setAuthChecking(false));
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
