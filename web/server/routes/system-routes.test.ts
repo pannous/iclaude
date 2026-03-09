@@ -578,7 +578,7 @@ describe("POST /api/sessions/:id/message", () => {
     const json = await res.json();
     expect(json.ok).toBe(true);
     expect(json.sessionId).toBe("sess-1");
-    expect(wsBridge.injectUserMessage).toHaveBeenCalledWith("sess-1", "hello world");
+    expect(wsBridge.injectUserMessage).toHaveBeenCalledWith("sess-1", "hello world", undefined);
   });
 
   it("returns 404 when the session does not exist", async () => {

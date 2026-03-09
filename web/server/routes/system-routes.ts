@@ -228,7 +228,8 @@ export function registerSystemRoutes(
     if (typeof body.content !== "string" || !body.content.trim()) {
       return c.json({ error: "content is required" }, 400);
     }
-    deps.wsBridge.injectUserMessage(id, body.content);
+    const images = Array.isArray(body.images) ? body.images : undefined;
+    deps.wsBridge.injectUserMessage(id, body.content, images);
     return c.json({ ok: true, sessionId: id });
   });
 }
