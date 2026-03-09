@@ -76,6 +76,7 @@ jobs:
     name: deploy/preview-npm
     needs: test-gate
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

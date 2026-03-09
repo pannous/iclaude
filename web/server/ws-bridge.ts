@@ -133,8 +133,8 @@ export class WsBridge {
   private warnedNoBrowsers = new Set<string>();
   /** Per-session timers for orphan kill: fires when CLI is idle + no browsers for too long. */
   private pendingOrphanKills = new Map<string, ReturnType<typeof setTimeout>>();
-  /** Grace period (ms) before killing an idle CLI with no browsers. Default: 10min. */
-  private static readonly ORPHAN_KILL_MS = Number(process.env.COMPANION_ORPHAN_KILL_MS || "600000");
+  /** Grace period (ms) before killing an idle CLI with no browsers. Default: 24h. */
+  private static readonly ORPHAN_KILL_MS = Number(process.env.COMPANION_ORPHAN_KILL_MS || "86400000");
   private onSessionOrphaned: ((sessionId: string) => void) | null = null;
   private userMsgCounter = 0;
   private onGitInfoReady: ((sessionId: string, cwd: string, branch: string) => void) | null = null;
