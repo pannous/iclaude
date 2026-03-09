@@ -1,6 +1,7 @@
-import { mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import type {
   SessionState,
   BrowserIncomingMessage,
@@ -28,7 +29,9 @@ export interface PersistedSession {
 
 // ─── Store ──────────────────────────────────────────────────────────────────
 
-const DEFAULT_DIR = join(tmpdir(), "vibe-sessions");
+// Persistent location — survives reboots (unlike $TMPDIR)
+const DEFAULT_DIR = join(homedir(), ".companion", "sessions");
+const LEGACY_DIR = join(tmpdir(), "vibe-sessions");
 
 export class SessionStore {
   private dir: string;
@@ -37,6 +40,32 @@ export class SessionStore {
   constructor(dir?: string) {
     this.dir = dir || DEFAULT_DIR;
     mkdirSync(this.dir, { recursive: true });
+    if (!dir) this.migrateFromLegacyDir();
+  }
+
+  /** Move session files from the old $TMPDIR location to the persistent directory. */
+  private migrateFromLegacyDir(): void {
+    if (!existsSync(LEGACY_DIR)) return;
+    try {
+      const files = readdirSync(LEGACY_DIR).filter((f) => f.endsWith(".json"));
+      let migrated = 0;
+      for (const file of files) {
+        const dest = join(this.dir, file);
+        if (existsSync(dest)) continue; // already exists in new location
+        try {
+          copyFileSync(join(LEGACY_DIR, file), dest);
+          unlinkSync(join(LEGACY_DIR, file));
+          migrated++;
+        } catch {
+          // Skip files that can't be migrated
+        }
+      }
+      if (migrated > 0) {
+        console.log(`[session-store] Migrated ${migrated} session file(s) from ${LEGACY_DIR} to ${this.dir}`);
+      }
+    } catch {
+      // Legacy dir not readable
+    }
   }
 
   private filePath(sessionId: string): string {
