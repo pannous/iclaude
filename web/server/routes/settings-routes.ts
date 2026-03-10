@@ -2,22 +2,26 @@ import type { Hono } from "hono";
 import { DEFAULT_ANTHROPIC_MODEL, getSettings, updateSettings, type UpdateChannel, type AiProvider } from "../settings-manager.js";
 import { linearCache } from "../linear-cache.js";
 import { getKeyHealth, clearKeyHealth } from "../auto-namer.js";
+import { listConnections } from "../linear-connections.js";
 
 export function registerSettingsRoutes(api: Hono): void {
   api.get("/settings", (c) => {
     const settings = getSettings();
+    const connections = listConnections();
     return c.json({
       authEnabled: settings.authEnabled,
       anthropicApiKeyConfigured: !!settings.anthropicApiKey.trim(),
       anthropicModel: settings.anthropicModel || DEFAULT_ANTHROPIC_MODEL,
       openaiApiKeyConfigured: !!settings.openaiApiKey.trim(),
       openrouterApiKeyConfigured: !!settings.openrouterApiKey.trim(),
-      linearApiKeyConfigured: !!settings.linearApiKey.trim(),
+      linearApiKeyConfigured: !!settings.linearApiKey.trim() || connections.length > 0,
+      linearConnectionCount: connections.length,
       linearAutoTransition: settings.linearAutoTransition,
       linearAutoTransitionStateName: settings.linearAutoTransitionStateName,
       linearArchiveTransition: settings.linearArchiveTransition,
       linearArchiveTransitionStateName: settings.linearArchiveTransitionStateName,
       linearOAuthConfigured: !!(settings.linearOAuthClientId.trim() && settings.linearOAuthClientSecret.trim() && settings.linearOAuthAccessToken.trim()),
+      linearOAuthCredentialsSaved: !!(settings.linearOAuthClientId.trim() && settings.linearOAuthClientSecret.trim()),
       editorTabEnabled: settings.editorTabEnabled,
       tunnelEnabled: settings.tunnelEnabled,
       tunnelMode: settings.tunnelMode,
@@ -224,18 +228,21 @@ export function registerSettingsRoutes(api: Hono): void {
           : undefined,
     });
 
+    const connectionsAfterUpdate = listConnections();
     return c.json({
       authEnabled: settings.authEnabled,
       anthropicApiKeyConfigured: !!settings.anthropicApiKey.trim(),
       anthropicModel: settings.anthropicModel || DEFAULT_ANTHROPIC_MODEL,
       openaiApiKeyConfigured: !!settings.openaiApiKey.trim(),
       openrouterApiKeyConfigured: !!settings.openrouterApiKey.trim(),
-      linearApiKeyConfigured: !!settings.linearApiKey.trim(),
+      linearApiKeyConfigured: !!settings.linearApiKey.trim() || connectionsAfterUpdate.length > 0,
+      linearConnectionCount: connectionsAfterUpdate.length,
       linearAutoTransition: settings.linearAutoTransition,
       linearAutoTransitionStateName: settings.linearAutoTransitionStateName,
       linearArchiveTransition: settings.linearArchiveTransition,
       linearArchiveTransitionStateName: settings.linearArchiveTransitionStateName,
       linearOAuthConfigured: !!(settings.linearOAuthClientId.trim() && settings.linearOAuthClientSecret.trim() && settings.linearOAuthAccessToken.trim()),
+      linearOAuthCredentialsSaved: !!(settings.linearOAuthClientId.trim() && settings.linearOAuthClientSecret.trim()),
       editorTabEnabled: settings.editorTabEnabled,
       tunnelEnabled: settings.tunnelEnabled,
       tunnelMode: settings.tunnelMode,

@@ -38,6 +38,8 @@ import { registerGitRoutes } from "./routes/git-routes.js";
 import { registerSystemRoutes } from "./routes/system-routes.js";
 import { registerLinearRoutes, transitionLinearIssue, fetchLinearTeamStates } from "./routes/linear-routes.js";
 import { registerCompleteRoutes } from "./routes/complete-routes.js";
+import { registerLinearConnectionRoutes } from "./routes/linear-connection-routes.js";
+import { getConnection, listConnections, resolveApiKey } from "./linear-connections.js";
 import { getSettings, updateSettings } from "./settings-manager.js";
 import { discoverClaudeSessions } from "./claude-session-discovery.js";
 import { getClaudeSessionHistoryPage } from "./claude-session-history.js";
@@ -164,6 +166,7 @@ export function createRoutes(
   tunnelManager?: import("./tunnel-manager.js").TunnelManager,
   linearAgentBridge?: import("./linear-agent-bridge.js").LinearAgentBridge,
   port?: number,
+  clearAutoRelaunchCount?: (sessionId: string) => void,
 ) {
   const api = new Hono();
 
@@ -318,7 +321,15 @@ export function createRoutes(
         return c.json({ error: `Invalid backend: ${String(backend)}` }, 400);
       }
 
-      const envVars = prepareEnvVars(body, envManager);
+      let envVars = prepareEnvVars(body, envManager);
+
+      // Inject LINEAR_API_KEY if a Linear connection is specified
+      if (body.linearConnectionId) {
+        const conn = getConnection(body.linearConnectionId);
+        if (conn?.apiKey) {
+          envVars = { ...envVars, LINEAR_API_KEY: conn.apiKey };
+        }
+      }
 
       const companionEnv = body.envSlug ? envManager.getEnv(body.envSlug) : null;
       let effectiveImage = companionEnv
@@ -577,6 +588,14 @@ export function createRoutes(
         const companionEnv = body.envSlug ? envManager.getEnv(body.envSlug) : null;
         if (body.envSlug && companionEnv) {
           envVars = { ...companionEnv.variables, ...body.env };
+        }
+
+        // Inject LINEAR_API_KEY if a Linear connection is specified
+        if (body.linearConnectionId) {
+          const conn = getConnection(body.linearConnectionId);
+          if (conn?.apiKey) {
+            envVars = { ...envVars, LINEAR_API_KEY: conn.apiKey };
+          }
         }
 
         // Resolve Docker image early so we know whether git ops should run on host or in container
@@ -1211,6 +1230,7 @@ export function createRoutes(
 
   api.post("/sessions/:id/relaunch", async (c) => {
     const id = c.req.param("id");
+    clearAutoRelaunchCount?.(id);
     const result = await launcher.relaunch(id);
     if (!result.ok) {
       const status = result.error?.includes("not found") || result.error?.includes("Session not found") ? 404 : 503;
@@ -1576,16 +1596,25 @@ export function createRoutes(
     }
 
     // Issue is not done — check if backlog state is available and if archive transition is configured
-    const settings = getSettings();
-    const linearApiKey = settings.linearApiKey.trim();
+    const resolved = resolveApiKey(linkedIssue.connectionId);
     let hasBacklogState = false;
-    if (linearApiKey && linkedIssue.teamId) {
-      const teams = await fetchLinearTeamStates(linearApiKey);
+    if (resolved && linkedIssue.teamId) {
+      const teams = await fetchLinearTeamStates(resolved.apiKey);
       const team = teams.find((t) => t.id === linkedIssue.teamId);
       if (team) {
         hasBacklogState = team.states.some((s) => s.type === "backlog");
       }
     }
+
+    // Use connection-level archive settings if available, fall back to global settings
+    const settings = getSettings();
+    const conn = resolved && resolved.connectionId !== "legacy" ? getConnection(resolved.connectionId) : null;
+    const archiveTransitionConfigured = conn
+      ? conn.archiveTransition && !!conn.archiveTransitionStateId.trim()
+      : settings.linearArchiveTransition && !!settings.linearArchiveTransitionStateId.trim();
+    const archiveTransitionStateName = conn
+      ? conn.archiveTransitionStateName || undefined
+      : settings.linearArchiveTransitionStateName || undefined;
 
     return c.json({
       hasLinkedIssue: true,
@@ -1598,8 +1627,8 @@ export function createRoutes(
         teamId: linkedIssue.teamId,
       },
       hasBacklogState,
-      archiveTransitionConfigured: settings.linearArchiveTransition && !!settings.linearArchiveTransitionStateId.trim(),
-      archiveTransitionStateName: settings.linearArchiveTransitionStateName || undefined,
+      archiveTransitionConfigured,
+      archiveTransitionStateName,
     });
   });
 
@@ -1614,9 +1643,12 @@ export function createRoutes(
     if (linearTransition && linearTransition !== "none") {
       const linkedIssue = sessionLinearIssues.getLinearIssue(id);
       if (linkedIssue) {
-        const settings = getSettings();
-        const linearApiKey = settings.linearApiKey.trim();
-        if (linearApiKey) {
+        const resolved = resolveApiKey(linkedIssue.connectionId);
+        if (resolved) {
+          const { apiKey: linearApiKey, connectionId: resolvedConnId } = resolved;
+          const settings = getSettings();
+          // Use connection-level archive settings if available, else fall back to global
+          const conn = resolvedConnId !== "legacy" ? getConnection(resolvedConnId) : null;
           let targetStateId = "";
 
           if (linearTransition === "backlog" && linkedIssue.teamId) {
@@ -1628,12 +1660,13 @@ export function createRoutes(
               targetStateId = backlogState.id;
             }
           } else if (linearTransition === "configured") {
-            targetStateId = settings.linearArchiveTransitionStateId.trim();
+            const archiveStateId = conn ? conn.archiveTransitionStateId : settings.linearArchiveTransitionStateId;
+            targetStateId = archiveStateId.trim();
           }
 
           if (targetStateId) {
             try {
-              linearTransitionResult = await transitionLinearIssue(linkedIssue.id, targetStateId, linearApiKey);
+              linearTransitionResult = await transitionLinearIssue(linkedIssue.id, targetStateId, linearApiKey, resolvedConnId);
             } catch {
               linearTransitionResult = { ok: false, error: "Transition failed unexpectedly" };
             }
@@ -1886,6 +1919,7 @@ export function createRoutes(
   // ─── Linear ────────────────────────────────────────────────────────
 
   registerLinearRoutes(api);
+  registerLinearConnectionRoutes(api);
 
   registerCompleteRoutes(api, { wsBridge });
 
