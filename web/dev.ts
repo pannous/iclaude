@@ -59,38 +59,64 @@ function cleanup(exitCode = 0) {
 process.on("SIGINT", () => cleanup(0));
 process.on("SIGTERM", () => cleanup(0));
 
-async function start() {
-  // ── Backend (Hono on Bun) ────────────────────────────────────────
+const HEALTH_CHECK_INTERVAL = 10_000; // check every 10s
+const HEALTH_CHECK_TIMEOUT = 3_000;   // 3s timeout per check
+const BACKEND_PORT = Number(process.env.PORT) || 3456;
+
+function spawnBackend(): Subprocess {
   const backend = spawn(["bun", "--watch", "server/index.ts"], {
     cwd: webDir,
     stdout: "pipe",
     stderr: "pipe",
     env: { ...process.env, NODE_ENV: "development" },
   });
-  procs.push(backend);
+  return backend;
+}
 
+function waitForReady(backend: Subprocess): {
+  promise: Promise<boolean>;
+  hookLine: (line: string) => void;
+} {
   let markReady: ((line: string) => void) | null = null;
-  const backendReady = new Promise<boolean>((resolve) => {
+  const promise = new Promise<boolean>((resolve) => {
     let done = false;
     const finish = (ok: boolean) => {
       if (done) return;
       done = true;
       resolve(ok);
     };
-
     markReady = (line: string) => {
-      if (line.includes("Server running on http://")) {
-        finish(true);
-      }
+      if (line.includes("Server running on http://")) finish(true);
     };
-
     backend.exited.then(() => finish(false));
   });
+  return { promise, hookLine: (line: string) => markReady?.(line) };
+}
 
-  prefix("api", "\x1b[36m", backend.stdout, (line) => markReady?.(line));
-  prefix("api", "\x1b[31m", backend.stderr, (line) => markReady?.(line));
+async function isBackendHealthy(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
+    const resp = await fetch(`http://localhost:${BACKEND_PORT}/api/health`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
 
-  const ready = await backendReady;
+async function start() {
+  // ── Backend (Hono on Bun) with auto-restart ────────────────────
+  let backend = spawnBackend();
+  procs.push(backend);
+
+  const { promise: firstReady, hookLine } = waitForReady(backend);
+  prefix("api", "\x1b[36m", backend.stdout, hookLine);
+  prefix("api", "\x1b[31m", backend.stderr, hookLine);
+
+  const ready = await firstReady;
   if (!ready) {
     console.error("\x1b[31mAPI server exited before becoming ready.\x1b[0m");
     cleanup(1);
@@ -108,15 +134,51 @@ async function start() {
   prefix("vite", "\x1b[35m", vite.stdout);
   prefix("vite", "\x1b[31m", vite.stderr);
 
-  // If either process exits unexpectedly, kill the other and exit.
-  const loser = await Promise.race([
-    backend.exited.then((code) => ({ name: "api", code })),
-    vite.exited.then((code) => ({ name: "vite", code })),
-  ]);
-  console.error(
-    `\x1b[31m[${loser.name}] exited with code ${loser.code}, shutting down...\x1b[0m`,
-  );
-  cleanup(typeof loser.code === "number" ? loser.code : 1);
+  // ── Health check loop — auto-restart backend if it stops responding ──
+  let consecutiveFailures = 0;
+  const healthTimer = setInterval(async () => {
+    if (shuttingDown) return;
+    const healthy = await isBackendHealthy();
+    if (healthy) {
+      consecutiveFailures = 0;
+      return;
+    }
+    consecutiveFailures++;
+    if (consecutiveFailures < 3) return; // tolerate transient failures during --watch restarts
+
+    console.error("\x1b[33m[dev] Backend unresponsive after 3 checks, restarting...\x1b[0m");
+    consecutiveFailures = 0;
+
+    // Kill the old backend
+    try { backend.kill(); } catch {}
+    const idx = procs.indexOf(backend);
+    if (idx !== -1) procs.splice(idx, 1);
+
+    // Spawn a fresh one
+    backend = spawnBackend();
+    procs.push(backend);
+    const { promise: restartReady, hookLine: restartHook } = waitForReady(backend);
+    prefix("api", "\x1b[36m", backend.stdout, restartHook);
+    prefix("api", "\x1b[31m", backend.stderr, restartHook);
+
+    const ok = await restartReady;
+    if (!ok) {
+      console.error("\x1b[31m[dev] Backend failed to restart. Retrying on next health check.\x1b[0m");
+    } else {
+      console.log("\x1b[32m[dev] Backend restarted successfully.\x1b[0m");
+    }
+  }, HEALTH_CHECK_INTERVAL);
+
+  // If Vite exits, shut down everything.
+  // If backend exits, the health check loop will auto-restart it.
+  backend.exited.then((code) => {
+    console.error(`\x1b[33m[api] exited with code ${code}, health check will restart it...\x1b[0m`);
+  });
+
+  await vite.exited;
+  clearInterval(healthTimer);
+  console.error("\x1b[31m[vite] exited, shutting down...\x1b[0m");
+  cleanup(1);
 }
 
 void start();

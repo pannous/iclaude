@@ -7,6 +7,9 @@ This file provides guidance to Claude Code & Codex when working with code in thi
 The Companion — a web UI for Claude Code & Codex.
 It reverse-engineers the undocumented `--sdk-url` WebSocket protocol in the Claude Code CLI to provide a browser-based interface for running multiple Claude Code sessions with streaming, tool call visibility, and permission control.
 
+❯ our repo is pannous/iclaude a fork from The-Vibe-Company/companion
+@README.md
+
 ## Development Commands
 
 ```bash
@@ -272,10 +275,9 @@ See git history (`git log --grep=panel`) for full implementation details.
 - Both start together with `cd web && bun run dev` (or `make dev`), but that runs in foreground. Use `./scripts/dev-start.sh` for background mode.
 
 ### Caveats
-- `./scripts/dev-start.sh` health-checks the backend on `/` which returns 404. If the script times out, the backend is still running — verify with `curl http://localhost:3456/api/sessions`. You can start the servers manually as background processes instead.
-- The app requires Claude Code CLI or Codex CLI to create functional sessions. Without them, the UI loads but session creation will fail. The component playground at `#/playground` works without any CLI.
 - No external databases or services are needed. Session state persists to `$TMPDIR/vibe-sessions/` as JSON files.
 - The pre-commit hook (`.husky/pre-commit`) runs `cd web && bun run typecheck && bun run test -- --coverage`. Run these before committing.
-- Two blocked postinstalls (`core-js`, `protobufjs`) are harmless and do not affect functionality.
+
+<!-- Version 2.1.72: Changed CLAUDE.md HTML comments  to be hidden from Claude when auto-injected. Comments remain visible when read with the Read tool YAY -->
 
 <!-- end of CLAUDE.md -->

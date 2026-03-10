@@ -23,6 +23,7 @@ function runGitCommand(sessionId: string, state: SessionState, command: string):
     cwd: state.cwd,
     encoding: "utf-8",
     timeout: 3000,
+    stdio: ["pipe", "pipe", "pipe"],
   }).trim();
 }
 

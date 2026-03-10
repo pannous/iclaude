@@ -171,6 +171,9 @@ export function createRoutes(
 ) {
   const api = new Hono();
 
+  // ─── Health check (used by dev.ts auto-restart) ────────────────────
+  api.get("/health", (c) => c.json({ ok: true }));
+
   // ─── Auth endpoints (exempt from auth middleware) ──────────────────
 
   api.post("/auth/verify", async (c) => {
