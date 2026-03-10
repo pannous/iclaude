@@ -176,6 +176,8 @@ export interface CodexAdapterOptions {
   recorder?: RecorderManager;
   /** Callback to kill the underlying process/connection on disconnect. */
   killProcess?: () => Promise<void> | void;
+  /** Optional system prompt injected into thread/start as instructions (e.g. Linear context). */
+  systemPrompt?: string;
 }
 
 // ─── Stdio JSON-RPC Transport ────────────────────────────────────────────────
@@ -886,7 +888,10 @@ export class CodexAdapter {
       }) as { thread: { id: string } };
     }
 
-    return await this.transport.call("thread/start", payload) as { thread: { id: string } };
+    return await this.transport.call("thread/start", {
+      ...payload,
+      ...(this.options.systemPrompt ? { instructions: this.options.systemPrompt } : {}),
+    }) as { thread: { id: string } };
   }
 
   private getFallbackModel(model?: string): string | undefined {

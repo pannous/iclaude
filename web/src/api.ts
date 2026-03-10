@@ -102,6 +102,13 @@ export interface CreateSessionOpts {
   resumeSessionAt?: string;
   forkSession?: boolean;
   linearConnectionId?: string;
+  linearIssue?: {
+    identifier: string;
+    title: string;
+    stateName: string;
+    teamName: string;
+    url: string;
+  };
 }
 
 export interface ResumableSession {
