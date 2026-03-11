@@ -3953,3 +3953,40 @@ describe("CLI message deduplication", () => {
     expect(browser.send).toHaveBeenCalledTimes(2);
   });
 });
+
+// ===========================================================================
+// handleSessionStartupError: surfaces CLI startup failures to browsers
+// ===========================================================================
+describe("handleSessionStartupError", () => {
+  it("broadcasts stderr as error message to connected browsers", () => {
+    const browser = makeBrowserSocket("s1");
+    bridge.handleBrowserOpen(browser, "s1");
+    bridge.handleBrowserMessage(browser, JSON.stringify({ type: "session_subscribe", last_seq: 0 }));
+
+    bridge.handleSessionStartupError("s1", 1, "Error: consent not accepted\n");
+
+    const lastCall = browser.send.mock.calls.at(-1);
+    const sent = JSON.parse(lastCall[0]);
+    expect(sent.type).toBe("error");
+    expect(sent.message).toContain("consent not accepted");
+    expect(sent.message).toContain("exited with code 1");
+  });
+
+  it("suggests running claude in terminal when no stderr is available", () => {
+    const browser = makeBrowserSocket("s1");
+    bridge.handleBrowserOpen(browser, "s1");
+    bridge.handleBrowserMessage(browser, JSON.stringify({ type: "session_subscribe", last_seq: 0 }));
+
+    bridge.handleSessionStartupError("s1", 1);
+
+    const lastCall = browser.send.mock.calls.at(-1);
+    const sent = JSON.parse(lastCall[0]);
+    expect(sent.type).toBe("error");
+    expect(sent.message).toContain("Run `claude` in your terminal");
+  });
+
+  it("does nothing for unknown session", () => {
+    // Should not throw
+    bridge.handleSessionStartupError("nonexistent", 1, "some error");
+  });
+});

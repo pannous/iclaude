@@ -968,6 +968,27 @@ export class WsBridge {
     }, WsBridge.DISCONNECT_DEBOUNCE_MS));
   }
 
+  /**
+   * Surface a CLI startup error to browsers (e.g. consent prompt not accepted,
+   * missing auth, or immediate crash with stderr output).
+   */
+  handleSessionStartupError(sessionId: string, exitCode: number | null, stderr?: string): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    const stderrClean = stderr?.trim();
+    let message = `Claude Code process exited with code ${exitCode ?? "unknown"}.`;
+    if (stderrClean) {
+      message += `\n${stderrClean}`;
+    }
+    if (!stderrClean && exitCode !== 0) {
+      message += "\nThis may happen if the Anthropic privacy consent has not been accepted yet. " +
+        "Run `claude` in your terminal to complete the initial setup.";
+    }
+
+    this.broadcastToBrowsers(session, { type: "error", message });
+  }
+
   // ── Browser WebSocket handlers ──────────────────────────────────────────
 
   handleBrowserOpen(ws: ServerWebSocket<SocketData>, sessionId: string) {

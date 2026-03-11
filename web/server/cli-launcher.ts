@@ -186,7 +186,9 @@ export class CliLauncher {
   private store: SessionStore | null = null;
   private recorder: RecorderManager | null = null;
   private onCodexAdapter: ((sessionId: string, adapter: CodexAdapter) => void) | null = null;
-  private exitHandlers: ((sessionId: string, exitCode: number | null) => void)[] = [];
+  private exitHandlers: ((sessionId: string, exitCode: number | null, stderr?: string) => void)[] = [];
+  /** Buffered stderr output per session for surfacing startup errors. */
+  private stderrBuffers = new Map<string, string>();
 
   constructor(port: number) {
     this.port = port;
@@ -198,7 +200,7 @@ export class CliLauncher {
   }
 
   /** Register a callback for when a CLI/Codex process exits. */
-  onSessionExited(cb: (sessionId: string, exitCode: number | null) => void): void {
+  onSessionExited(cb: (sessionId: string, exitCode: number | null, stderr?: string) => void): void {
     this.exitHandlers.push(cb);
   }
 
@@ -659,9 +661,11 @@ export class CliLauncher {
         }
       }
       this.processes.delete(sessionId);
+      const stderr = this.stderrBuffers.get(sessionId);
+      this.stderrBuffers.delete(sessionId);
       this.persistState();
       for (const handler of this.exitHandlers) {
-        try { handler(sessionId, exitCode); } catch {}
+        try { handler(sessionId, exitCode, stderr); } catch {}
       }
     });
 
@@ -950,9 +954,11 @@ export class CliLauncher {
       }
       this.processes.delete(sessionId);
       this.codexWsProxies.delete(sessionId);
+      const stderr = this.stderrBuffers.get(sessionId);
+      this.stderrBuffers.delete(sessionId);
       this.persistState();
       for (const handler of this.exitHandlers) {
-        try { handler(sessionId, exitCode); } catch {}
+        try { handler(sessionId, exitCode, stderr); } catch {}
       }
     };
 
@@ -1128,9 +1134,11 @@ export class CliLauncher {
         session.exitCode = exitCode;
       }
       this.processes.delete(sessionId);
+      const stderr = this.stderrBuffers.get(sessionId);
+      this.stderrBuffers.delete(sessionId);
       this.persistState();
       for (const handler of this.exitHandlers) {
-        try { handler(sessionId, exitCode); } catch {}
+        try { handler(sessionId, exitCode, stderr); } catch {}
       }
     });
 
@@ -1292,6 +1300,14 @@ export class CliLauncher {
         const text = decoder.decode(value);
         if (text.trim()) {
           log(`[session:${sessionId}:${label}] ${text.trimEnd()}`);
+          // Buffer stderr so we can surface startup errors to the browser
+          if (label === "stderr") {
+            const prev = this.stderrBuffers.get(sessionId) || "";
+            // Cap at 4KB to avoid unbounded growth
+            if (prev.length < 4096) {
+              this.stderrBuffers.set(sessionId, prev + text);
+            }
+          }
         }
       }
     } catch {}

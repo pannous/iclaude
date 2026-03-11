@@ -112,8 +112,13 @@ launcher.onCodexAdapterCreated((sessionId, adapter) => {
 });
 
 // When a CLI/Codex process exits, mark the corresponding agent execution as completed
-launcher.onSessionExited((sessionId, exitCode) => {
+// and surface startup errors (e.g. consent not accepted) to the browser.
+launcher.onSessionExited((sessionId, exitCode, stderr) => {
   agentExecutor.handleSessionExited(sessionId, exitCode);
+  // Surface non-zero exits to browsers so users see why their session failed to start
+  if (exitCode !== 0 && exitCode !== null) {
+    wsBridge.handleSessionStartupError(sessionId, exitCode, stderr);
+  }
 });
 
 // Start watching PRs when git info is resolved for a session
