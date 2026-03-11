@@ -279,9 +279,9 @@ describe("launch", () => {
     });
 
     const [cmdAndArgs] = mockSpawn.mock.calls[0];
-    const resumeAtIdx = cmdAndArgs.indexOf("--resume-session-at");
-    expect(resumeAtIdx).toBeGreaterThan(-1);
-    expect(cmdAndArgs[resumeAtIdx + 1]).toBe("prior-session-123");
+    const resumeIdx = cmdAndArgs.indexOf("--resume");
+    expect(resumeIdx).toBeGreaterThan(-1);
+    expect(cmdAndArgs[resumeIdx + 1]).toBe("prior-session-123");
     expect(cmdAndArgs).toContain("--fork-session");
   });
 

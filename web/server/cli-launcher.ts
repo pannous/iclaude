@@ -566,10 +566,10 @@ export class CliLauncher {
       }
     }
     if (options.resumeSessionAt) {
-      args.push("--resume-session-at", options.resumeSessionAt);
-    }
-    if (options.forkSession) {
-      args.push("--fork-session");
+      args.push("--resume", options.resumeSessionAt);
+      if (options.forkSession) {
+        args.push("--fork-session");
+      }
     }
 
     // Always pass -p "" for headless mode. When relaunching, also pass --resume
