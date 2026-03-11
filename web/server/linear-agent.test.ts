@@ -23,7 +23,7 @@ function makeSettings(overrides: Partial<CompanionSettings> = {}): CompanionSett
   return {
     authEnabled: true,
     anthropicApiKey: "",
-    anthropicModel: "claude-sonnet-4.6",
+    anthropicModel: "claude-sonnet-4-6",
     openaiApiKey: "",
     openrouterApiKey: "",
     linearApiKey: "",

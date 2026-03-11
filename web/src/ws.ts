@@ -20,6 +20,38 @@ const processedToolUseIds = new Map<string, Set<string>>();
 /** Whether an assistant message was finalized this turn (used to preserve post-thinking text) */
 const hadAssistantThisTurn = new Set<string>();
 
+// ── Page visibility handling ─────────────────────────────────────────────────
+// Mobile browsers (Android Chrome, iOS Safari) aggressively kill WebSocket
+// connections when the page is backgrounded. Without this handler, the frontend
+// enters a rapid connect/disconnect cycle: WS opens, browser kills it, 2s
+// reconnect timer fires, WS opens again, browser kills it again...
+//
+// Solution: when the page becomes hidden, pause all reconnect attempts. When
+// the page becomes visible again, immediately reconnect all active sessions.
+let pageHidden = typeof document !== "undefined" ? document.hidden : false;
+
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      pageHidden = true;
+      // Cancel all pending reconnect timers — no point reconnecting while hidden
+      for (const [sessionId, timer] of reconnectTimers) {
+        clearTimeout(timer);
+        reconnectTimers.delete(sessionId);
+      }
+    } else {
+      pageHidden = false;
+      // Page is visible again — reconnect all active sessions
+      const store = useStore.getState();
+      for (const s of store.sdkSessions) {
+        if (!s.archived && !sockets.has(s.sessionId)) {
+          connectSession(s.sessionId);
+        }
+      }
+    }
+  });
+}
+
 function normalizePath(path: string): string {
   const isAbs = path.startsWith("/");
   const parts = path.split("/");
@@ -1165,11 +1197,17 @@ export function connectSession(sessionId: string) {
 
 function scheduleReconnect(sessionId: string) {
   if (reconnectTimers.has(sessionId)) return;
+  // Don't schedule reconnect when page is hidden — mobile browsers will just
+  // kill the new connection too, creating a wasteful connect/disconnect cycle.
+  // The visibilitychange handler will reconnect when the page becomes visible.
+  if (pageHidden) return;
   const attempts = reconnectAttempts.get(sessionId) || 0;
   const delay = Math.min(BASE_RECONNECT_DELAY * 2 ** attempts, MAX_RECONNECT_DELAY);
   reconnectAttempts.set(sessionId, attempts + 1);
   const timer = setTimeout(() => {
     reconnectTimers.delete(sessionId);
+    // Re-check visibility — page may have been hidden during the delay
+    if (pageHidden) return;
     const store = useStore.getState();
     // Only reconnect if this is still the active session and not archived
     if (store.currentSessionId !== sessionId) return;
@@ -1218,6 +1256,9 @@ export function disconnectAllExcept(keepSessionId: string | null) {
 }
 
 export function connectAllSessions(sessions: SdkSessionInfo[]) {
+  // Skip connection attempts when page is hidden — mobile browsers kill
+  // backgrounded WS connections, so connecting here would just cycle.
+  if (pageHidden) return;
   for (const s of sessions) {
     if (!s.archived) {
       connectSession(s.sessionId);

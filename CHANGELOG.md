@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.74.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.73.0...the-companion-v0.74.0) (2026-03-10)
+
+
+### Features
+
+* **composer:** pre-populate slash commands and skills on session creation ([#500](https://github.com/The-Vibe-Company/companion/issues/500)) ([79b4664](https://github.com/The-Vibe-Company/companion/commit/79b466417631ab9f345e05d6d3d55d1786cdf398))
+
+
+### Bug Fixes
+
+* prevent WebSocket connection cycling and output replay ([#494](https://github.com/The-Vibe-Company/companion/issues/494)) ([91e2a22](https://github.com/The-Vibe-Company/companion/commit/91e2a22c039973e63031ebc8dcbdd92323254d8a))
+* **settings:** correct Anthropic model ID from claude-sonnet-4.6 to claude-sonnet-4-6 ([#503](https://github.com/The-Vibe-Company/companion/issues/503)) ([186aa77](https://github.com/The-Vibe-Company/companion/commit/186aa77c631a5d0c96ce96d41b7342e28b3b7024))
+* **ui:** limit auto-approve notifications to one with dismiss button ([#504](https://github.com/The-Vibe-Company/companion/issues/504)) ([6fb15a0](https://github.com/The-Vibe-Company/companion/commit/6fb15a0ebe1790cef1368dc80af0a9eb0da6c7d1))
+
+## [0.73.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.72.0...the-companion-v0.73.0) (2026-03-10)
+
+
+### Features
+
+* **agents:** add Linear Agent Interaction SDK integration ([#486](https://github.com/The-Vibe-Company/companion/issues/486)) ([64b838d](https://github.com/The-Vibe-Company/companion/commit/64b838de84c4c5b21ee4b43d6853f36975a6923b))
+* **agents:** add per-agent chat platform credentials ([#477](https://github.com/The-Vibe-Company/companion/issues/477)) ([afb9557](https://github.com/The-Vibe-Company/companion/commit/afb95575615516600a284666f6f55c5c121e9650))
+* **docker:** add Cubic CLI to the-companion image ([#499](https://github.com/The-Vibe-Company/companion/issues/499)) ([2b45aaa](https://github.com/The-Vibe-Company/companion/commit/2b45aaa2790e41cff2c940adb26106ddf06729ef))
+* **integrations:** add Tailscale Funnel integration for one-click HTTPS ([#482](https://github.com/The-Vibe-Company/companion/issues/482)) ([a79f1fd](https://github.com/The-Vibe-Company/companion/commit/a79f1fd4f45dad176a2f718029e4c6625cdd7f02))
+* **linear:** inject Linear context into CLI system prompt ([#497](https://github.com/The-Vibe-Company/companion/issues/497)) ([db0ae68](https://github.com/The-Vibe-Company/companion/commit/db0ae6843da948273844acb2f7f9adafa05a42a3))
+* **linear:** support multiple Linear connections with API key injection ([#496](https://github.com/The-Vibe-Company/companion/issues/496)) ([3c76a4b](https://github.com/The-Vibe-Company/companion/commit/3c76a4b8331f1519be1abb34476e53186dd57b48))
+* **settings:** add public URL config + guided Linear webhook setup ([#478](https://github.com/The-Vibe-Company/companion/issues/478)) ([18f08d3](https://github.com/The-Vibe-Company/companion/commit/18f08d35ea412c5a81f0918197ea23a90f485a97))
+
+
+### Bug Fixes
+
+* **agents:** make webhook secret field editable for Linear/GitHub ([#485](https://github.com/The-Vibe-Company/companion/issues/485)) ([b3460db](https://github.com/The-Vibe-Company/companion/commit/b3460db75b5bec4ea116f41ea83e710c79566751))
+* **codex:** auto-relaunch session when transport drops with browsers connected ([#484](https://github.com/The-Vibe-Company/companion/issues/484)) ([c0ec63b](https://github.com/The-Vibe-Company/companion/commit/c0ec63be8e9e1814e33eef2fc9b58da1b09e06b7))
+* **linear:** refresh OAuth configured state after saving credentials ([#495](https://github.com/The-Vibe-Company/companion/issues/495)) ([db5998a](https://github.com/The-Vibe-Company/companion/commit/db5998a2752f0188432d4c726dc8d1fbc8768cca))
+* **linear:** thread connectionId through CreateIssueModal for multi-connection support ([#498](https://github.com/The-Vibe-Company/companion/issues/498)) ([ccb8881](https://github.com/The-Vibe-Company/companion/commit/ccb8881066bafe9664f7cf3822f528d840499df1))
+* **tailscale:** add operator mode detection + DNS reachability checks ([#483](https://github.com/The-Vibe-Company/companion/issues/483)) ([d7a1460](https://github.com/The-Vibe-Company/companion/commit/d7a1460ac0864c7970970fcfcc0d8c7e1237eff2))
+* **web:** prevent horizontal scroll on Android Chrome ([#443](https://github.com/The-Vibe-Company/companion/issues/443)) ([cc4743c](https://github.com/The-Vibe-Company/companion/commit/cc4743ce3112f0e523e7dd688a7ec8a008f73e57))
+
 ## [0.72.0](https://github.com/The-Vibe-Company/companion/compare/iclaude-v0.71.0...iclaude-v0.72.0) (2026-03-04)
 
 

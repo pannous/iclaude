@@ -79,11 +79,11 @@ vi.mock("./session-names.js", () => ({
 }));
 
 vi.mock("./settings-manager.js", () => ({
-  DEFAULT_ANTHROPIC_MODEL: "claude-sonnet-4.6",
+  DEFAULT_ANTHROPIC_MODEL: "claude-sonnet-4-6",
   getSettings: vi.fn(() => ({
     authEnabled: true,
     anthropicApiKey: "",
-    anthropicModel: "claude-sonnet-4.6",
+    anthropicModel: "claude-sonnet-4-6",
     openaiApiKey: "",
     openrouterApiKey: "",
     linearApiKey: "",
@@ -115,7 +115,7 @@ vi.mock("./settings-manager.js", () => ({
   updateSettings: vi.fn((patch) => ({
     authEnabled: true,
     anthropicApiKey: patch.anthropicApiKey ?? "",
-    anthropicModel: patch.anthropicModel ?? "claude-sonnet-4.6",
+    anthropicModel: patch.anthropicModel ?? "claude-sonnet-4-6",
     linearApiKey: patch.linearApiKey ?? "",
     linearAutoTransition: patch.linearAutoTransition ?? false,
     linearAutoTransitionStateId: patch.linearAutoTransitionStateId ?? "",
@@ -328,9 +328,9 @@ function createMockBridge() {
     getSessionTitle: vi.fn(() => undefined),
     getCodexRateLimits: vi.fn(() => null),
     markContainerized: vi.fn(),
-
     broadcastToSession: vi.fn(),
     broadcastGlobal: vi.fn(),
+    prePopulateCommands: vi.fn(),
     broadcastNameUpdate: vi.fn(),
     initializeResumedSession: vi.fn(),
     getFragmentState: vi.fn(() => null),
@@ -338,7 +338,7 @@ function createMockBridge() {
     getFragmentConsole: vi.fn(() => []),
     getAllFragmentConsole: vi.fn(() => ({})),
     hasBrowsers: vi.fn(() => false),
-
+    injectSystemPrompt: vi.fn(),
   } as any;
 }
 
@@ -1827,7 +1827,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_test_key",
@@ -1878,7 +1878,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_test_key",
@@ -1922,7 +1922,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_test_key",
@@ -2014,7 +2014,7 @@ describe("GET /api/sessions/:id/archive-info", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_test_key",
@@ -2361,7 +2361,7 @@ describe("GET /api/settings", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "or-secret",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "",
@@ -2398,7 +2398,7 @@ describe("GET /api/settings", () => {
     expect(json).toEqual({
       authEnabled: true,
       anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKeyConfigured: false,
       openrouterApiKeyConfigured: false,
       linearApiKeyConfigured: false,
@@ -2498,7 +2498,7 @@ describe("GET /api/settings", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "",
@@ -2541,7 +2541,7 @@ describe("PUT /api/settings", () => {
     vi.mocked(settingsManager.updateSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "new-key",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "",
@@ -2605,7 +2605,7 @@ describe("PUT /api/settings", () => {
     expect(json).toEqual({
       authEnabled: true,
       anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKeyConfigured: false,
       openrouterApiKeyConfigured: false,
       linearApiKeyConfigured: false,
@@ -2636,7 +2636,7 @@ describe("PUT /api/settings", () => {
     vi.mocked(settingsManager.updateSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "trimmed-key",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_api_trimmed",
@@ -2676,7 +2676,7 @@ describe("PUT /api/settings", () => {
     expect(settingsManager.updateSettings).toHaveBeenCalledWith({
       authEnabled: undefined,
       anthropicApiKey: "trimmed-key",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: undefined,
       linearApiKey: "lin_api_trimmed",
       linearAutoTransition: undefined,
@@ -2808,7 +2808,7 @@ describe("PUT /api/settings", () => {
     vi.mocked(settingsManager.updateSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "",
@@ -2992,7 +2992,7 @@ describe("GET /api/linear/issues", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "",
@@ -3033,7 +3033,7 @@ describe("GET /api/linear/issues", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_api_123",
@@ -3127,7 +3127,7 @@ describe("GET /api/linear/issues", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_api_123",
@@ -3228,7 +3228,7 @@ describe("GET /api/linear/issues", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_api_123",
@@ -3294,7 +3294,7 @@ describe("GET /api/linear/connection", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "",
@@ -3335,7 +3335,7 @@ describe("GET /api/linear/connection", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_api_123",
@@ -3398,7 +3398,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_api_123",
@@ -3443,7 +3443,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_api_123",
@@ -3487,7 +3487,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "",
@@ -3533,7 +3533,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_api_123",
@@ -3613,7 +3613,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_api_123",
@@ -3672,7 +3672,7 @@ describe("GET /api/linear/projects", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "",
@@ -3713,7 +3713,7 @@ describe("GET /api/linear/projects", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_api_123",
@@ -3784,7 +3784,7 @@ describe("GET /api/linear/project-issues", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "",
@@ -3825,7 +3825,7 @@ describe("GET /api/linear/project-issues", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_api_123",
@@ -3911,7 +3911,7 @@ describe("GET /api/linear/project-issues", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "lin_api_123",

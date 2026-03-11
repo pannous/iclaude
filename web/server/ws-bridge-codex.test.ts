@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock settings-manager before importing the module under test
 vi.mock("./settings-manager.js", () => ({
-  DEFAULT_ANTHROPIC_MODEL: "claude-sonnet-4.6",
+  DEFAULT_ANTHROPIC_MODEL: "claude-sonnet-4-6",
   getSettings: vi.fn(),
 }));
 
@@ -62,6 +62,9 @@ function createMockSession(overrides = {}): Session {
     lastAckSeq: 0,
     processedClientMessageIds: [],
     processedClientMessageIdSet: new Set(),
+    recentCLIMessageHashes: [],
+    recentCLIMessageHashSet: new Set(),
+    lastCliActivityTs: Date.now(),
     ...overrides,
   } as Session;
 }
@@ -116,7 +119,7 @@ describe("attachCodexAdapterHandlers", () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       openaiApiKey: "",
       openrouterApiKey: "",
       linearApiKey: "",
@@ -203,7 +206,112 @@ describe("attachCodexAdapterHandlers", () => {
     expect(deps.persistSession).toHaveBeenCalledWith(session);
   });
 
+  it("session_init preserves pre-populated commands/skills when adapter sends empty arrays", () => {
+    // When prePopulateCommands has set commands/skills on the session before
+    // the Codex adapter sends session_init with empty arrays, the pre-populated
+    // data should be preserved (Codex does not provide its own commands/skills).
+    session.state.slash_commands = ["pre-cmd-1", "pre-cmd-2"];
+    session.state.skills = ["pre-skill"];
+
+    attachCodexAdapterHandlers("test-session", session, adapter as unknown as CodexAdapter, deps);
+
+    adapter._trigger("onBrowserMessage", {
+      type: "session_init",
+      session: {
+        session_id: "test-session",
+        backend_type: "codex",
+        model: "o3-pro",
+        cwd: "/home/user/project",
+        tools: [],
+        permissionMode: "default",
+        claude_code_version: "",
+        mcp_servers: [],
+        agents: [],
+        slash_commands: [],
+        skills: [],
+        total_cost_usd: 0,
+        num_turns: 0,
+        context_used_percent: 0,
+        is_compacting: false,
+        git_branch: "",
+        is_worktree: false,
+        is_containerized: false,
+        repo_root: "",
+        git_ahead: 0,
+        git_behind: 0,
+        total_lines_added: 0,
+        total_lines_removed: 0,
+      },
+    });
+
+    // Pre-populated data should survive the Codex session_init merge
+    expect(session.state.slash_commands).toEqual(["pre-cmd-1", "pre-cmd-2"]);
+    expect(session.state.skills).toEqual(["pre-skill"]);
+    // Other fields should still be updated
+    expect(session.state.model).toBe("o3-pro");
+    expect(session.state.cwd).toBe("/home/user/project");
+  });
+
+  it("session_init allows overwriting commands/skills when adapter sends non-empty arrays", () => {
+    // If a future Codex version sends actual commands/skills, they should
+    // overwrite the pre-populated data.
+    session.state.slash_commands = ["pre-cmd"];
+    session.state.skills = ["pre-skill"];
+
+    attachCodexAdapterHandlers("test-session", session, adapter as unknown as CodexAdapter, deps);
+
+    adapter._trigger("onBrowserMessage", {
+      type: "session_init",
+      session: {
+        session_id: "test-session",
+        backend_type: "codex",
+        model: "o3-pro",
+        cwd: "/home/user/project",
+        tools: [],
+        permissionMode: "default",
+        claude_code_version: "",
+        mcp_servers: [],
+        agents: [],
+        slash_commands: ["codex-cmd"],
+        skills: ["codex-skill"],
+        total_cost_usd: 0,
+        num_turns: 0,
+        context_used_percent: 0,
+        is_compacting: false,
+        git_branch: "",
+        is_worktree: false,
+        is_containerized: false,
+        repo_root: "",
+        git_ahead: 0,
+        git_behind: 0,
+        total_lines_added: 0,
+        total_lines_removed: 0,
+      },
+    });
+
+    // Non-empty arrays from the adapter should overwrite pre-populated data
+    expect(session.state.slash_commands).toEqual(["codex-cmd"]);
+    expect(session.state.skills).toEqual(["codex-skill"]);
+  });
+
   // ── session_update ──────────────────────────────────────────────────────
+
+  it("session_update preserves pre-populated commands/skills when update has empty arrays", () => {
+    // Same preservation logic applies to session_update messages.
+    session.state.slash_commands = ["pre-cmd"];
+    session.state.skills = ["pre-skill"];
+
+    attachCodexAdapterHandlers("test-session", session, adapter as unknown as CodexAdapter, deps);
+
+    adapter._trigger("onBrowserMessage", {
+      type: "session_update",
+      session: { model: "gpt-4.1", slash_commands: [], skills: [] },
+    });
+
+    expect(session.state.slash_commands).toEqual(["pre-cmd"]);
+    expect(session.state.skills).toEqual(["pre-skill"]);
+    expect(session.state.model).toBe("gpt-4.1");
+  });
 
   it("session_update merges partial state and sets backend_type to codex", () => {
     // session_update should spread the partial session fields into state,
@@ -950,7 +1058,7 @@ describe("attachCodexAdapterHandlers", () => {
       vi.mocked(settingsManager.getSettings).mockReturnValue({
         authEnabled: true,
       anthropicApiKey: "test-api-key",
-        anthropicModel: "claude-sonnet-4.6",
+        anthropicModel: "claude-sonnet-4-6",
         openaiApiKey: "",
         openrouterApiKey: "",
         linearApiKey: "",
@@ -1132,7 +1240,7 @@ describe("attachCodexAdapterHandlers", () => {
       vi.mocked(settingsManager.getSettings).mockReturnValue({
         authEnabled: true,
       anthropicApiKey: "test-api-key",
-        anthropicModel: "claude-sonnet-4.6",
+        anthropicModel: "claude-sonnet-4-6",
         openaiApiKey: "",
         openrouterApiKey: "",
         linearApiKey: "",
@@ -1184,7 +1292,7 @@ describe("attachCodexAdapterHandlers", () => {
       vi.mocked(settingsManager.getSettings).mockReturnValue({
         authEnabled: true,
       anthropicApiKey: "",  // empty
-        anthropicModel: "claude-sonnet-4.6",
+        anthropicModel: "claude-sonnet-4-6",
         openaiApiKey: "",
         openrouterApiKey: "",
         linearApiKey: "",
@@ -1301,7 +1409,7 @@ describe("attachCodexAdapterHandlers", () => {
       vi.mocked(settingsManager.getSettings).mockReturnValue({
         authEnabled: true,
       anthropicApiKey: "test-api-key",
-        anthropicModel: "claude-sonnet-4.6",
+        anthropicModel: "claude-sonnet-4-6",
         openaiApiKey: "",
         openrouterApiKey: "",
         linearApiKey: "",
@@ -1437,7 +1545,7 @@ describe("attachCodexAdapterHandlers", () => {
       vi.mocked(settingsManager.getSettings).mockReturnValue({
         authEnabled: true,
       anthropicApiKey: "test-api-key",
-        anthropicModel: "claude-sonnet-4.6",
+        anthropicModel: "claude-sonnet-4-6",
         openaiApiKey: "",
         openrouterApiKey: "",
         linearApiKey: "",

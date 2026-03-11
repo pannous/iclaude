@@ -26,7 +26,7 @@ type CategoryId = (typeof CATEGORIES)[number]["id"];
 
 export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [anthropicApiKey, setAnthropicApiKey] = useState("");
-  const [anthropicModel, setAnthropicModel] = useState("claude-sonnet-4.6");
+  const [anthropicModel, setAnthropicModel] = useState("claude-sonnet-4-6");
   const [editorTabEnabled, setEditorTabEnabled] = useState(false);
   const [configured, setConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -164,7 +164,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
         setOpenaiConfigured(!!s.openaiApiKeyConfigured);
         setOpenrouterConfigured(!!s.openrouterApiKeyConfigured);
         if (typeof s.authEnabled === "boolean") setAuthEnabled(s.authEnabled);
-        setAnthropicModel(s.anthropicModel || "claude-sonnet-4.6");
+        setAnthropicModel(s.anthropicModel || "claude-sonnet-4-6");
         setEditorTabEnabled(s.editorTabEnabled);
         setStoreEditorTabEnabled(s.editorTabEnabled);
         if (s.aiProvider) setAiProvider(s.aiProvider);
@@ -210,7 +210,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
         anthropicApiKey?: string; anthropicModel: string; editorTabEnabled: boolean;
         openaiApiKey?: string; openrouterApiKey?: string;
       } = {
-        anthropicModel: anthropicModel.trim() || "claude-sonnet-4.6",
+        anthropicModel: anthropicModel.trim() || "claude-sonnet-4-6",
         editorTabEnabled,
       };
       const nextAnthropicKey = anthropicApiKey.trim();

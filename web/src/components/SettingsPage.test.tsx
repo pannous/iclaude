@@ -125,7 +125,7 @@ beforeEach(() => {
   window.location.hash = "#/settings";
   mockApi.getSettings.mockResolvedValue({
     anthropicApiKeyConfigured: true,
-    anthropicModel: "claude-sonnet-4.6",
+    anthropicModel: "claude-sonnet-4-6",
     linearApiKeyConfigured: false,
     linearAutoTransition: false,
     linearAutoTransitionStateName: "",
@@ -135,7 +135,7 @@ beforeEach(() => {
   });
   mockApi.updateSettings.mockResolvedValue({
     anthropicApiKeyConfigured: true,
-    anthropicModel: "claude-sonnet-4.6",
+    anthropicModel: "claude-sonnet-4-6",
     linearApiKeyConfigured: false,
     linearAutoTransition: false,
     linearAutoTransitionStateName: "",
@@ -222,7 +222,7 @@ describe("SettingsPage", () => {
   it("shows not configured status", async () => {
     mockApi.getSettings.mockResolvedValueOnce({
       anthropicApiKeyConfigured: false,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -256,7 +256,7 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
         anthropicApiKey: "or-key",
-        anthropicModel: "claude-sonnet-4.6",
+        anthropicModel: "claude-sonnet-4-6",
         editorTabEnabled: false,
       });
     });
@@ -264,7 +264,7 @@ describe("SettingsPage", () => {
     expect(await screen.findByText("Settings saved.")).toBeInTheDocument();
   });
 
-  it("sends default model claude-sonnet-4.6 in save payload", async () => {
+  it("sends default model claude-sonnet-4-6 in save payload", async () => {
     render(<SettingsPage />);
     await screen.findByText("Preferred: OpenRouter");
 
@@ -272,7 +272,7 @@ describe("SettingsPage", () => {
 
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
-        anthropicModel: "claude-sonnet-4.6",
+        anthropicModel: "claude-sonnet-4-6",
         editorTabEnabled: false,
       });
     });
@@ -286,7 +286,7 @@ describe("SettingsPage", () => {
 
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
-        anthropicModel: "claude-sonnet-4.6",
+        anthropicModel: "claude-sonnet-4-6",
         editorTabEnabled: false,
       });
     });
@@ -303,7 +303,7 @@ describe("SettingsPage", () => {
 
     await waitFor(() => {
       expect(mockApi.updateSettings).toHaveBeenCalledWith({
-        anthropicModel: "claude-sonnet-4.6",
+        anthropicModel: "claude-sonnet-4-6",
         editorTabEnabled: true,
       });
     });
@@ -378,7 +378,7 @@ describe("SettingsPage", () => {
 
     resolveSave?.({
       anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -753,7 +753,7 @@ describe("SettingsPage", () => {
   it("disables AI Validation toggle when Anthropic key is NOT configured", async () => {
     mockApi.getSettings.mockResolvedValueOnce({
       anthropicApiKeyConfigured: false,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -778,7 +778,7 @@ describe("SettingsPage", () => {
   it("calls updateSettings with aiValidationEnabled when toggle is clicked", async () => {
     mockApi.updateSettings.mockResolvedValue({
       anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -805,7 +805,7 @@ describe("SettingsPage", () => {
     // Return settings with aiValidationEnabled: true so sub-toggles render
     mockApi.getSettings.mockResolvedValueOnce({
       anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -829,7 +829,7 @@ describe("SettingsPage", () => {
   it("hides auto-approve and auto-deny sub-toggles when AI Validation is disabled", async () => {
     mockApi.getSettings.mockResolvedValueOnce({
       anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -853,7 +853,7 @@ describe("SettingsPage", () => {
   it("calls updateSettings with aiValidationAutoApprove when auto-approve is toggled", async () => {
     mockApi.getSettings.mockResolvedValueOnce({
       anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -866,7 +866,7 @@ describe("SettingsPage", () => {
     });
     mockApi.updateSettings.mockResolvedValue({
       anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -893,7 +893,7 @@ describe("SettingsPage", () => {
   it("calls updateSettings with aiValidationAutoDeny when auto-deny is toggled", async () => {
     mockApi.getSettings.mockResolvedValueOnce({
       anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -906,7 +906,7 @@ describe("SettingsPage", () => {
     });
     mockApi.updateSettings.mockResolvedValue({
       anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -982,7 +982,7 @@ describe("SettingsPage", () => {
   it("shows prerelease description when channel is prerelease", async () => {
     mockApi.getSettings.mockResolvedValueOnce({
       anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -1000,7 +1000,7 @@ describe("SettingsPage", () => {
   it("switches to prerelease channel and re-checks updates", async () => {
     mockApi.updateSettings.mockResolvedValueOnce({
       anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -1269,7 +1269,7 @@ describe("SettingsPage", () => {
   it("shows 'Using: {url}' status when publicUrl is set", async () => {
     mockApi.getSettings.mockResolvedValueOnce({
       anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
@@ -1288,7 +1288,7 @@ describe("SettingsPage", () => {
   it("saves public URL via api.updateSettings when Save is clicked", async () => {
     mockApi.updateSettings.mockResolvedValueOnce({
       anthropicApiKeyConfigured: true,
-      anthropicModel: "claude-sonnet-4.6",
+      anthropicModel: "claude-sonnet-4-6",
       linearApiKeyConfigured: false,
       linearAutoTransition: false,
       linearAutoTransitionStateName: "",
