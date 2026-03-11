@@ -31,7 +31,12 @@ export interface ViteHmrSocketData {
   upstream: WebSocket | null;
 }
 
-export type SocketData = CLISocketData | BrowserSocketData | TerminalSocketData | ViteHmrSocketData;
+export interface NoVncSocketData {
+  kind: "novnc";
+  sessionId: string;
+}
+
+export type SocketData = CLISocketData | BrowserSocketData | TerminalSocketData | ViteHmrSocketData | NoVncSocketData;
 
 /** Tracks a pending control_request sent to CLI that expects a control_response. */
 export interface PendingControlRequest {

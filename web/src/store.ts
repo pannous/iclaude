@@ -145,7 +145,7 @@ interface AppState {
   publicUrl: string;
   editorTabEnabled: boolean;
   newSessionCwd: string | null; // LOCAL: custom cwd for new sessions
-  activeTab: string; // LOCAL: "chat" | "diff" | "terminal" | "editor" | "processes" | "panel:<slug>"
+  activeTab: string; // LOCAL: "chat" | "diff" | "terminal" | "editor" | "processes" | "browser" | "panel:<slug>"
   openPanels: string[];
   editorOpenFile: Map<string, string>;
   editorUrl: Map<string, string>;

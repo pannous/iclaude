@@ -11,7 +11,7 @@ import { AiValidationToggle } from "./AiValidationToggle.js";
 
 const EMPTY_MESSAGES: import("../types.js").ChatMessage[] = [];
 
-type WorkspaceTab = "chat" | "diff" | "terminal" | "processes" | "editor";
+type WorkspaceTab = "chat" | "diff" | "terminal" | "processes" | "editor" | "browser";
 
 export function TopBar() {
   const hash = useSyncExternalStore(
@@ -97,7 +97,8 @@ export function TopBar() {
     : null;
   const showWorkspaceControls = !!(currentSessionId && isSessionView);
   const showContextToggle = route.page === "session" && !!currentSessionId;
-  const workspaceTabs: WorkspaceTab[] = ["chat", "diff", "terminal", "processes", "editor"];
+  const isContainerSession = !!(sdkSession?.containerId || bridgeSession?.is_containerized);
+  const workspaceTabs: WorkspaceTab[] = ["chat", "diff", "terminal", "processes", "editor", "browser"];
 
   const activateWorkspaceTab = (tab: WorkspaceTab) => {
     if (tab === "terminal") {
@@ -112,6 +113,11 @@ export function TopBar() {
     if (tab === "editor") {
       if (!cwd) return;
       setActiveTab("editor");
+      return;
+    }
+
+    if (tab === "browser") {
+      setActiveTab("browser");
       return;
     }
 
@@ -261,6 +267,18 @@ export function TopBar() {
                 aria-label="Editor tab"
               >
                 Editor
+              </button>
+              <button
+                onClick={() => activateWorkspaceTab("browser")}
+                className={`h-full px-3 text-[12px] font-medium transition-colors cursor-pointer flex items-center border-b-[1.5px] shrink-0 ${
+                  activeTab === "browser"
+                    ? "text-cc-fg border-cc-primary"
+                    : "text-cc-muted hover:text-cc-fg border-transparent"
+                }`}
+                title="Browser preview"
+                aria-label="Browser tab"
+              >
+                Browser
               </button>
           </div>
         )}

@@ -30,6 +30,7 @@ import { CronScheduler } from "./cron-scheduler.js";
 import { AgentExecutor } from "./agent-executor.js";
 import { migrateCronJobsToAgents } from "./agent-cron-migrator.js";
 import { LinearAgentBridge } from "./linear-agent-bridge.js";
+import { NoVncProxy } from "./novnc-proxy.js";
 
 import { TunnelManager, getTunnelPort } from "./tunnel-manager.js";
 import QRCode from "qrcode";
@@ -55,6 +56,7 @@ const launcher = new CliLauncher(port);
 const worktreeTracker = new WorktreeTracker();
 const CONTAINER_STATE_PATH = join(homedir(), ".companion", "containers.json");
 const terminalManager = new TerminalManager();
+const noVncProxy = new NoVncProxy();
 const prPoller = new PRPoller(wsBridge);
 const recorder = new RecorderManager();
 const cronScheduler = new CronScheduler(launcher, wsBridge);
@@ -433,6 +435,21 @@ const server = Bun.serve<SocketData>({
       return new Response("WebSocket upgrade failed", { status: 400 });
     }
 
+    // ── noVNC WebSocket — proxies VNC data to container's websockify ────
+    const novncMatch = url.pathname.match(/^\/ws\/novnc\/([a-f0-9-]+)$/);
+    if (novncMatch) {
+      const wsToken = url.searchParams.get("token");
+      if (!isLocalhost && !verifyToken(wsToken)) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      const sessionId = novncMatch[1];
+      const upgraded = server.upgrade(req, {
+        data: { kind: "novnc" as const, sessionId },
+      });
+      if (upgraded) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    }
+
     // In dev mode, proxy Vite HMR WebSocket so remote access works on the API port
     if (process.env.NODE_ENV !== "production" && req.headers.get("upgrade")?.toLowerCase() === "websocket") {
       const upgraded = server.upgrade(req, {
@@ -461,6 +478,8 @@ const server = Bun.serve<SocketData>({
         wsBridge.handleBrowserOpen(ws, data.sessionId);
       } else if (data.kind === "terminal") {
         terminalManager.addBrowserSocket(ws);
+      } else if (data.kind === "novnc") {
+        noVncProxy.handleOpen(ws, data.sessionId);
       } else if (data.kind === "vite-hmr") {
         // Proxy Vite HMR WebSocket: connect upstream to the real Vite dev server
         const vitePort = Number(process.env.VITE_PORT) || DEFAULT_FRONTEND_PORT_DEV;
@@ -481,6 +500,8 @@ const server = Bun.serve<SocketData>({
         wsBridge.handleBrowserMessage(ws, msg);
       } else if (data.kind === "terminal") {
         terminalManager.handleBrowserMessage(ws, msg);
+      } else if (data.kind === "novnc") {
+        noVncProxy.handleMessage(ws, msg);
       } else if (data.kind === "vite-hmr" && data.upstream) {
         if (data.upstream.readyState === WebSocket.OPEN) {
           data.upstream.send(typeof msg === "string" ? msg : new Uint8Array(msg));
@@ -496,6 +517,8 @@ const server = Bun.serve<SocketData>({
         wsBridge.handleBrowserClose(ws);
       } else if (data.kind === "terminal") {
         terminalManager.removeBrowserSocket(ws);
+      } else if (data.kind === "novnc") {
+        noVncProxy.handleClose(ws);
       } else if (data.kind === "vite-hmr" && data.upstream) {
         try { data.upstream.close(); } catch {}
       }
