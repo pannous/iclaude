@@ -34,6 +34,7 @@ vi.mock("../api.js", () => ({
     listPrompts: (...args: unknown[]) => mockListPrompts(...args),
     createPrompt: (...args: unknown[]) => mockCreatePrompt(...args),
     completeInput: vi.fn().mockResolvedValue({ suggestion: null }),
+    renameSession: vi.fn().mockResolvedValue({ ok: true }),
   },
   createSessionStream: (...args: unknown[]) => mockCreateSessionStream(...args),
 }));

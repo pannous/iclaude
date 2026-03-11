@@ -181,7 +181,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
       ]);
       // Copy original session name/title with a fork suffix so it passes the sidebar's validSessions filter
       const originalName = store.sessionNames.get(sessionId) || sdkSession.title || generateUniqueSessionName(new Set(store.sessionNames.values()));
-      store.setSessionName(result.sessionId, `${originalName} (fork)`);
+      const forkName = `${originalName} (fork)`;
+      store.setSessionName(result.sessionId, forkName);
+      // Sync to server so the auto-namer knows a name already exists and won't overwrite it
+      api.renameSession(result.sessionId, forkName).catch(() => {});
       navigateToSession(result.sessionId, true);
       connectSession(result.sessionId);
     } catch (err) {
