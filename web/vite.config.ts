@@ -72,7 +72,7 @@ export default defineConfig({
     watch: {
       // Vitest writes coverage files here during test runs; exclude them
       // so Vite doesn't trigger spurious HMR reloads.
-      ignored: ["**/coverage/**"],
+      ignored: ["**/coverage/**", "**/*.test.*", "**/*.spec.*"],
     },
     proxy: {
       "/api": {
