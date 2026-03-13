@@ -50,6 +50,7 @@ function makeSettings(overrides: Partial<CompanionSettings> = {}): CompanionSett
     aiProvider: "openrouter" as const,
     publicUrl: "",
     updateChannel: "stable" as const,
+    dockerAutoUpdate: false,
     updatedAt: 0,
     ...overrides,
   };

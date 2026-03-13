@@ -114,4 +114,6 @@ export interface SdkSessionInfo {
   agentId?: string;
   /** Human-readable name of the agent that spawned this session */
   agentName?: string;
+  /** Sandbox profile slug used for this session */
+  sandboxSlug?: string;
 }

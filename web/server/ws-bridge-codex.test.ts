@@ -146,6 +146,7 @@ describe("attachCodexAdapterHandlers", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
   });
@@ -1085,6 +1086,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiProvider: "openrouter",
         publicUrl: "",
         updateChannel: "stable",
+        dockerAutoUpdate: false,
         updatedAt: 0,
       });
     }
@@ -1267,6 +1269,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiProvider: "openrouter",
         publicUrl: "",
         updateChannel: "stable",
+        dockerAutoUpdate: false,
         updatedAt: 0,
       });
 
@@ -1319,6 +1322,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiProvider: "openrouter",
         publicUrl: "",
         updateChannel: "stable",
+        dockerAutoUpdate: false,
         updatedAt: 0,
       });
 
@@ -1436,6 +1440,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiProvider: "openrouter",
         publicUrl: "",
         updateChannel: "stable",
+        dockerAutoUpdate: false,
         updatedAt: 0,
       });
 
@@ -1572,6 +1577,7 @@ describe("attachCodexAdapterHandlers", () => {
         aiProvider: "openrouter",
         publicUrl: "",
         updateChannel: "stable",
+        dockerAutoUpdate: false,
         updatedAt: 0,
       });
 

@@ -49,6 +49,7 @@ const DEFAULT_MOCK_SETTINGS = {
   aiProvider: "anthropic" as const,
   publicUrl: "",
   updateChannel: "stable" as const,
+  dockerAutoUpdate: false,
   updatedAt: 0,
 };
 

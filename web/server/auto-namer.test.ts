@@ -46,6 +46,7 @@ beforeEach(() => {
     aiProvider: "openrouter",
     publicUrl: "",
     updateChannel: "stable",
+    dockerAutoUpdate: false,
     updatedAt: 0,
   });
 });
@@ -95,6 +96,7 @@ describe("generateSessionTitle", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
 
@@ -154,6 +156,7 @@ describe("generateSessionTitle", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
     mockFetch.mockResolvedValueOnce({
@@ -239,6 +242,7 @@ describe("generateSessionTitle", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
     mockFetch.mockResolvedValueOnce({
@@ -311,6 +315,7 @@ describe("generateSessionTitle", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
     mockFetch.mockResolvedValueOnce({
@@ -358,6 +363,7 @@ describe("generateSessionTitle", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
     // Anthropic fails
@@ -407,6 +413,7 @@ describe("generateSessionTitle", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
 

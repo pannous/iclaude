@@ -1041,6 +1041,91 @@ describe("SettingsPage", () => {
     expect(mockApi.updateSettings).not.toHaveBeenCalled();
   });
 
+  // ─── Docker Auto-Update toggle tests ──────────────────────────────────
+
+  // The Docker auto-update toggle renders in the Updates section and calls
+  // updateSettings with dockerAutoUpdate when clicked.
+  it("toggles dockerAutoUpdate and calls updateSettings", async () => {
+    mockApi.getSettings.mockResolvedValueOnce({
+      anthropicApiKeyConfigured: true,
+      anthropicModel: "claude-sonnet-4-6",
+      linearApiKeyConfigured: false,
+      linearAutoTransition: false,
+      linearAutoTransitionStateName: "",
+      editorTabEnabled: false,
+      updateChannel: "stable",
+      dockerAutoUpdate: false,
+    });
+
+    render(<SettingsPage />);
+    await screen.findByText("Preferred: OpenRouter");
+
+    // Find the docker auto-update toggle via its nearby label
+    const label = screen.getByText("Auto-update Docker image");
+    const toggle = within(label.closest(".flex")!).getByRole("switch");
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+
+    // Click to enable
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(mockApi.updateSettings).toHaveBeenCalledWith({ dockerAutoUpdate: true });
+    });
+  });
+
+  // When the API call for dockerAutoUpdate fails, the toggle should revert
+  // to its previous value (optimistic update rollback).
+  it("reverts dockerAutoUpdate toggle on API failure", async () => {
+    mockApi.getSettings.mockResolvedValueOnce({
+      anthropicApiKeyConfigured: true,
+      anthropicModel: "claude-sonnet-4-6",
+      linearApiKeyConfigured: false,
+      linearAutoTransition: false,
+      linearAutoTransitionStateName: "",
+      editorTabEnabled: false,
+      updateChannel: "stable",
+      dockerAutoUpdate: false,
+    });
+    mockApi.updateSettings.mockRejectedValueOnce(new Error("network error"));
+
+    render(<SettingsPage />);
+    await screen.findByText("Preferred: OpenRouter");
+
+    const label = screen.getByText("Auto-update Docker image");
+    const toggle = within(label.closest(".flex")!).getByRole("switch");
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+
+    // Click to enable — optimistic update sets it to true
+    fireEvent.click(toggle);
+
+    // After the API rejects, the toggle should revert back to false
+    await waitFor(() => {
+      expect(toggle).toHaveAttribute("aria-checked", "false");
+    });
+  });
+
+  // When settings load with dockerAutoUpdate: true, the toggle should
+  // reflect the enabled state.
+  it("shows dockerAutoUpdate as enabled when loaded from settings", async () => {
+    mockApi.getSettings.mockResolvedValueOnce({
+      anthropicApiKeyConfigured: true,
+      anthropicModel: "claude-sonnet-4-6",
+      linearApiKeyConfigured: false,
+      linearAutoTransition: false,
+      linearAutoTransitionStateName: "",
+      editorTabEnabled: false,
+      updateChannel: "stable",
+      dockerAutoUpdate: true,
+    });
+
+    render(<SettingsPage />);
+    await screen.findByText("Preferred: OpenRouter");
+
+    const label = screen.getByText("Auto-update Docker image");
+    const toggle = within(label.closest(".flex")!).getByRole("switch");
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+  });
+
   // ── Tunnel section ───────────────────────────────────────────────────
 
   it("shows tunnel toggle in Off state by default", async () => {

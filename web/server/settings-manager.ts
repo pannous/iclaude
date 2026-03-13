@@ -5,9 +5,9 @@ import {
   existsSync,
 } from "node:fs";
 import { join, dirname } from "node:path";
-import { homedir } from "node:os";
+import { COMPANION_HOME } from "./paths.js";
 
-export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
+export const DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
 
 export type UpdateChannel = "stable" | "prerelease";
 
@@ -48,10 +48,11 @@ export interface CompanionSettings {
   aiProvider: AiProvider;
   publicUrl: string;
   updateChannel: UpdateChannel;
+  dockerAutoUpdate: boolean;
   updatedAt: number;
 }
 
-const DEFAULT_PATH = join(homedir(), ".companion", "settings.json");
+const DEFAULT_PATH = join(COMPANION_HOME, "settings.json");
 
 let loaded = false;
 let filePath = DEFAULT_PATH;
@@ -85,6 +86,7 @@ let settings: CompanionSettings = {
   aiProvider: "openrouter",
   publicUrl: "",
   updateChannel: "stable",
+  dockerAutoUpdate: false,
   updatedAt: 0,
 };
 
@@ -124,6 +126,7 @@ function normalize(raw: Partial<CompanionSettings> | null | undefined): Companio
       : "openrouter",
     publicUrl: typeof raw?.publicUrl === "string" ? raw.publicUrl.trim().replace(/\/+$/, "") : "",
     updateChannel: raw?.updateChannel === "prerelease" ? "prerelease" : "stable",
+    dockerAutoUpdate: typeof raw?.dockerAutoUpdate === "boolean" ? raw.dockerAutoUpdate : false,
     updatedAt: typeof raw?.updatedAt === "number" ? raw.updatedAt : 0,
   };
 }
@@ -152,7 +155,7 @@ export function getSettings(): CompanionSettings {
 }
 
 export function updateSettings(
-  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "openrouterApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "linearOAuthClientId" | "linearOAuthClientSecret" | "linearOAuthWebhookSecret" | "linearOAuthAccessToken" | "linearOAuthRefreshToken" | "editorTabEnabled" | "tunnelEnabled" | "tunnelMode" | "tunnelId" | "tunnelHostname" | "tunnelCredentialsPath" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "publicUrl" | "updateChannel">>,
+  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "openrouterApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "linearOAuthClientId" | "linearOAuthClientSecret" | "linearOAuthWebhookSecret" | "linearOAuthAccessToken" | "linearOAuthRefreshToken" | "editorTabEnabled" | "tunnelEnabled" | "tunnelMode" | "tunnelId" | "tunnelHostname" | "tunnelCredentialsPath" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "publicUrl" | "updateChannel" | "dockerAutoUpdate">>,
 ): CompanionSettings {
   ensureLoaded();
   settings = normalize({
@@ -185,6 +188,7 @@ export function updateSettings(
     aiProvider: patch.aiProvider ?? settings.aiProvider,
     publicUrl: patch.publicUrl ?? settings.publicUrl,
     updateChannel: patch.updateChannel ?? settings.updateChannel,
+    dockerAutoUpdate: patch.dockerAutoUpdate ?? settings.dockerAutoUpdate,
     updatedAt: Date.now(),
   });
   persist();

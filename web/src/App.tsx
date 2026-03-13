@@ -32,6 +32,7 @@ const TailscalePage = lazyNamed(() => import("./components/TailscalePage.js"), "
 const PromptsPage = lazyNamed(() => import("./components/PromptsPage.js"), "PromptsPage");
 const EnvManager = lazyNamed(() => import("./components/EnvManager.js"), "EnvManager");
 const DockerBuilderPage = lazyNamed(() => import("./components/DockerBuilderPage.js"), "DockerBuilderPage");
+const SandboxManager = lazyNamed(() => import("./components/SandboxManager.js"), "SandboxManager");
 const CronManager = lazyNamed(() => import("./components/CronManager.js"), "CronManager");
 const AgentsPage = lazyNamed(() => import("./components/AgentsPage.js"), "AgentsPage");
 const RunsPage = lazyNamed(() => import("./components/RunsPage.js"), "RunsPage");
@@ -51,6 +52,7 @@ const PAGE_MAP: Partial<Record<Route["page"], { component: ComponentType<any>; p
   terminal: { component: TerminalPage },
   environments: { component: EnvManager, props: { embedded: true } },
   "docker-builder": { component: DockerBuilderPage },
+  sandboxes: { component: SandboxManager, props: { embedded: true } },
   scheduled: { component: CronManager, props: { embedded: true } },
   panels: { component: PanelsPage },
 };

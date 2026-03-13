@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { setCookie, getCookie } from "hono/cookie";
+import { getCookie, setCookie } from "hono/cookie";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
 import { execSync } from "node:child_process";
 import { resolveBinary } from "./path-resolver.js";
@@ -8,6 +8,7 @@ import { readdir, stat } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
+import { COMPANION_HOME } from "./paths.js";
 import { existsSync, readFileSync, createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import type { CliLauncher } from "./cli-launcher.js";
@@ -17,6 +18,7 @@ import type { SessionStore } from "./session-store.js";
 import type { WorktreeTracker } from "./worktree-tracker.js";
 import type { TerminalManager } from "./terminal-manager.js";
 import * as envManager from "./env-manager.js";
+import * as sandboxManager from "./sandbox-manager.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
 import * as sessionLinearIssues from "./session-linear-issues.js";
@@ -28,6 +30,7 @@ import { imagePullManager } from "./image-pull-manager.js";
 import { registerFsRoutes } from "./routes/fs-routes.js";
 import { registerPanelRoutes } from "./routes/panels-routes.js";
 import { registerEnvRoutes } from "./routes/env-routes.js";
+import { registerSandboxRoutes } from "./routes/sandbox-routes.js";
 import { registerCronRoutes } from "./routes/cron-routes.js";
 import { registerAgentRoutes } from "./routes/agent-routes.js";
 import { registerLinearAgentWebhookRoute, registerLinearAgentProtectedRoutes } from "./routes/linear-agent-routes.js";
@@ -291,7 +294,9 @@ export function createRoutes(
     // Accept token from Authorization header or cookie (same as global gate)
     const authHeader = c.req.header("Authorization");
     const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    const cookieToken = getCookie(c, "companion_auth");
+    // Also check the companion_auth cookie — iframes (browser preview) can't
+    // send Authorization headers, but browsers do forward cookies automatically.
+    const cookieToken = getCookie(c, "companion_auth") ?? null;
     if (!verifyToken(bearer) && !verifyToken(cookieToken)) {
       return c.json({ error: "unauthorized" }, 401);
     }
@@ -329,6 +334,13 @@ export function createRoutes(
 
       let envVars = prepareEnvVars(body, envManager);
 
+      // Resolve sandbox configuration
+      const sandboxEnabled = body.sandboxEnabled === true;
+      const companionSandbox = body.sandboxSlug ? sandboxManager.getSandbox(body.sandboxSlug) : null;
+      if (sandboxEnabled && body.sandboxSlug && !companionSandbox) {
+        return c.json({ error: `Sandbox "${body.sandboxSlug}" not found` }, 404);
+      }
+
       // Inject LINEAR_API_KEY if a Linear connection is specified
       let linearSystemPrompt: string | undefined;
       if (body.linearConnectionId) {
@@ -339,10 +351,18 @@ export function createRoutes(
         }
       }
 
+      // Resolve Docker image early so we know whether git ops should run on host or in container
       const companionEnv = body.envSlug ? envManager.getEnv(body.envSlug) : null;
-      let effectiveImage = companionEnv
-        ? (body.envSlug ? envManager.getEffectiveImage(body.envSlug) : null)
-        : (body.container?.image || null);
+      let effectiveImage: string | null = null;
+      if (sandboxEnabled) {
+        effectiveImage = companionSandbox
+          ? sandboxManager.getEffectiveImage(body.sandboxSlug)
+          : "iclaude:latest";
+      } else if (companionEnv && body.envSlug) {
+        effectiveImage = envManager.getEffectiveImage(body.envSlug);
+      } else if (body.container?.image) {
+        effectiveImage = body.container.image;
+      }
       const isDockerSession = !!effectiveImage;
 
       // For Docker sessions, skip host git ops — they'll run inside the container after workspace copy.
@@ -408,10 +428,9 @@ export function createRoutes(
         }
 
         const tempId = crypto.randomUUID().slice(0, 8);
-        const requestedPorts = companionEnv?.ports
-          ?? (Array.isArray(body.container?.ports)
-            ? body.container.ports.map(Number).filter((n: number) => n > 0)
-            : []);
+        const requestedPorts = Array.isArray(body.container?.ports)
+          ? body.container.ports.map(Number).filter((n: number) => n > 0)
+          : [];
         const containerPorts: (number | { port: number; hostIp?: string })[] = [
           ...Array.from(new Set([
             ...requestedPorts.filter((p: number) => p !== NOVNC_CONTAINER_PORT),
@@ -423,7 +442,7 @@ export function createRoutes(
         const cConfig: ContainerConfig = {
           image: effectiveImage,
           ports: containerPorts,
-          volumes: companionEnv?.volumes ?? body.container?.volumes,
+          volumes: body.container?.volumes,
           env: { ...(envVars ?? {}), DISPLAY: ":99" },
         };
         try {
@@ -471,18 +490,20 @@ export function createRoutes(
           }
         }
 
-        // Run per-environment init script if configured
-        if (companionEnv?.initScript?.trim()) {
+        // Run per-sandbox init script if configured
+        const initScript = companionSandbox?.initScript?.trim();
+        if (initScript) {
           try {
+            console.log(`[routes] Running init script for sandbox "${companionSandbox?.name || "sandbox"}" in container ${containerInfo.name}...`);
             const initTimeout = Number(process.env.COMPANION_INIT_SCRIPT_TIMEOUT) || 120_000;
             const result = await containerManager.execInContainerAsync(
               containerInfo.containerId,
-              ["sh", "-lc", companionEnv.initScript],
+              ["sh", "-lc", initScript],
               { timeout: initTimeout },
             );
             if (result.exitCode !== 0) {
               console.error(
-                `[routes] Init script failed for env "${companionEnv.name}" (exit ${result.exitCode}):\n${result.output}`,
+                `[routes] Init script failed for sandbox "${companionSandbox?.name || "sandbox"}" (exit ${result.exitCode}):\n${result.output}`,
               );
               containerManager.removeContainer(tempId);
               const truncated = result.output.length > 2000
@@ -492,6 +513,7 @@ export function createRoutes(
                 error: `Init script failed (exit ${result.exitCode}):\n${truncated}`,
               }, 503);
             }
+            console.log(`[routes] Init script completed successfully for sandbox "${companionSandbox?.name || "sandbox"}"`);
           } catch (e) {
             containerManager.removeContainer(tempId);
             const reason = getErrorMessage(e);
@@ -521,6 +543,7 @@ export function createRoutes(
         resumeSessionAt,
         forkSession,
         systemPrompt: backend === "codex" ? linearSystemPrompt : undefined,
+        sandboxSlug: sandboxEnabled ? (body.sandboxSlug || undefined) : undefined,
       });
 
       // Pre-load conversation history from CLI session file so the browser
@@ -610,6 +633,17 @@ export function createRoutes(
           envVars = { ...companionEnv.variables, ...body.env };
         }
 
+        // Resolve sandbox configuration
+        const sandboxEnabled = body.sandboxEnabled === true;
+        const companionSandbox = body.sandboxSlug ? sandboxManager.getSandbox(body.sandboxSlug) : null;
+        if (sandboxEnabled && body.sandboxSlug && !companionSandbox) {
+          await stream.writeSSE({
+            event: "error",
+            data: JSON.stringify({ error: `Sandbox "${body.sandboxSlug}" not found`, step: "resolving_env" }),
+          });
+          return;
+        }
+
         // Inject LINEAR_API_KEY if a Linear connection is specified
         let linearSystemPrompt: string | undefined;
         if (body.linearConnectionId) {
@@ -621,9 +655,14 @@ export function createRoutes(
         }
 
         // Resolve Docker image early so we know whether git ops should run on host or in container
-        let effectiveImage = companionEnv
-          ? (body.envSlug ? envManager.getEffectiveImage(body.envSlug) : null)
-          : (body.container?.image || null);
+        let effectiveImage: string | null = null;
+        if (sandboxEnabled) {
+          effectiveImage = companionSandbox
+            ? sandboxManager.getEffectiveImage(body.sandboxSlug)
+            : "the-companion:latest";
+        } else if (body.container?.image) {
+          effectiveImage = body.container.image;
+        }
         const isDockerSession = !!effectiveImage;
 
         await emitProgress(stream, "resolving_env", "Environment resolved", "done");
@@ -767,13 +806,12 @@ export function createRoutes(
           // --- Step: Create container ---
           await emitProgress(stream, "creating_container", "Starting container...", "in_progress");
           const tempId = crypto.randomUUID().slice(0, 8);
-          const requestedPorts = companionEnv?.ports
-            ?? (Array.isArray(body.container?.ports)
-              ? body.container.ports.map(Number).filter((n: number) => n > 0)
-              : []);
+          const requestedPorts = Array.isArray(body.container?.ports)
+            ? body.container.ports.map(Number).filter((n: number) => n > 0)
+            : [];
           const containerPorts: (number | { port: number; hostIp?: string })[] = [
             ...Array.from(new Set([
-              ...requestedPorts,
+              ...requestedPorts.filter((p: number) => p !== NOVNC_CONTAINER_PORT),
               VSCODE_EDITOR_CONTAINER_PORT,
               ...(backend === "codex" ? [CODEX_APP_SERVER_CONTAINER_PORT] : []),
             ])),
@@ -782,7 +820,7 @@ export function createRoutes(
           const cConfig: ContainerConfig = {
             image: effectiveImage,
             ports: containerPorts,
-            volumes: companionEnv?.volumes ?? body.container?.volumes,
+            volumes: body.container?.volumes,
             env: { ...(envVars ?? {}), DISPLAY: ":99" },
           };
           try {
@@ -861,13 +899,14 @@ export function createRoutes(
           }
 
           // --- Step: Init script ---
-          if (companionEnv?.initScript?.trim()) {
+          const initScript = companionSandbox?.initScript?.trim();
+          if (initScript) {
             await emitProgress(stream, "running_init_script", "Running init script...", "in_progress");
             try {
               const initTimeout = Number(process.env.COMPANION_INIT_SCRIPT_TIMEOUT) || 120_000;
               const result = await containerManager.execInContainerAsync(
                 containerInfo.containerId,
-                ["sh", "-lc", companionEnv.initScript],
+                ["sh", "-lc", initScript],
                 {
                   timeout: initTimeout,
                   onOutput: (line) => {
@@ -877,7 +916,7 @@ export function createRoutes(
               );
               if (result.exitCode !== 0) {
                 console.error(
-                  `[routes] Init script failed for env "${companionEnv.name}" (exit ${result.exitCode}):\n${result.output}`,
+                  `[routes] Init script failed for sandbox "${companionSandbox?.name || "sandbox"}" (exit ${result.exitCode}):\n${result.output}`,
                 );
                 containerManager.removeContainer(tempId);
                 const truncated = result.output.length > 2000
@@ -930,6 +969,7 @@ export function createRoutes(
           resumeSessionAt,
           forkSession,
           systemPrompt: backend === "codex" ? linearSystemPrompt : undefined,
+          sandboxSlug: sandboxEnabled ? (body.sandboxSlug || undefined) : undefined,
         });
 
         // Pre-load conversation history from CLI session file so the browser
@@ -1199,14 +1239,13 @@ export function createRoutes(
     const editorPathSuffix = `?folder=${encodeURIComponent(hostFallbackCwd)}`;
 
     try {
-      const companionDir = join(homedir(), ".companion");
-      const logFile = join(companionDir, "code-server-host.log");
+      const logFile = join(COMPANION_HOME, "code-server-host.log");
       const startCmd = [
         `if ! pgrep -f ${shellEscapeArg(`code-server.*--bind-addr 127.0.0.1:${VSCODE_EDITOR_HOST_PORT}`)} >/dev/null 2>&1; then`,
         `nohup ${shellEscapeArg(hostCodeServer)} --auth none --disable-telemetry --bind-addr 127.0.0.1:${VSCODE_EDITOR_HOST_PORT} ${shellEscapeArg(hostFallbackCwd)} >> ${shellEscapeArg(logFile)} 2>&1 &`,
         "fi",
       ].join(" ");
-      const startHostCmd = `mkdir -p ${shellEscapeArg(companionDir)} && ${startCmd}`;
+      const startHostCmd = `mkdir -p ${shellEscapeArg(COMPANION_HOME)} && ${startCmd}`;
       execSync(startHostCmd, { encoding: "utf-8", timeout: 10_000 });
 
       // Wait for code-server to be ready (up to 5s)
@@ -1306,14 +1345,14 @@ export function createRoutes(
         "  x11vnc -display :99 -forever -shared -nopw -rfbport 5900 -noxdamage -wait 20 &>/dev/null &",
         "  sleep 0.3",
         "  websockify --web /usr/share/novnc/ 6080 localhost:5900 &>/dev/null &",
-        "  sleep 0.5",
+        "  sleep 1.0",
         "fi",
       ].join("\n");
 
-      containerManager.execInContainer(
+      await containerManager.execInContainerAsync(
         container.containerId,
         ["sh", "-c", startScript],
-        15_000,
+        { timeout: 15_000 },
       );
 
       // Optionally launch Chromium to a URL (validate scheme if provided)
@@ -1344,15 +1383,15 @@ export function createRoutes(
         "fi",
       ].join("\n");
 
-      containerManager.execInContainer(
+      await containerManager.execInContainerAsync(
         container.containerId,
         ["sh", "-c", launchChrome],
-        10_000,
+        { timeout: 10_000 },
       );
 
-      // Wait for noVNC to be ready (up to 5s)
+      // Wait for noVNC to be ready (up to 10s)
       let noVncReady = false;
-      for (let i = 0; i < 25; i++) {
+      for (let i = 0; i < 50; i++) {
         try {
           const res = await fetch(`http://127.0.0.1:${portMapping.hostPort}/`);
           if (res.ok || res.status === 200) {
@@ -1425,15 +1464,14 @@ export function createRoutes(
         `xdotool type --clearmodifiers ${shellEscapeArg(url)}`,
         "xdotool key --clearmodifiers Return",
       ].join(" && ");
-      containerManager.execInContainer(
+      await containerManager.execInContainerAsync(
         container.containerId,
         ["sh", "-c", navScript],
-        10_000,
+        { timeout: 10_000 },
       );
       return c.json({ ok: true, url });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      return c.json({ error: `Navigation failed: ${message}` }, 500);
+    } catch {
+      return c.json({ error: "Navigation failed" }, 500);
     }
   });
 
@@ -1456,6 +1494,12 @@ export function createRoutes(
     const fullPath = c.req.path;
     const proxyPrefix = `/api/sessions/${id}/browser/proxy/`;
     const subPath = fullPath.startsWith(proxyPrefix) ? fullPath.slice(proxyPrefix.length) : "";
+
+    // Block path traversal (defense-in-depth)
+    if (subPath.includes("..")) {
+      return c.json({ error: "Invalid path" }, 400);
+    }
+
     const queryString = new URL(c.req.url).search;
 
     try {
@@ -1470,16 +1514,15 @@ export function createRoutes(
         status: upstream.status,
         headers,
       });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      return c.json({ error: `Proxy failed: ${message}` }, 502);
+    } catch {
+      return c.json({ error: "Proxy failed: upstream unreachable" }, 502);
     }
   });
 
 
   // HTTP proxy for host browser preview — proxies localhost requests through the companion’s port
   const HOP_BY_HOP = new Set(["connection", "keep-alive", "transfer-encoding", "upgrade", "proxy-connection", "te", "trailer"]);
-  api.get("/sessions/:id/browser/host-proxy/:port/*", async (c) => {
+  api.all("/sessions/:id/browser/host-proxy/:port/*", async (c) => {
     const id = c.req.param("id");
     const session = launcher.getSession(id);
     if (!session) return c.json({ error: "Session not found" }, 404);
@@ -1490,10 +1533,11 @@ export function createRoutes(
       return c.json({ error: "Invalid port" }, 400);
     }
 
-    // Block proxying to the companion server itself (would bypass remote auth via localhost check)
+    // Block well-known sensitive service ports to limit SSRF surface area
+    const BLOCKED_PORTS = new Set([22, 23, 25, 110, 143, 3306, 5432, 6379, 27017, 11211]);
     const serverPort = port || (process.env.NODE_ENV === "production" ? 3456 : 3457);
-    if (portNum === serverPort) {
-      return c.json({ error: "Cannot proxy to the companion server" }, 400);
+    if (portNum === serverPort || BLOCKED_PORTS.has(portNum)) {
+      return c.json({ error: "Port not allowed" }, 400);
     }
 
     // Reconstruct path from wildcard — only take path, query comes separately
@@ -1512,7 +1556,13 @@ export function createRoutes(
     const timeout = setTimeout(() => controller.abort(), 15_000);
     try {
       const targetUrl = `http://127.0.0.1:${portNum}/${subPath}${queryString}`;
-      const upstream = await fetch(targetUrl, { redirect: "follow", signal: controller.signal });
+      const upstream = await fetch(targetUrl, {
+        method: c.req.method,
+        headers: { "accept": c.req.header("accept") || "*/*" },
+        body: ["GET", "HEAD"].includes(c.req.method) ? undefined : c.req.raw.body,
+        redirect: "follow",
+        signal: controller.signal,
+      });
       clearTimeout(timeout);
       // Forward response headers, stripping hop-by-hop headers
       const headers = new Headers();
@@ -2235,6 +2285,7 @@ export function createRoutes(
 
   registerFsRoutes(api);
   registerEnvRoutes(api, { webDir: WEB_DIR });
+  registerSandboxRoutes(api);
 
   registerPromptRoutes(api);
   registerSettingsRoutes(api);

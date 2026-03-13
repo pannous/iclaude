@@ -54,6 +54,7 @@ describe("settings-manager", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
   });
@@ -116,6 +117,7 @@ describe("settings-manager", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 123,
     });
   });
@@ -202,6 +204,7 @@ describe("settings-manager", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
   });

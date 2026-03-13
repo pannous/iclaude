@@ -216,6 +216,14 @@ export class SessionStore {
     return purged;
   }
 
+  /** Cancel all pending debounce timers (for clean test teardown). */
+  dispose(): void {
+    for (const timer of this.debounceTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.debounceTimers.clear();
+  }
+
   get directory(): string {
     return this.dir;
   }

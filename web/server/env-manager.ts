@@ -43,19 +43,21 @@ export interface CompanionEnv {
 export interface EnvUpdateFields {
   name?: string;
   variables?: Record<string, string>;
-  dockerfile?: string;
-  imageTag?: string;
-  baseImage?: string;
-  ports?: number[];
-  volumes?: string[];
-  initScript?: string;
 }
 
 // ─── Paths ──────────────────────────────────────────────────────────────────
 
 const ENVS_DIR = companionDir("envs");
 
+/** Validate that a slug contains only safe characters (prevents path traversal) */
+function validateSlug(slug: string): void {
+  if (!/^[a-z0-9-]+$/.test(slug)) {
+    throw new Error("Invalid slug: must contain only lowercase alphanumeric characters and hyphens");
+  }
+}
+
 function filePath(slug: string): string {
+  validateSlug(slug);
   return companionFilePath("envs", slug);
 }
 
@@ -91,10 +93,6 @@ export function getEnv(slug: string): CompanionEnv | null {
   }
 }
 
-/**
- * Return the effective Docker image for an environment.
- * Priority: imageTag (custom built) > baseImage (user-selected) > default.
- */
 export function getEffectiveImage(slug: string): string | null {
   const env = getEnv(slug);
   if (!env) return null;
@@ -167,14 +165,6 @@ export function updateEnv(
     variables: updates.variables ?? existing.variables,
     updatedAt: Date.now(),
   };
-
-  // Apply Docker field updates (only override if explicitly provided)
-  if (updates.dockerfile !== undefined) env.dockerfile = updates.dockerfile;
-  if (updates.imageTag !== undefined) env.imageTag = updates.imageTag;
-  if (updates.baseImage !== undefined) env.baseImage = updates.baseImage;
-  if (updates.ports !== undefined) env.ports = updates.ports;
-  if (updates.volumes !== undefined) env.volumes = updates.volumes;
-  if (updates.initScript !== undefined) env.initScript = updates.initScript;
 
   // If slug changed, delete old file
   if (newSlug !== slug) {

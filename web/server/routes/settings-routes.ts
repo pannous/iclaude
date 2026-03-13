@@ -34,6 +34,7 @@ export function registerSettingsRoutes(api: Hono): void {
       aiProvider: settings.aiProvider,
       publicUrl: settings.publicUrl,
       updateChannel: settings.updateChannel,
+      dockerAutoUpdate: settings.dockerAutoUpdate,
       keyHealth: getKeyHealth(),
     });
   });
@@ -112,6 +113,9 @@ export function registerSettingsRoutes(api: Hono): void {
     if (body.linearOAuthWebhookSecret !== undefined && typeof body.linearOAuthWebhookSecret !== "string") {
       return c.json({ error: "linearOAuthWebhookSecret must be a string" }, 400);
     }
+    if (body.dockerAutoUpdate !== undefined && typeof body.dockerAutoUpdate !== "boolean") {
+      return c.json({ error: "dockerAutoUpdate must be a boolean" }, 400);
+    }
     const hasAnyField = body.authEnabled !== undefined
       || body.anthropicApiKey !== undefined || body.anthropicModel !== undefined
       || body.openaiApiKey !== undefined || body.openrouterApiKey !== undefined || body.linearApiKey !== undefined || body.linearAutoTransition !== undefined
@@ -125,7 +129,8 @@ export function registerSettingsRoutes(api: Hono): void {
       || body.aiValidationAutoDeny !== undefined
       || body.aiProvider !== undefined
       || body.publicUrl !== undefined
-      || body.updateChannel !== undefined;
+      || body.updateChannel !== undefined
+      || body.dockerAutoUpdate !== undefined;
     if (!hasAnyField) {
       return c.json({ error: "At least one settings field is required" }, 400);
     }
@@ -226,6 +231,10 @@ export function registerSettingsRoutes(api: Hono): void {
         body.updateChannel === "stable" || body.updateChannel === "prerelease"
           ? (body.updateChannel as UpdateChannel)
           : undefined,
+      dockerAutoUpdate:
+        typeof body.dockerAutoUpdate === "boolean"
+          ? body.dockerAutoUpdate
+          : undefined,
     });
 
     const connectionsAfterUpdate = listConnections();
@@ -255,6 +264,7 @@ export function registerSettingsRoutes(api: Hono): void {
       aiProvider: settings.aiProvider,
       publicUrl: settings.publicUrl,
       updateChannel: settings.updateChannel,
+      dockerAutoUpdate: settings.dockerAutoUpdate,
       keyHealth: getKeyHealth(),
     });
   });

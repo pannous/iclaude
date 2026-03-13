@@ -113,7 +113,15 @@ const NAV_ITEMS: NavItem[] = [
     hash: "#/environments",
     viewBox: "0 0 16 16",
     iconPath: "M8 1a2 2 0 012 2v1h2a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h2V3a2 2 0 012-2zm0 1.5a.5.5 0 00-.5.5v1h1V3a.5.5 0 00-.5-.5zM4 5.5a.5.5 0 00-.5.5v6a.5.5 0 00.5.5h8a.5.5 0 00.5-.5V6a.5.5 0 00-.5-.5H4z",
-    activePages: ["environments", "docker-builder"],
+    activePages: ["environments"],
+  },
+  {
+    id: "sandboxes",
+    label: "Sandboxes",
+    hash: "#/sandboxes",
+    viewBox: "0 0 16 16",
+    iconPath: "M2 2a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V2zm2-.5a.5.5 0 00-.5.5v12a.5.5 0 00.5.5h8a.5.5 0 00.5-.5V2a.5.5 0 00-.5-.5H4zM6 4.5a.5.5 0 01.5-.5h3a.5.5 0 010 1h-3a.5.5 0 01-.5-.5zM6.5 7a.5.5 0 000 1h3a.5.5 0 000-1h-3z",
+    activePages: ["sandboxes"],
   },
   {
     id: "agents",

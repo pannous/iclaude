@@ -118,6 +118,8 @@ export interface SdkSessionInfo {
   agentId?: string;
   /** Human-readable name of the agent that spawned this session */
   agentName?: string;
+  /** Sandbox profile slug used for this session */
+  sandboxSlug?: string;
 
   // Codex WebSocket transport fields
   /** Port used for Codex WebSocket transport (host mode). */
@@ -169,6 +171,8 @@ export interface LaunchOptions {
   sessionId?: string;
   /** Optional system prompt to inject into Codex sessions (e.g. Linear context). */
   systemPrompt?: string;
+  /** Sandbox profile slug used for this session */
+  sandboxSlug?: string;
 }
 
 /**
@@ -357,6 +361,12 @@ export class CliLauncher {
       info.codexSandbox = options.codexSandbox;
     }
 
+    // Store sandbox slug if provided
+    if (options.sandboxSlug) {
+      info.sandboxSlug = options.sandboxSlug;
+    }
+
+    // Store container metadata if provided
     if (options.containerId) {
       info.containerId = options.containerId;
       info.containerName = options.containerName;
@@ -529,18 +539,26 @@ export class CliLauncher {
       ? `ws://${containerSdkHost}:${this.port}/ws/cli/${sessionId}`
       : `ws://localhost:${this.port}/ws/cli/${sessionId}`;
 
-    // Claude Code rejects bypassPermissions when running with root/sudo. Most
-    // container images run as root by default, so downgrade to acceptEdits unless
-    // explicitly forced.
+    // Claude Code rejects bypassPermissions when running with root/sudo.
+    // Container sessions are downgraded by default; host sessions are only
+    // downgraded when this server itself runs as root.
     let effectivePermissionMode = options.permissionMode;
-    if (
+    const isRootProcess = typeof process.getuid === "function" && process.getuid() === 0;
+    const shouldDowngradeContainerBypass =
       isContainerized
       && options.permissionMode === "bypassPermissions"
-      && process.env.COMPANION_FORCE_BYPASS_IN_CONTAINER !== "1"
-    ) {
+      && process.env.COMPANION_FORCE_BYPASS_IN_CONTAINER !== "1";
+    const shouldDowngradeRootBypass =
+      !isContainerized
+      && isRootProcess
+      && options.permissionMode === "bypassPermissions"
+      && process.env.COMPANION_FORCE_BYPASS_AS_ROOT !== "1";
+
+    if (shouldDowngradeContainerBypass || shouldDowngradeRootBypass) {
+      const scope = isContainerized ? "container" : "root";
       console.warn(
-        `[cli-launcher] Session ${sessionId}: downgrading container permission mode ` +
-        `from bypassPermissions to acceptEdits (set COMPANION_FORCE_BYPASS_IN_CONTAINER=1 to force bypass).`,
+        `[cli-launcher] Session ${sessionId}: downgrading ${scope} permission mode ` +
+        `from bypassPermissions to acceptEdits.`,
       );
       effectivePermissionMode = "acceptEdits";
       info.permissionMode = "acceptEdits";
@@ -615,7 +633,10 @@ export class CliLauncher {
       spawnCwd = undefined; // cwd is set inside the container via -w at creation
     } else {
       // Host-based spawn (original behavior)
-      spawnCmd = [binary, ...args];
+      // On Windows, .cmd/.bat files cannot be spawned directly by Bun.spawn;
+      // they must be invoked via cmd.exe /c.
+      const isCmdScript = process.platform === "win32" && (binary.endsWith(".cmd") || binary.endsWith(".bat"));
+      spawnCmd = isCmdScript ? ["cmd.exe", "/c", binary, ...args] : [binary, ...args];
       spawnEnv = {
         ...process.env,
         CLAUDECODE: undefined,
@@ -728,6 +749,8 @@ export class CliLauncher {
    */
   private async spawnCodexWs(sessionId: string, info: SdkSessionInfo, options: LaunchOptions): Promise<void> {
     const isContainerized = !!options.containerId;
+    const connectTimeoutMs = Math.max(1000, parseInt(process.env.COMPANION_CODEX_WS_CONNECT_TIMEOUT_MS ?? "", 10) || 30000);
+    const pongTimeoutMs = Math.max(1000, parseInt(process.env.COMPANION_CODEX_PONG_TIMEOUT_MS ?? "", 10) || 30000);
 
     let binary = options.codexBinary || "codex";
     if (!isContainerized) {
@@ -817,7 +840,8 @@ export class CliLauncher {
       const binaryDir = resolve(binary, "..");
       const siblingNode = join(binaryDir, "node");
       const enrichedPath = getEnrichedPath();
-      const spawnPath = [binaryDir, ...enrichedPath.split(":")].filter(Boolean).join(":");
+      const pathSep = process.platform === "win32" ? ";" : ":";
+      const spawnPath = [binaryDir, ...enrichedPath.split(pathSep)].filter(Boolean).join(pathSep);
 
       if (existsSync(siblingNode)) {
         let codexScript: string;
@@ -828,7 +852,9 @@ export class CliLauncher {
         }
         spawnCmd = [siblingNode, codexScript, ...args];
       } else {
-        spawnCmd = [binary, ...args];
+        // On Windows, .cmd/.bat files cannot be spawned directly by Bun.spawn
+        const isCmdScript = process.platform === "win32" && (binary.endsWith(".cmd") || binary.endsWith(".bat"));
+        spawnCmd = isCmdScript ? ["cmd.exe", "/c", binary, ...args] : [binary, ...args];
       }
 
       spawnEnv = {
@@ -871,7 +897,7 @@ export class CliLauncher {
     const codexBinaryDir = isContainerized ? undefined : resolve(binary, "..");
     const proxyNodeCandidate = codexBinaryDir ? join(codexBinaryDir, "node") : undefined;
     const proxyNode = proxyNodeCandidate && existsSync(proxyNodeCandidate) ? proxyNodeCandidate : "node";
-    const proxyProc = Bun.spawn([proxyNode, CODEX_WS_PROXY_PATH, wsUrl, "10000"], {
+    const proxyProc = Bun.spawn([proxyNode, CODEX_WS_PROXY_PATH, wsUrl, String(connectTimeoutMs), String(pongTimeoutMs)], {
       cwd: info.cwd,
       env: {
         ...process.env,
@@ -1045,7 +1071,8 @@ export class CliLauncher {
       const binaryDir = resolve(binary, "..");
       const siblingNode = join(binaryDir, "node");
       const enrichedPath = getEnrichedPath();
-      const spawnPath = [binaryDir, ...enrichedPath.split(":")].filter(Boolean).join(":");
+      const pathSep = process.platform === "win32" ? ";" : ":";
+      const spawnPath = [binaryDir, ...enrichedPath.split(pathSep)].filter(Boolean).join(pathSep);
 
       if (existsSync(siblingNode)) {
         let codexScript: string;
@@ -1056,7 +1083,9 @@ export class CliLauncher {
         }
         spawnCmd = [siblingNode, codexScript, ...args];
       } else {
-        spawnCmd = [binary, ...args];
+        // On Windows, .cmd/.bat files cannot be spawned directly by Bun.spawn
+        const isCmdScript = process.platform === "win32" && (binary.endsWith(".cmd") || binary.endsWith(".bat"));
+        spawnCmd = isCmdScript ? ["cmd.exe", "/c", binary, ...args] : [binary, ...args];
       }
 
       spawnEnv = {

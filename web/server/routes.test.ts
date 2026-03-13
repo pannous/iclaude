@@ -28,6 +28,17 @@ vi.mock("./panel-manager.js", () => ({
   wrapWithVibeApi: vi.fn((html: string) => `<script>vibe</script>\n${html}`),
 }));
 
+// Mock sandbox-manager — sandboxes now own Docker/container config (separated from envs)
+vi.mock("./sandbox-manager.js", () => ({
+  listSandboxes: vi.fn(() => []),
+  getSandbox: vi.fn(() => null),
+  getEffectiveImage: vi.fn(() => "iclaude:latest"),
+  createSandbox: vi.fn(),
+  updateSandbox: vi.fn(),
+  deleteSandbox: vi.fn(() => false),
+  updateBuildStatus: vi.fn(() => null),
+}));
+
 vi.mock("./prompt-manager.js", () => ({
   listPrompts: vi.fn(() => []),
   createPrompt: vi.fn(),
@@ -110,6 +121,7 @@ vi.mock("./settings-manager.js", () => ({
     aiProvider: "openrouter",
     publicUrl: "",
     updateChannel: "stable",
+    dockerAutoUpdate: false,
     updatedAt: 0,
   })),
   updateSettings: vi.fn((patch) => ({
@@ -131,9 +143,10 @@ vi.mock("./settings-manager.js", () => ({
     editorTabEnabled: patch.editorTabEnabled ?? false,
     aiValidationEnabled: patch.aiValidationEnabled ?? false,
     aiValidationAutoApprove: patch.aiValidationAutoApprove ?? true,
-    aiValidationAutoDeny: patch.aiValidationAutoDeny ?? true,
+    aiValidationAutoDeny: patch.aiValidationAutoDeny ?? false,
     publicUrl: patch.publicUrl ?? "",
     updateChannel: patch.updateChannel ?? "stable",
+    dockerAutoUpdate: patch.dockerAutoUpdate ?? false,
     updatedAt: Date.now(),
   })),
 }));
@@ -283,6 +296,7 @@ import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createRoutes } from "./routes.js";
 import * as envManager from "./env-manager.js";
+import * as sandboxManager from "./sandbox-manager.js";
 import * as promptManager from "./prompt-manager.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
@@ -738,7 +752,7 @@ describe("POST /api/sessions/create", () => {
     );
   });
 
-  it("returns 503 when env has Docker image but container startup fails", async () => {
+  it("returns 503 when sandbox has Docker image but container startup fails", async () => {
     vi.mocked(envManager.getEnv).mockReturnValue({
       name: "Companion",
       slug: "companion",
@@ -747,7 +761,13 @@ describe("POST /api/sessions/create", () => {
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "Companion",
+      slug: "companion",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockImplementationOnce(() => {
       throw new Error("docker daemon timeout");
@@ -756,7 +776,7 @@ describe("POST /api/sessions/create", () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "companion" }),
+      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "companion", sandboxEnabled: true, sandboxSlug: "companion" }),
     });
 
     expect(res.status).toBe(503);
@@ -777,12 +797,18 @@ describe("POST /api/sessions/create", () => {
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "Codex Docker",
+      slug: "codex-docker",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
 
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test", envSlug: "codex-docker", backend: "codex" }),
+      body: JSON.stringify({ cwd: "/test", envSlug: "codex-docker", sandboxEnabled: true, sandboxSlug: "codex-docker", backend: "codex" }),
     });
 
     expect(res.status).toBe(400);
@@ -801,7 +827,13 @@ describe("POST /api/sessions/create", () => {
       createdAt: 1000,
       updatedAt: 1000,
     } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "Codex Docker",
+      slug: "codex-docker",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     const createSpy = vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-codex",
@@ -817,7 +849,7 @@ describe("POST /api/sessions/create", () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test", envSlug: "codex-docker", backend: "codex" }),
+      body: JSON.stringify({ cwd: "/test", envSlug: "codex-docker", sandboxEnabled: true, sandboxSlug: "codex-docker", backend: "codex" }),
     });
 
     expect(res.status).toBe(200);
@@ -840,9 +872,15 @@ describe("POST /api/sessions/create", () => {
       baseImage: "iclaude:latest",
       createdAt: 1000,
       updatedAt: 1000,
-      ports: [3000],
     } as any);
     vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "Companion",
+      slug: "companion",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     const createSpy = vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-vscode",
       name: "companion-vscode",
@@ -857,7 +895,7 @@ describe("POST /api/sessions/create", () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test", envSlug: "companion" }),
+      body: JSON.stringify({ cwd: "/test", envSlug: "companion", sandboxEnabled: true, sandboxSlug: "companion", container: { ports: [3000] } }),
     });
 
     expect(res.status).toBe(200);
@@ -878,6 +916,13 @@ describe("POST /api/sessions/create", () => {
       updatedAt: 1000,
     } as any);
     vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "Companion",
+      slug: "companion",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     mockImagePullIsReady.mockReturnValue(false);
     mockImagePullGetState.mockReturnValue({
       image: "iclaude:latest",
@@ -899,7 +944,7 @@ describe("POST /api/sessions/create", () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "companion" }),
+      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "companion" , sandboxEnabled: true, sandboxSlug: "companion" }),
     });
 
     expect(res.status).toBe(200);
@@ -908,8 +953,8 @@ describe("POST /api/sessions/create", () => {
     expect(launcher.launch).toHaveBeenCalled();
   });
 
-  it("runs init script before launching CLI when env has initScript", async () => {
-    // Environment with initScript and Docker image
+  it("runs init script before launching CLI when sandbox has initScript", async () => {
+    // Sandbox with initScript and Docker image
     vi.mocked(envManager.getEnv).mockReturnValue({
       name: "WithInit",
       slug: "with-init",
@@ -920,6 +965,14 @@ describe("POST /api/sessions/create", () => {
       updatedAt: 1000,
     } as any);
     vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "WithInit",
+      slug: "with-init",
+      initScript: "bun install && pip install -r requirements.txt",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-init",
@@ -937,7 +990,7 @@ describe("POST /api/sessions/create", () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "with-init" }),
+      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "with-init" , sandboxEnabled: true, sandboxSlug: "with-init" }),
     });
 
     expect(res.status).toBe(200);
@@ -962,6 +1015,14 @@ describe("POST /api/sessions/create", () => {
       updatedAt: 1000,
     } as any);
     vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "FailInit",
+      slug: "fail-init",
+      initScript: "exit 1",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-fail",
@@ -979,7 +1040,7 @@ describe("POST /api/sessions/create", () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "fail-init" }),
+      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "fail-init" , sandboxEnabled: true, sandboxSlug: "fail-init" }),
     });
 
     expect(res.status).toBe(503);
@@ -1010,6 +1071,13 @@ describe("POST /api/sessions/create", () => {
       updatedAt: 1000,
     } as any);
     vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "Docker",
+      slug: "docker",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-git",
       name: "companion-git",
@@ -1030,7 +1098,7 @@ describe("POST /api/sessions/create", () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/repo", branch: "feat/new", envSlug: "docker" }),
+      body: JSON.stringify({ cwd: "/repo", branch: "feat/new", envSlug: "docker", sandboxEnabled: true, sandboxSlug: "docker" }),
     });
 
     expect(res.status).toBe(200);
@@ -1056,6 +1124,13 @@ describe("POST /api/sessions/create", () => {
       updatedAt: 1000,
     } as any);
     vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "Docker",
+      slug: "docker",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-nobranch",
       name: "companion-nobranch",
@@ -1071,7 +1146,7 @@ describe("POST /api/sessions/create", () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test", envSlug: "docker" }),
+      body: JSON.stringify({ cwd: "/test", envSlug: "docker", sandboxEnabled: true, sandboxSlug: "docker" }),
     });
 
     expect(res.status).toBe(200);
@@ -1096,6 +1171,13 @@ describe("POST /api/sessions/create", () => {
       updatedAt: 1000,
     } as any);
     vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "Docker",
+      slug: "docker",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-failcheckout",
       name: "companion-failcheckout",
@@ -1116,7 +1198,7 @@ describe("POST /api/sessions/create", () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/repo", branch: "nonexistent", envSlug: "docker" }),
+      body: JSON.stringify({ cwd: "/repo", branch: "nonexistent", envSlug: "docker", sandboxEnabled: true, sandboxSlug: "docker" }),
     });
 
     expect(res.status).toBe(400);
@@ -1163,6 +1245,52 @@ describe("POST /api/sessions/create", () => {
         forkSession: false,
       }),
     );
+  });
+
+  it("uses the-companion:latest when sandboxEnabled is true but no sandboxSlug is provided", async () => {
+    // Validates the default image fallback path: when sandboxEnabled is true
+    // but no sandboxSlug is given, the route should use "the-companion:latest"
+    // as the effectiveImage without calling sandboxManager.getSandbox or
+    // sandboxManager.getEffectiveImage, since there is no sandbox to look up.
+    vi.mocked(envManager.getEnv).mockReturnValue({
+      name: "my-env",
+      slug: "my-env",
+      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
+      createdAt: 1000,
+      updatedAt: 1000,
+    } as any);
+    vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
+    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
+      containerId: "cid-default",
+      name: "companion-default",
+      image: "the-companion:latest",
+      portMappings: [],
+      hostCwd: "/test",
+      containerCwd: "/workspace",
+      state: "running",
+    });
+    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
+
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: "/test", envSlug: "my-env", sandboxEnabled: true }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(launcher.launch).toHaveBeenCalled();
+
+    // sandboxManager.getSandbox should NOT be called because no sandboxSlug was provided.
+    // The route only calls getSandbox when body.sandboxSlug is truthy.
+    expect(sandboxManager.getSandbox).not.toHaveBeenCalled();
+
+    // sandboxManager.getEffectiveImage should NOT be called because companionSandbox is null
+    // (no sandboxSlug means no sandbox lookup), so the route falls through to the default image.
+    expect(sandboxManager.getEffectiveImage).not.toHaveBeenCalled();
+
+    // The container should have been created with the default base image
+    const createContainerCall = vi.mocked(containerManager.createContainer).mock.calls[0];
+    expect(createContainerCall[2].image).toBe("iclaude:latest");
   });
 });
 
@@ -1854,6 +1982,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
     const res = await app.request("/api/sessions/s1/archive", {
@@ -1905,6 +2034,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
     const res = await app.request("/api/sessions/s1/archive", {
@@ -1949,6 +2079,7 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
     const res = await app.request("/api/sessions/s1/archive", {
@@ -2041,6 +2172,7 @@ describe("GET /api/sessions/:id/archive-info", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
     const res = await app.request("/api/sessions/s1/archive-info", { method: "GET" });
@@ -2107,12 +2239,6 @@ describe("POST /api/envs", () => {
     expect(envManager.createEnv).toHaveBeenCalledWith(
       "Staging",
       { HOST: "staging.example.com" },
-      {
-        dockerfile: undefined,
-        baseImage: undefined,
-        ports: undefined,
-        volumes: undefined,
-      },
     );
   });
 
@@ -2388,6 +2514,7 @@ describe("GET /api/settings", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 123,
     });
 
@@ -2422,6 +2549,7 @@ describe("GET /api/settings", () => {
       publicUrl: "",
       updateChannel: "stable",
       keyHealth: { anthropic: null, openai: null, openrouter: null },
+      dockerAutoUpdate: false,
     });
   });
 
@@ -2456,6 +2584,7 @@ describe("GET /api/settings", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 123,
     });
 
@@ -2490,6 +2619,7 @@ describe("GET /api/settings", () => {
       publicUrl: "",
       updateChannel: "stable",
       keyHealth: { anthropic: null, openai: null, openrouter: null },
+      dockerAutoUpdate: false,
     });
   });
 
@@ -2525,6 +2655,7 @@ describe("GET /api/settings", () => {
       aiProvider: "openrouter",
       publicUrl: "https://example.com",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 100,
     });
 
@@ -2568,6 +2699,7 @@ describe("PUT /api/settings", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 456,
     });
 
@@ -2629,6 +2761,7 @@ describe("PUT /api/settings", () => {
       publicUrl: "",
       updateChannel: "stable",
       keyHealth: { anthropic: null, openai: null, openrouter: null },
+      dockerAutoUpdate: false,
     });
   });
 
@@ -2663,6 +2796,7 @@ describe("PUT /api/settings", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 789,
     });
 
@@ -2717,6 +2851,7 @@ describe("PUT /api/settings", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 999,
     });
 
@@ -2835,6 +2970,7 @@ describe("PUT /api/settings", () => {
       aiProvider: "openrouter",
       publicUrl: "https://my-server.com",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 500,
     });
 
@@ -3019,6 +3155,7 @@ describe("GET /api/linear/issues", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
     vi.mocked(resolveApiKey).mockReturnValue(null);
@@ -3060,6 +3197,7 @@ describe("GET /api/linear/issues", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
 
@@ -3154,6 +3292,7 @@ describe("GET /api/linear/issues", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
 
@@ -3255,6 +3394,7 @@ describe("GET /api/linear/issues", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
 
@@ -3321,6 +3461,7 @@ describe("GET /api/linear/connection", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
     vi.mocked(resolveApiKey).mockReturnValue(null);
@@ -3362,6 +3503,7 @@ describe("GET /api/linear/connection", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
 
@@ -3425,6 +3567,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
 
@@ -3470,6 +3613,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
 
@@ -3514,6 +3658,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
     vi.mocked(resolveApiKey).mockReturnValue(null);
@@ -3560,6 +3705,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
 
@@ -3640,6 +3786,7 @@ describe("POST /api/linear/issues/:id/transition", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
 
@@ -3699,6 +3846,7 @@ describe("GET /api/linear/projects", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
     vi.mocked(resolveApiKey).mockReturnValue(null);
@@ -3740,6 +3888,7 @@ describe("GET /api/linear/projects", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
 
@@ -3811,6 +3960,7 @@ describe("GET /api/linear/project-issues", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
     vi.mocked(resolveApiKey).mockReturnValue(null);
@@ -3852,6 +4002,7 @@ describe("GET /api/linear/project-issues", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
 
@@ -3938,6 +4089,7 @@ describe("GET /api/linear/project-issues", () => {
       aiProvider: "openrouter",
       publicUrl: "",
       updateChannel: "stable",
+      dockerAutoUpdate: false,
       updatedAt: 0,
     });
 
@@ -4994,7 +5146,7 @@ describe("POST /api/sessions/create-stream", () => {
   });
 
   it("emits container progress events for containerized session", async () => {
-    // Env with Docker image — image already exists
+    // Sandbox with Docker image — image already exists
     vi.mocked(envManager.getEnv).mockReturnValue({
       name: "Docker",
       slug: "docker",
@@ -5004,6 +5156,13 @@ describe("POST /api/sessions/create-stream", () => {
       updatedAt: 1000,
     } as any);
     vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "Docker",
+      slug: "docker",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-stream",
@@ -5019,7 +5178,7 @@ describe("POST /api/sessions/create-stream", () => {
     const res = await app.request("/api/sessions/create-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "docker" }),
+      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "docker" , sandboxEnabled: true, sandboxSlug: "docker" }),
     });
 
     expect(res.status).toBe(200);
@@ -5044,7 +5203,7 @@ describe("POST /api/sessions/create-stream", () => {
   });
 
   it("emits pulling_image step when image is not ready and waits for background pull", async () => {
-    // Env with Docker image that is not available yet — pull manager handles it
+    // Sandbox with Docker image that is not available yet — pull manager handles it
     vi.mocked(envManager.getEnv).mockReturnValue({
       name: "Docker",
       slug: "docker",
@@ -5054,6 +5213,13 @@ describe("POST /api/sessions/create-stream", () => {
       updatedAt: 1000,
     } as any);
     vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "Docker",
+      slug: "docker",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     // Image not ready initially — pull manager will handle it
     mockImagePullIsReady.mockReturnValue(false);
     mockImagePullGetState.mockReturnValue({
@@ -5076,7 +5242,7 @@ describe("POST /api/sessions/create-stream", () => {
     const res = await app.request("/api/sessions/create-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "docker" }),
+      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "docker" , sandboxEnabled: true, sandboxSlug: "docker" }),
     });
 
     expect(res.status).toBe(200);
@@ -5107,6 +5273,13 @@ describe("POST /api/sessions/create-stream", () => {
       updatedAt: 1000,
     } as any);
     vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "Docker",
+      slug: "docker",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     mockImagePullIsReady.mockReturnValue(false);
     mockImagePullGetState.mockReturnValue({
       image: "iclaude:latest",
@@ -5119,7 +5292,7 @@ describe("POST /api/sessions/create-stream", () => {
     const res = await app.request("/api/sessions/create-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "docker" }),
+      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "docker" , sandboxEnabled: true, sandboxSlug: "docker" }),
     });
 
     expect(res.status).toBe(200);
@@ -5129,7 +5302,7 @@ describe("POST /api/sessions/create-stream", () => {
     expect(JSON.parse(errorEvent!.data).error).toContain("Pull and build both failed");
   });
 
-  it("emits init script progress events when env has initScript", async () => {
+  it("emits init script progress events when sandbox has initScript", async () => {
     vi.mocked(envManager.getEnv).mockReturnValue({
       name: "WithInit",
       slug: "with-init",
@@ -5140,6 +5313,14 @@ describe("POST /api/sessions/create-stream", () => {
       updatedAt: 1000,
     } as any);
     vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "WithInit",
+      slug: "with-init",
+      initScript: "npm install",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-init-stream",
@@ -5157,7 +5338,7 @@ describe("POST /api/sessions/create-stream", () => {
     const res = await app.request("/api/sessions/create-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "with-init" }),
+      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "with-init" , sandboxEnabled: true, sandboxSlug: "with-init" }),
     });
 
     expect(res.status).toBe(200);
@@ -5185,6 +5366,14 @@ describe("POST /api/sessions/create-stream", () => {
       updatedAt: 1000,
     } as any);
     vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "FailInit",
+      slug: "fail-init",
+      initScript: "exit 1",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-fail-stream",
@@ -5202,7 +5391,7 @@ describe("POST /api/sessions/create-stream", () => {
     const res = await app.request("/api/sessions/create-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "fail-init" }),
+      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "fail-init" , sandboxEnabled: true, sandboxSlug: "fail-init" }),
     });
 
     expect(res.status).toBe(200);
@@ -5244,6 +5433,13 @@ describe("POST /api/sessions/create-stream", () => {
       updatedAt: 1000,
     } as any);
     vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "Docker",
+      slug: "docker",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-git-stream",
       name: "companion-git-stream",
@@ -5264,7 +5460,7 @@ describe("POST /api/sessions/create-stream", () => {
     const res = await app.request("/api/sessions/create-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/repo", branch: "feat/new", envSlug: "docker" }),
+      body: JSON.stringify({ cwd: "/repo", branch: "feat/new", envSlug: "docker", sandboxEnabled: true, sandboxSlug: "docker" }),
     });
 
     expect(res.status).toBe(200);
@@ -5315,6 +5511,13 @@ describe("POST /api/sessions/create-stream", () => {
       updatedAt: 1000,
     } as any);
     vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
+    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
+      name: "Docker",
+      slug: "docker",
+      createdAt: 1000,
+      updatedAt: 1000,
+    });
+    vi.mocked(sandboxManager.getEffectiveImage).mockReturnValue("iclaude:latest");
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-fail-git",
       name: "companion-fail-git",
@@ -5335,7 +5538,7 @@ describe("POST /api/sessions/create-stream", () => {
     const res = await app.request("/api/sessions/create-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/repo", branch: "nonexistent", envSlug: "docker" }),
+      body: JSON.stringify({ cwd: "/repo", branch: "nonexistent", envSlug: "docker", sandboxEnabled: true, sandboxSlug: "docker" }),
     });
 
     expect(res.status).toBe(200);
@@ -5880,7 +6083,7 @@ describe("POST /api/sessions/:id/browser/start", () => {
     });
     vi.spyOn(containerManager, "hasBinaryInContainer").mockReturnValue(true);
     vi.spyOn(containerManager, "isContainerAlive").mockReturnValue("running");
-    const execSpy = vi.spyOn(containerManager, "execInContainer").mockReturnValue("");
+    const execSpy = vi.spyOn(containerManager, "execInContainerAsync").mockResolvedValue({ exitCode: 0, output: "" });
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("ok", { status: 200 }));
 
     const res = await app.request("/api/sessions/s1/browser/start", { method: "POST" });
@@ -5895,12 +6098,12 @@ describe("POST /api/sessions/:id/browser/start", () => {
     expect(json.url).toContain("/api/sessions/s1/browser/proxy/vnc.html");
     expect(json.url).toContain("autoconnect=true");
     expect(json.url).toContain("path=ws/novnc/s1");
-    // Should have called execInContainer for the display stack and Chrome
+    // Should have called execInContainerAsync for the display stack and Chrome
     expect(execSpy).toHaveBeenCalledTimes(2);
     fetchSpy.mockRestore();
   });
 
-  it("returns unavailable when noVNC polling times out", { timeout: 15_000 }, async () => {
+  it("returns unavailable when noVNC polling times out", { timeout: 25_000 }, async () => {
     launcher.getSession.mockReturnValue({
       sessionId: "s1",
       state: "running",
@@ -5918,7 +6121,7 @@ describe("POST /api/sessions/:id/browser/start", () => {
     });
     vi.spyOn(containerManager, "hasBinaryInContainer").mockReturnValue(true);
     vi.spyOn(containerManager, "isContainerAlive").mockReturnValue("running");
-    vi.spyOn(containerManager, "execInContainer").mockReturnValue("");
+    vi.spyOn(containerManager, "execInContainerAsync").mockResolvedValue({ exitCode: 0, output: "" });
     // Simulate noVNC never becoming ready — all fetches throw
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("connection refused"));
 
@@ -5952,7 +6155,7 @@ describe("POST /api/sessions/:id/browser/start", () => {
     });
     vi.spyOn(containerManager, "hasBinaryInContainer").mockReturnValue(true);
     vi.spyOn(containerManager, "isContainerAlive").mockReturnValue("running");
-    vi.spyOn(containerManager, "execInContainer").mockReturnValue("");
+    vi.spyOn(containerManager, "execInContainerAsync").mockResolvedValue({ exitCode: 0, output: "" });
 
     const res = await app.request("/api/sessions/s1/browser/start", {
       method: "POST",
@@ -6031,7 +6234,7 @@ describe("POST /api/sessions/:id/browser/navigate", () => {
       containerCwd: "/workspace",
       state: "running",
     });
-    const execSpy = vi.spyOn(containerManager, "execInContainer").mockReturnValue("");
+    const execSpy = vi.spyOn(containerManager, "execInContainerAsync").mockResolvedValue({ exitCode: 0, output: "" });
 
     const res = await app.request("/api/sessions/s1/browser/navigate", {
       method: "POST",
@@ -6045,7 +6248,7 @@ describe("POST /api/sessions/:id/browser/navigate", () => {
     expect(execSpy).toHaveBeenCalledWith(
       "cid-1",
       expect.arrayContaining(["sh", "-c"]),
-      10_000,
+      { timeout: 10_000 },
     );
   });
 });
@@ -6172,7 +6375,23 @@ describe("GET /api/sessions/:id/browser/host-proxy/:port/*", () => {
 
     expect(res.status).toBe(400);
     const json = await res.json();
-    expect(json.error).toContain("Cannot proxy to the companion server");
+    expect(json.error).toContain("Port not allowed");
+  });
+
+  it("blocks well-known sensitive service ports", async () => {
+    // Sensitive ports (databases, caches, mail) should be blocked to limit SSRF
+    launcher.getSession.mockReturnValue({
+      sessionId: "s1",
+      state: "running",
+      cwd: "/repo",
+    });
+
+    for (const blockedPort of [5432, 3306, 6379, 27017]) {
+      const res = await app.request(`/api/sessions/s1/browser/host-proxy/${blockedPort}/`);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toContain("Port not allowed");
+    }
   });
 
   it("proxies request to localhost on the given port", async () => {

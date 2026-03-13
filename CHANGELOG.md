@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.76.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.75.2...the-companion-v0.76.0) (2026-03-13)
+
+
+### Features
+
+* **platform:** add Companion Cloud managed platform foundation ([#401](https://github.com/The-Vibe-Company/companion/issues/401)) ([cdd6a0c](https://github.com/The-Vibe-Company/companion/commit/cdd6a0c1df616ffd16439339b0be745c812ad16a))
+* **sandbox:** separate sandbox from environment management ([#516](https://github.com/The-Vibe-Company/companion/issues/516)) ([d38dcc3](https://github.com/The-Vibe-Company/companion/commit/d38dcc34623048fdf881584691f9dabfad025d0d))
+
+## [0.75.2](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.75.1...the-companion-v0.75.2) (2026-03-12)
+
+
+### Bug Fixes
+
+* **codex:** increase WS timeouts and auto-relaunch on RPC timeout ([#514](https://github.com/The-Vibe-Company/companion/issues/514)) ([2fcccf3](https://github.com/The-Vibe-Company/companion/commit/2fcccf39d72a59bc674b41e7d912297c3afce4eb))
+* **settings:** disable auto-deny dangerous tools by default ([#513](https://github.com/The-Vibe-Company/companion/issues/513)) ([4c9be30](https://github.com/The-Vibe-Company/companion/commit/4c9be30104dea84462daca03f52d079d697e2859))
+
+## [0.75.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.75.0...the-companion-v0.75.1) (2026-03-12)
+
+
+### Bug Fixes
+
+* add Windows compatibility for binary resolution and process spawning ([#510](https://github.com/The-Vibe-Company/companion/issues/510)) ([79573af](https://github.com/The-Vibe-Company/companion/commit/79573af1243a74586f56b1cc5fd4558f76c2c69e))
+* **windows:** add platform guards and prefer where over which ([#512](https://github.com/The-Vibe-Company/companion/issues/512)) ([08464f5](https://github.com/The-Vibe-Company/companion/commit/08464f5e2b82153a4218ebbad10f4efdf3f0c81a))
+
 ## [0.75.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.74.0...the-companion-v0.75.0) (2026-03-11)
 
 
