@@ -646,9 +646,9 @@ describe("UI state", () => {
     store.openQuickTerminal({ target: "host", cwd: "/repo/d" });
 
     const labels = useStore.getState().quickTerminalTabs.map((t) => t.label);
-    expect(labels).toContain("Terminal");
-    expect(labels).toContain("Terminal 3");
-    expect(labels).toContain("Terminal 4");
+    expect(labels).toContain("Shell");
+    expect(labels).toContain("Shell 3");
+    expect(labels).toContain("Shell 4");
   });
 });
 

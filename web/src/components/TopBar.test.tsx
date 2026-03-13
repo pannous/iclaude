@@ -145,7 +145,7 @@ describe("TopBar", () => {
   it("reuses an existing quick terminal when already open", () => {
     resetStore({
       quickTerminalOpen: true,
-      quickTerminalTabs: [{ id: "t1", label: "Terminal", cwd: "/repo" }],
+      quickTerminalTabs: [{ id: "t1", label: "Shell", cwd: "/repo" }],
     });
     render(<TopBar />);
 
@@ -177,7 +177,7 @@ describe("TopBar", () => {
     resetStore({
       activeTab: "terminal",
       quickTerminalOpen: true,
-      quickTerminalTabs: [{ id: "t1", label: "Terminal", cwd: "/repo" }],
+      quickTerminalTabs: [{ id: "t1", label: "Shell", cwd: "/repo" }],
     });
     render(<TopBar />);
 
@@ -189,7 +189,7 @@ describe("TopBar", () => {
     resetStore({
       activeTab: "terminal",
       quickTerminalOpen: true,
-      quickTerminalTabs: [{ id: "t1", label: "Terminal", cwd: "/repo" }],
+      quickTerminalTabs: [{ id: "t1", label: "Shell", cwd: "/repo" }],
     });
     render(<TopBar />);
 

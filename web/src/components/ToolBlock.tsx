@@ -5,7 +5,7 @@ import { execCode, PlayIcon, SpinnerIcon, RunOutput, type ExecResult } from "./R
 import { CopyButton } from "./CopyButton.js";
 
 const TOOL_ICONS: Record<string, string> = {
-  Bash: "terminal",
+  Bash: "shell",
   Read: "file",
   Write: "file-plus",
   Edit: "file-edit",
@@ -29,7 +29,7 @@ export function getToolIcon(name: string): string {
 }
 
 export function getToolLabel(name: string): string {
-  if (name === "Bash") return "Terminal";
+  if (name === "Bash") return "Shell";
   if (name === "Read") return "Read File";
   if (name === "Write") return "Write File";
   if (name === "Edit") return "Edit File";
@@ -367,11 +367,11 @@ export function getPreview(name: string, input: Record<string, unknown>): string
 export function ToolIcon({ type }: { type: string }) {
   const cls = "w-3.5 h-3.5 text-cc-primary shrink-0";
 
-  if (type === "terminal") {
+  if (type === "shell") {
     return (
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className={cls}>
-        <polyline points="3 11 6 8 3 5" />
-        <line x1="8" y1="11" x2="13" y2="11" />
+        <polyline points="2 5 5.5 8 2 11" />
+        <line x1="7" y1="11" x2="14" y2="11" />
       </svg>
     );
   }

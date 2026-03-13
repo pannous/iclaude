@@ -5,8 +5,8 @@ import { ToolBlock, ToolIcon, getToolIcon, getToolLabel, getPreview } from "./To
 // ─── getToolIcon ─────────────────────────────────────────────────────────────
 
 describe("getToolIcon", () => {
-  it("returns 'terminal' for Bash", () => {
-    expect(getToolIcon("Bash")).toBe("terminal");
+  it("returns 'shell' for Bash", () => {
+    expect(getToolIcon("Bash")).toBe("shell");
   });
 
   it("returns 'file' for Read", () => {
@@ -55,8 +55,8 @@ describe("getToolIcon", () => {
 // ─── getToolLabel ────────────────────────────────────────────────────────────
 
 describe("getToolLabel", () => {
-  it("returns 'Terminal' for Bash", () => {
-    expect(getToolLabel("Bash")).toBe("Terminal");
+  it("returns 'Shell' for Bash", () => {
+    expect(getToolLabel("Bash")).toBe("Shell");
   });
 
   it("returns 'Read File' for Read", () => {
@@ -162,8 +162,8 @@ describe("getPreview", () => {
 // ─── ToolIcon ────────────────────────────────────────────────────────────────
 
 describe("ToolIcon", () => {
-  it("renders an SVG for terminal type", () => {
-    const { container } = render(<ToolIcon type="terminal" />);
+  it("renders an SVG for shell type", () => {
+    const { container } = render(<ToolIcon type="shell" />);
     const svg = container.querySelector("svg");
     expect(svg).toBeTruthy();
     expect(svg?.querySelector("polyline")).toBeTruthy();
@@ -221,7 +221,7 @@ describe("ToolBlock", () => {
         toolUseId="tool-1"
       />
     );
-    expect(screen.getByText("Terminal")).toBeTruthy();
+    expect(screen.getByText("Shell")).toBeTruthy();
     // Preview text appears in the header button area
     const previewSpan = screen.getByText("echo hello");
     expect(previewSpan).toBeTruthy();
@@ -261,7 +261,7 @@ describe("ToolBlock", () => {
     );
 
     // Click the label text to expand (whole header row is clickable)
-    fireEvent.click(screen.getByText("Terminal"));
+    fireEvent.click(screen.getByText("Shell"));
 
     // After expanding, the detail area should be visible with a pre element
     const allLsLa = screen.getAllByText("ls -la");
@@ -281,11 +281,11 @@ describe("ToolBlock", () => {
     );
 
     // Click the label text to expand (whole header row is clickable)
-    fireEvent.click(screen.getByText("Terminal"));
+    fireEvent.click(screen.getByText("Shell"));
     expect(container.querySelector(".border-t")).toBeTruthy();
 
     // Collapse - click the label again
-    fireEvent.click(screen.getByText("Terminal"));
+    fireEvent.click(screen.getByText("Shell"));
     expect(container.querySelector(".border-t")).toBeNull();
   });
 
@@ -298,7 +298,7 @@ describe("ToolBlock", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("Terminal"));
+    fireEvent.click(screen.getByText("Shell"));
 
     // When expanded, the command appears in both the preview header and the code block.
     // Find the pre element containing the $ prefix.

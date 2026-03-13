@@ -943,7 +943,7 @@ export const useStore = create<AppState>((set) => ({
         id: `${opts.target}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         label: isDocker
           ? `Docker ${dockerIndex}`
-          : (hostIndex === 1 ? "Terminal" : `Terminal ${hostIndex}`),
+          : (hostIndex === 1 ? "Shell" : `Shell ${hostIndex}`),
         cwd: opts.cwd,
         containerId: opts.containerId,
       };

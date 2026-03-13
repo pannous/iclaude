@@ -592,7 +592,7 @@ export function Playground() {
             <Card label="Single tool running">
               <div className="flex items-center gap-1.5 text-[11px] text-cc-muted font-mono-code pl-9">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-cc-primary animate-pulse" />
-                <span>Terminal</span>
+                <span>Shell</span>
                 <span className="text-cc-muted/60">8s</span>
               </div>
             </Card>
@@ -2268,7 +2268,7 @@ function Card({
 
 function PlaygroundTerminalTabsMock() {
   const tabs = [
-    { id: "host", label: "Terminal", cwd: "/Users/demo/project" },
+    { id: "host", label: "Shell", cwd: "/Users/demo/project" },
     { id: "docker", label: "Docker", cwd: "/workspace" },
   ];
   const [active, setActive] = useState("host");

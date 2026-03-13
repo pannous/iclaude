@@ -12,7 +12,7 @@ export function TerminalPage() {
       <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-10 pb-safe h-full flex flex-col">
         <div className="flex items-start justify-between gap-3 mb-6 shrink-0">
           <div>
-            <h1 className="text-xl font-semibold text-cc-fg">Terminal</h1>
+            <h1 className="text-xl font-semibold text-cc-fg">Shell</h1>
             <p className="mt-1 text-sm text-cc-muted">
               Run shell commands in a project folder without leaving the Companion.
             </p>

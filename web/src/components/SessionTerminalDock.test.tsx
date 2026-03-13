@@ -28,7 +28,7 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
   storeState = {
     currentSessionId: "s1",
     quickTerminalOpen: true,
-    quickTerminalTabs: [{ id: "t1", label: "Terminal", cwd: "/repo" }],
+    quickTerminalTabs: [{ id: "t1", label: "Shell", cwd: "/repo" }],
     activeQuickTerminalTabId: "t1",
     quickTerminalPlacement: "left",
     setQuickTerminalOpen: vi.fn(),
@@ -76,7 +76,7 @@ describe("SessionTerminalDock", () => {
     );
 
     expect(screen.getByText("Session content")).toBeInTheDocument();
-    expect(screen.getByText("Terminal")).toBeInTheDocument();
+    expect(screen.getByText("Shell")).toBeInTheDocument();
     expect(screen.getByTestId("terminal-view")).toHaveTextContent("/repo");
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));

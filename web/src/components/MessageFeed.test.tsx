@@ -552,7 +552,7 @@ describe("MessageFeed - tool progress indicator", () => {
 
     render(<MessageFeed sessionId={sid} />);
 
-    expect(screen.getByText("Terminal")).toBeTruthy();
+    expect(screen.getByText("Shell")).toBeTruthy();
     expect(screen.getByText("Read File")).toBeTruthy();
     expect(screen.getByText("7s")).toBeTruthy();
     expect(screen.getByText("2s")).toBeTruthy();
@@ -636,7 +636,7 @@ describe("MessageFeed - tool-only message detection", () => {
     render(<MessageFeed sessionId={sid} />);
 
     expect(screen.getByText("Read File")).toBeTruthy();
-    expect(screen.getByText("Terminal")).toBeTruthy();
+    expect(screen.getByText("Shell")).toBeTruthy();
   });
 
   it("does not treat assistant messages with text as tool-only", () => {

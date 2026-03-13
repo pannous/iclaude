@@ -91,11 +91,11 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "terminal",
-    label: "Terminal",
-    shortLabel: "Term.",
+    label: "Shell",
+    shortLabel: "Shell",
     hash: "#/terminal",
     viewBox: "0 0 16 16",
-    iconPath: "M2 3a1 1 0 011-1h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm2 1.5l3 2.5-3 2.5V4.5zM8.5 10h3v1h-3v-1z",
+    iconPath: "M2 5l3.5 3L2 11M7 11h7",
   },
   {
     // LOCAL: moved from TopBar workspace tabs to sidebar nav

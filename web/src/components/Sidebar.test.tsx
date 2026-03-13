@@ -488,7 +488,7 @@ describe("Sidebar", () => {
 
   it("navigates to terminal page when Terminal is clicked", () => {
     render(<Sidebar />);
-    fireEvent.click(screen.getByTitle("Terminal"));
+    fireEvent.click(screen.getByTitle("Shell"));
     expect(window.location.hash).toBe("#/terminal");
   });
 
@@ -1523,7 +1523,7 @@ describe("Sidebar", () => {
     // Reset mocks from initial poll
     mockState.closeTerminal.mockClear();
 
-    fireEvent.click(screen.getByTitle("Terminal"));
+    fireEvent.click(screen.getByTitle("Shell"));
     expect(mockState.closeTerminal).not.toHaveBeenCalled();
   });
 
