@@ -68,6 +68,8 @@ interface MockStoreState {
   clearRecentlyRenamed: ReturnType<typeof vi.fn>;
   setSdkSessions: ReturnType<typeof vi.fn>;
   closeTerminal: ReturnType<typeof vi.fn>;
+  openTerminal: ReturnType<typeof vi.fn>;
+  terminalCwd: string | null;
   setActiveTab: ReturnType<typeof vi.fn>;
   setAllProjectsCollapsed: ReturnType<typeof vi.fn>;
   setFocusedFolder: ReturnType<typeof vi.fn>;
@@ -139,6 +141,8 @@ function createMockState(overrides: Partial<MockStoreState> = {}): MockStoreStat
     clearRecentlyRenamed: vi.fn(),
     setSdkSessions: vi.fn(),
     closeTerminal: vi.fn(),
+    openTerminal: vi.fn(),
+    terminalCwd: null,
     setActiveTab: vi.fn(),
     setAllProjectsCollapsed: vi.fn(),
     setFocusedFolder: vi.fn(),
@@ -1525,6 +1529,37 @@ describe("Sidebar", () => {
 
     fireEvent.click(screen.getByTitle("Shell"));
     expect(mockState.closeTerminal).not.toHaveBeenCalled();
+  });
+
+  it("clicking Shell auto-opens terminal with current session cwd", () => {
+    // When the user clicks Shell and has a session selected, the terminal
+    // should automatically open in that session's working directory.
+    const session = makeSession("s1");
+    mockState = createMockState({
+      sessions: new Map([["s1", session]]),
+      currentSessionId: "s1",
+      terminalCwd: null,
+    });
+
+    render(<Sidebar />);
+    fireEvent.click(screen.getByTitle("Shell"));
+
+    expect(mockState.openTerminal).toHaveBeenCalledWith("/home/user/projects/myapp");
+  });
+
+  it("clicking Shell does not override existing terminal cwd", () => {
+    // If the terminal already has a cwd set, clicking Shell should not change it.
+    const session = makeSession("s1");
+    mockState = createMockState({
+      sessions: new Map([["s1", session]]),
+      currentSessionId: "s1",
+      terminalCwd: "/some/other/folder",
+    });
+
+    render(<Sidebar />);
+    fireEvent.click(screen.getByTitle("Shell"));
+
+    expect(mockState.openTerminal).not.toHaveBeenCalled();
   });
 
   it("New Session button calls closeTerminal", () => {

@@ -943,6 +943,13 @@ export function Sidebar() {
                   if (item.id !== "terminal") {
                     useStore.getState().closeTerminal();
                   }
+                  if (item.id === "terminal") {
+                    const st = useStore.getState();
+                    const session = st.currentSessionId ? st.sessions.get(st.currentSessionId) : null;
+                    if (session?.cwd && !st.terminalCwd) {
+                      st.openTerminal(session.cwd);
+                    }
+                  }
                   window.location.hash = item.hash;
                   if (window.innerWidth < 768) {
                     useStore.getState().setSidebarOpen(false);

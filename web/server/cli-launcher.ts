@@ -640,6 +640,7 @@ export class CliLauncher {
       spawnEnv = {
         ...process.env,
         CLAUDECODE: undefined,
+        CI: "true",
         ...options.env,
         COMPANION_SESSION_ID: sessionId,
         COMPANION_PORT: String(this.port),

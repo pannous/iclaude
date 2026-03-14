@@ -982,8 +982,7 @@ export class WsBridge {
       message += `\n${stderrClean}`;
     }
     if (!stderrClean && exitCode !== 0) {
-      message += "\nThis may happen if the Anthropic privacy consent has not been accepted yet. " +
-        "Run `claude` in your terminal to complete the initial setup.";
+      message += "\nRun `claude` in your terminal to check for errors.";
     }
 
     this.broadcastToBrowsers(session, { type: "error", message });
