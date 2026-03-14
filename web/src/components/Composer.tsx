@@ -140,7 +140,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   // LOCAL: SDK session info needed for fork (cliSessionId) — only claude has fork support
   const sdkSession = useStore((s) => s.sdkSessions.find((sdk) => sdk.sessionId === sessionId));
   const [isForking, setIsForking] = useState(false);
-  const canFork = !isCodex && !!sdkSession?.cliSessionId && !isRunning && !isForking;
+  const canFork = !isCodex && !!sdkSession?.cliSessionId && !isForking;
 
   // Persist draft input to sessionStorage so it survives HMR / server restarts
   useEffect(() => {

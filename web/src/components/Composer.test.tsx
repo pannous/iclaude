@@ -775,13 +775,12 @@ describe("Composer fork button", () => {
     expect(screen.queryByTitle("Fork conversation into a new session")).toBeNull();
   });
 
-  it("hides fork button when session is running", () => {
-    // Even with cliSessionId, the fork button should not appear while the agent is running.
-    // Set up a running session with cliSessionId before rendering.
+  it("shows fork button even when session is running", () => {
+    // Fork should be available while the agent is working so users can branch off.
     setupMockStore({ sessionStatus: "running" });
     (mockStoreState.sdkSessions as Array<Record<string, unknown>>)[0].cliSessionId = "cli-abc";
     render(<Composer sessionId="s1" />);
-    expect(screen.queryByTitle("Fork conversation into a new session")).toBeNull();
+    expect(screen.queryByTitle("Fork conversation into a new session")).toBeTruthy();
   });
 
   it("calls createSessionStream with forkSession=true and navigates on click", async () => {
