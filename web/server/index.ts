@@ -21,19 +21,21 @@ import { containerManager } from "./container-manager.js";
 import { join } from "node:path";
 import { COMPANION_HOME } from "./paths.js";
 import { TerminalManager } from "./terminal-manager.js";
-import { generateSessionTitle } from "./auto-namer.js";
-import * as sessionNames from "./session-names.js";
-import { getSettings } from "./settings-manager.js";
 import { PRPoller } from "./pr-poller.js";
 import { RecorderManager } from "./recorder.js";
 import { CronScheduler } from "./cron-scheduler.js";
 import { AgentExecutor } from "./agent-executor.js";
+import { SessionOrchestrator } from "./session-orchestrator.js";
 import { migrateCronJobsToAgents } from "./agent-cron-migrator.js";
+import { migrateLinearCredentialsToAgents } from "./linear-credential-migration.js";
 import { authenticateManagedWebSocket } from "./ws-auth.js";
 import { LinearAgentBridge } from "./linear-agent-bridge.js";
 import { NoVncProxy } from "./novnc-proxy.js";
 
 import { TunnelManager, getTunnelPort } from "./tunnel-manager.js";
+import { getSettings } from "./settings-manager.js";
+import * as sessionNames from "./session-names.js";
+import { generateSessionTitle } from "./auto-namer.js";
 import QRCode from "qrcode";
 import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
 import { imagePullManager } from "./image-pull-manager.js";
@@ -65,6 +67,11 @@ const cronScheduler = new CronScheduler(launcher, wsBridge);
 const agentExecutor = new AgentExecutor(launcher, wsBridge);
 const tunnelManager = new TunnelManager();
 const linearAgentBridge = new LinearAgentBridge(agentExecutor, wsBridge);
+
+const orchestrator = new SessionOrchestrator({
+  launcher, wsBridge, sessionStore, worktreeTracker,
+  prPoller, agentExecutor,
+});
 
 // ── Cloud relay connection (for receiving webhooks behind a firewall) ────────
 // The relay forwards platform webhooks (e.g. GitHub, Slack) to the Companion
@@ -318,7 +325,7 @@ app.use("/*", async (c, next) => {
 });
 
 app.use("/api/*", cors());
-app.route("/api", createRoutes(launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, agentExecutor, tunnelManager, linearAgentBridge, port));
+app.route("/api", createRoutes(orchestrator, launcher, wsBridge, sessionStore, worktreeTracker, terminalManager, prPoller, recorder, cronScheduler, agentExecutor, tunnelManager, linearAgentBridge, port));
 
 // Universal Link handler: /auth?token=xxx
 // If Listen app is installed, iOS opens it directly (app reads the token from the URL).
@@ -627,6 +634,7 @@ cronScheduler.startAll();
 
 // ── Agent system ────────────────────────────────────────────────────────────
 migrateCronJobsToAgents();
+migrateLinearCredentialsToAgents();
 agentExecutor.startAll();
 
 // ── Image pull manager — pre-pull missing Docker images for environments ────
@@ -673,20 +681,3 @@ function gracefulShutdown() {
 process.on("SIGTERM", gracefulShutdown);
 process.on("SIGINT", gracefulShutdown);
 
-// ── Reconnection watchdog ────────────────────────────────────────────────────
-// After a server restart, restored CLI processes may not reconnect their
-// WebSocket. Give them a grace period, then kill + relaunch any that are
-// still in "starting" state (alive but no WS connection).
-const RECONNECT_GRACE_MS = Number(process.env.COMPANION_RECONNECT_GRACE_MS || "30000");
-const starting = launcher.getStartingSessions();
-if (starting.length > 0) {
-  console.log(`[server] Waiting ${RECONNECT_GRACE_MS / 1000}s for ${starting.length} CLI process(es) to reconnect...`);
-  setTimeout(async () => {
-    const stale = launcher.getStartingSessions();
-    for (const info of stale) {
-      if (info.archived) continue;
-      console.log(`[server] CLI for session ${info.sessionId} did not reconnect, relaunching...`);
-      await launcher.relaunch(info.sessionId);
-    }
-  }, RECONNECT_GRACE_MS);
-}

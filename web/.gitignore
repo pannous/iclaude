@@ -1,2 +1,3 @@
 platform/.env.example
 platform/.env.example
+*.orig

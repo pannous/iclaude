@@ -1,6 +1,6 @@
 {
   "name": "iclaude",
-  "version": "0.79.12",
+  "version": "0.80.1",
   "type": "module",
   "description": "Web UI for launching and interacting with Claude Code agents",
   "license": "MIT",

@@ -150,6 +150,7 @@ vi.mock("./settings-manager.js", () => ({
 }));
 
 const mockGetLinearIssue = vi.hoisted(() => vi.fn(() => undefined as any));
+const linkedIssue = { issueId: "i1", identifier: "ENG-1", connectionId: "c1" };
 vi.mock("./session-linear-issues.js", () => ({
   getLinearIssue: mockGetLinearIssue,
   setLinearIssue: vi.fn(),
@@ -369,9 +370,30 @@ function createMockTracker() {
   } as any;
 }
 
+function createMockOrchestrator() {
+  return {
+    createSession: vi.fn(async () => ({
+      ok: true,
+      session: { sessionId: "session-1", state: "starting", cwd: "/test", createdAt: Date.now() },
+    })),
+    createSessionStreaming: vi.fn(async () => ({
+      ok: true,
+      session: { sessionId: "session-1", state: "starting", cwd: "/test", createdAt: Date.now() },
+    })),
+    killSession: vi.fn(async () => ({ ok: true })),
+    relaunchSession: vi.fn(async () => ({ ok: true })),
+    deleteSession: vi.fn(async () => ({ ok: true })),
+    archiveSession: vi.fn(async () => ({ ok: true })),
+    unarchiveSession: vi.fn(() => ({ ok: true })),
+    clearAutoRelaunchCount: vi.fn(),
+    getSession: vi.fn(),
+  } as any;
+}
+
 // ─── Test setup ──────────────────────────────────────────────────────────────
 
 let app: Hono;
+let orchestrator: ReturnType<typeof createMockOrchestrator>;
 let launcher: ReturnType<typeof createMockLauncher>;
 let bridge: ReturnType<typeof createMockBridge>;
 let sessionStore: ReturnType<typeof createMockStore>;
@@ -390,13 +412,14 @@ beforeEach(() => {
   mockUpdateCheckerState.isServiceMode = false;
   mockUpdateCheckerState.checking = false;
   mockUpdateCheckerState.updateInProgress = false;
+  orchestrator = createMockOrchestrator();
   launcher = createMockLauncher();
   bridge = createMockBridge();
   sessionStore = createMockStore();
   tracker = createMockTracker();
   terminalManager = { getInfo: vi.fn(() => null), spawn: vi.fn(() => ""), kill: vi.fn() };
   app = new Hono();
-  app.route("/api", createRoutes(launcher, bridge, sessionStore, tracker, terminalManager as any));
+  app.route("/api", createRoutes(orchestrator, launcher, bridge, sessionStore, tracker, terminalManager as any));
 
   // Default: cwd paths "exist" so routes' cwd validation passes.
   // Use implementation so specific tests can still override with mockReturnValue/Once.
@@ -449,7 +472,16 @@ describe("POST /api/terminal/kill", () => {
 // ─── Sessions ────────────────────────────────────────────────────────────────
 
 describe("POST /api/sessions/create", () => {
-  it("launches a session and returns its info", async () => {
+  // Route delegates to orchestrator.createSession — detailed orchestration logic
+  // (env resolution, git ops, container creation, etc.) is tested in session-orchestrator.test.ts.
+  // Route tests verify correct delegation and HTTP response mapping.
+
+  it("delegates to orchestrator and returns session info on success", async () => {
+    orchestrator.createSession.mockResolvedValue({
+      ok: true,
+      session: { sessionId: "session-1", state: "starting", cwd: "/test", createdAt: Date.now() },
+    });
+
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -458,17 +490,13 @@ describe("POST /api/sessions/create", () => {
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json).toMatchObject({ sessionId: "session-1", state: "starting", cwd: TEST_CWD });
-    expect(launcher.launch).toHaveBeenCalledWith(
+    expect(json).toMatchObject({ sessionId: "session-1", state: "starting", cwd: "/test" });
+    expect(orchestrator.createSession).toHaveBeenCalledWith(
       expect.objectContaining({ model: "claude-sonnet-4-6", cwd: TEST_CWD }),
     );
   });
 
-  it("forwards resumeSessionId to launcher so the CLI spawns with --resume", async () => {
-    // When a user resumes a Claude session from the sidebar, the frontend passes
-    // resumeSessionId (the CLI's internal session ID from ~/.claude/projects/).
-    // This must reach launcher.launch() so the CLI can continue the conversation
-    // and loadCLIHistory() can retrieve the saved messages.
+  it("forwards resumeSessionId through to orchestrator", async () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -476,204 +504,56 @@ describe("POST /api/sessions/create", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(launcher.launch).toHaveBeenCalledWith(
+    expect(orchestrator.createSession).toHaveBeenCalledWith(
       expect.objectContaining({ resumeSessionId: "cli-session-abc" }),
     );
   });
 
-  it("passes launch branching controls through to launcher", async () => {
+  it("passes the full request body through to orchestrator", async () => {
+    const body = {
+      cwd: "/test",
+      resumeSessionAt: "  prior-session-123  ",
+      forkSession: true,
+      backend: "codex",
+      branch: "feat",
+      useWorktree: true,
+      envSlug: "production",
+      sandboxEnabled: true,
+      sandboxSlug: "my-sandbox",
+    };
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cwd: "/test",
-        resumeSessionAt: "  prior-session-123  ",
-        forkSession: true,
-      }),
+      body: JSON.stringify(body),
     });
 
     expect(res.status).toBe(200);
-    expect(launcher.launch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cwd: "/test",
-        resumeSessionAt: "prior-session-123",
-        forkSession: true,
-      }),
-    );
+    expect(orchestrator.createSession).toHaveBeenCalledWith(body);
   });
 
-  it("injects environment variables when envSlug is provided", async () => {
-    mockedEnvManager.getEnv.mockReturnValue({
-      name: "Production",
-      slug: "production",
-      variables: { API_KEY: "secret123", DB_HOST: "db.example.com" },
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "production" }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(envManager.getEnv).toHaveBeenCalledWith("production");
-    expect(launcher.launch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        env: { API_KEY: "secret123", DB_HOST: "db.example.com" },
-      }),
-    );
-  });
-
-  it("sets up a worktree when branch is specified", async () => {
-    const REPO = `${homedir()}/repo`;
-    mockedGitUtils.getRepoInfo.mockReturnValue({
-      repoRoot: REPO,
-      repoName: "my-repo",
-      currentBranch: "main",
-      defaultBranch: "main",
-      isWorktree: false,
-    });
-    mockedGitUtils.ensureWorktree.mockReturnValue({
-      worktreePath: `${homedir()}/.companion/worktrees/my-repo/feat-branch`,
-      branch: "feat-branch",
-      actualBranch: "feat-branch",
-      isNew: true,
+  it("returns error status from orchestrator on failure", async () => {
+    orchestrator.createSession.mockResolvedValue({
+      ok: false,
+      error: "Invalid backend: invalid-backend",
+      status: 400,
     });
 
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: REPO, branch: "feat-branch", useWorktree: true }),
+      body: JSON.stringify({ cwd: "/test", backend: "invalid-backend" }),
     });
 
-    expect(res.status).toBe(200);
-    expect(gitUtils.getRepoInfo).toHaveBeenCalledWith(REPO);
-    expect(gitUtils.ensureWorktree).toHaveBeenCalledWith(REPO, "feat-branch", {
-      baseBranch: "main",
-      createBranch: undefined,
-      forceNew: true,
-    });
-    expect(launcher.launch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cwd: `${homedir()}/.companion/worktrees/my-repo/feat-branch`,
-      }),
-    );
-    expect(tracker.addMapping).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: "session-1",
-        repoRoot: REPO,
-        branch: "feat-branch",
-        actualBranch: "feat-branch",
-      }),
-    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toContain("Invalid backend");
   });
 
-
-  it("fetches and pulls before create when branch matches current branch", async () => {
-    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
-      repoRoot: TEST_CWD,
-      repoName: "my-repo",
-      currentBranch: "main",
-      defaultBranch: "main",
-      isWorktree: false,
-    });
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, branch: "main" }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(gitUtils.gitFetch).toHaveBeenCalledWith(TEST_CWD);
-    expect(gitUtils.checkoutOrCreateBranch).not.toHaveBeenCalled();
-    expect(gitUtils.gitPull).toHaveBeenCalledWith(TEST_CWD);
-  });
-
-  it("fetches, checks out selected branch, then pulls before create", async () => {
-    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
-      repoRoot: TEST_CWD,
-      repoName: "my-repo",
-      currentBranch: "develop",
-      defaultBranch: "main",
-      isWorktree: false,
-    });
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, branch: "main" }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(gitUtils.gitFetch).toHaveBeenCalledWith(TEST_CWD);
-    expect(gitUtils.checkoutOrCreateBranch).toHaveBeenCalledWith(TEST_CWD, "main", {
-      createBranch: undefined,
-      defaultBranch: "main",
-    });
-    expect(gitUtils.gitPull).toHaveBeenCalledWith(TEST_CWD);
-    expect(vi.mocked(gitUtils.gitFetch).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(gitUtils.checkoutOrCreateBranch).mock.invocationCallOrder[0],
-    );
-    expect(vi.mocked(gitUtils.checkoutOrCreateBranch).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(gitUtils.gitPull).mock.invocationCallOrder[0],
-    );
-  });
-
-  it("proceeds with session creation when fetch fails (non-fatal)", async () => {
-    // git fetch failure should not block session creation — the user may be
-    // offline or have SSH key issues, but still wants to work locally.
-    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
-      repoRoot: TEST_CWD,
-      repoName: "my-repo",
-      currentBranch: "main",
-      defaultBranch: "main",
-      isWorktree: false,
-    });
-    vi.mocked(gitUtils.gitFetch).mockReturnValueOnce({
-      success: false,
-      output: "network error",
-    });
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, branch: "main" }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(launcher.launch).toHaveBeenCalled();
-  });
-
-  it("proceeds with session creation when pull fails (non-fatal)", async () => {
-    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
-      repoRoot: TEST_CWD,
-      repoName: "my-repo",
-      currentBranch: "main",
-      defaultBranch: "main",
-      isWorktree: false,
-    });
-    vi.mocked(gitUtils.gitPull).mockReturnValueOnce({
-      success: false,
-      output: "no tracking information",
-    });
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, branch: "main" }),
-    });
-
-    // Pull failure is non-fatal — session should still be created
-    expect(res.status).toBe(200);
-    expect(launcher.launch).toHaveBeenCalled();
-  });
-
-  it("returns 500 when launch throws an error", async () => {
-    launcher.launch.mockImplementation(() => {
-      throw new Error("CLI binary not found");
+  it("returns 500 status from orchestrator on internal errors", async () => {
+    orchestrator.createSession.mockResolvedValue({
+      ok: false,
+      error: "CLI binary not found",
+      status: 500,
     });
 
     const res = await app.request("/api/sessions/create", {
@@ -684,597 +564,37 @@ describe("POST /api/sessions/create", () => {
 
     expect(res.status).toBe(500);
     const json = await res.json();
-    expect(json).toEqual({ error: "CLI binary not found" });
+    expect(json.error).toContain("CLI binary not found");
   });
 
-  it("returns 400 for invalid backend values", async () => {
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: `${homedir()}/test`, backend: "invalid-backend" }),
-    });
-
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toContain("Invalid backend");
-    expect(launcher.launch).not.toHaveBeenCalled();
-  });
-
-  it("sets up a worktree when useWorktree and branch are specified", async () => {
-    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
-      repoRoot: "/repo",
-      repoName: "my-repo",
-      currentBranch: "main",
-      defaultBranch: "main",
-      isWorktree: false,
-    });
-    vi.mocked(gitUtils.ensureWorktree).mockReturnValue({
-      worktreePath: "/home/.companion/worktrees/my-repo/feat-branch",
-      branch: "feat-branch",
-      actualBranch: "feat-branch",
-      isNew: true,
+  it("returns 503 from orchestrator on container startup failure", async () => {
+    orchestrator.createSession.mockResolvedValue({
+      ok: false,
+      error: "Docker is required but container startup failed",
+      status: 503,
     });
 
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/repo", branch: "feat-branch", useWorktree: true }),
-    });
-
-    expect(res.status).toBe(200);
-    // gitFetch should be called before ensureWorktree to refresh remote refs
-    expect(gitUtils.gitFetch).toHaveBeenCalledWith("/repo");
-    // ensureWorktree should be called with forceNew: true
-    expect(gitUtils.ensureWorktree).toHaveBeenCalledWith("/repo", "feat-branch", {
-      baseBranch: "main",
-      createBranch: undefined,
-      forceNew: true,
-    });
-    // gitFetch must be called before ensureWorktree
-    const fetchOrder = vi.mocked(gitUtils.gitFetch).mock.invocationCallOrder[0];
-    const worktreeOrder = vi.mocked(gitUtils.ensureWorktree).mock.invocationCallOrder[0];
-    expect(fetchOrder).toBeLessThan(worktreeOrder);
-    // launcher should receive the worktree path as cwd
-    expect(launcher.launch).toHaveBeenCalled();
-    const launchOpts = launcher.launch.mock.calls[0][0];
-    expect(launchOpts.cwd).toBe("/home/.companion/worktrees/my-repo/feat-branch");
-    // Worktree mapping should be tracked
-    expect(tracker.addMapping).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: "session-1",
-        repoRoot: "/repo",
-        branch: "feat-branch",
-        actualBranch: "feat-branch",
-        worktreePath: "/home/.companion/worktrees/my-repo/feat-branch",
-      }),
-    );
-  });
-
-  it("returns 503 when sandbox has Docker image but container startup fails", async () => {
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "Companion",
-      slug: "companion",
-      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "iclaude:latest",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "Companion",
-      slug: "companion",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
-    vi.spyOn(containerManager, "createContainer").mockImplementationOnce(() => {
-      throw new Error("docker daemon timeout");
-    });
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "companion", sandboxEnabled: true, sandboxSlug: "companion" }),
+      body: JSON.stringify({ cwd: "/test", sandboxEnabled: true }),
     });
 
     expect(res.status).toBe(503);
     const json = await res.json();
     expect(json.error).toContain("Docker is required");
-    expect(json.error).toContain("container startup failed");
-    expect(launcher.launch).not.toHaveBeenCalled();
   });
 
-  it("returns 400 when containerized Codex session lacks auth", async () => {
-    // Codex in containers needs OPENAI_API_KEY or ~/.codex/auth.json.
-    // Auth check runs before image resolution so no need to mock imageExists.
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "Codex Docker",
-      slug: "codex-docker",
-      variables: {},
-      baseImage: "iclaude:latest",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "Codex Docker",
-      slug: "codex-docker",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-
+  it("handles empty request body gracefully", async () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test", envSlug: "codex-docker", sandboxEnabled: true, sandboxSlug: "codex-docker", backend: "codex" }),
+      body: "not-json",
     });
 
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toContain("Containerized Codex requires auth");
-    expect(json.error).toContain("OPENAI_API_KEY");
-    expect(launcher.launch).not.toHaveBeenCalled();
-  });
-
-  it("allows containerized Codex when OPENAI_API_KEY is provided", async () => {
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "Codex Docker",
-      slug: "codex-docker",
-      variables: { OPENAI_API_KEY: "sk-test" },
-      baseImage: "iclaude:latest",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "Codex Docker",
-      slug: "codex-docker",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
-    const createSpy = vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-codex",
-      name: "companion-codex",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/test",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test", envSlug: "codex-docker", sandboxEnabled: true, sandboxSlug: "codex-docker", backend: "codex" }),
-    });
-
+    // Route catches JSON parse errors and defaults to {}
     expect(res.status).toBe(200);
-    const config = createSpy.mock.calls[0][2];
-    expect(config.ports).toContain(4502);
-    expect(launcher.launch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        backendType: "codex",
-        containerId: "cid-codex",
-        containerCwd: "/workspace",
-      }),
-    );
-  });
-
-  it("always exposes VS Code editor port on new containers", async () => {
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "Companion",
-      slug: "companion",
-      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "iclaude:latest",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "Companion",
-      slug: "companion",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    const createSpy = vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-vscode",
-      name: "companion-vscode",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/test",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test", envSlug: "companion", sandboxEnabled: true, sandboxSlug: "companion", container: { ports: [3000] } }),
-    });
-
-    expect(res.status).toBe(200);
-    const config = createSpy.mock.calls[0][2];
-    expect(config.ports).toContain(3000);
-    expect(config.ports).toContain(13337);
-  });
-
-  it("waits for background pull when image is not ready", async () => {
-    // imagePullManager reports the image is not ready initially,
-    // but waitForReady resolves to true (background pull succeeds).
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "Companion",
-      slug: "companion",
-      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "iclaude:latest",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "Companion",
-      slug: "companion",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    mockImagePullIsReady.mockReturnValue(false);
-    mockImagePullGetState.mockReturnValue({
-      image: "iclaude:latest",
-      status: "idle" as const,
-      progress: [],
-    });
-    mockImagePullWaitForReady.mockResolvedValue(true);
-    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-1",
-      name: "companion-temp",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/test",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "companion" , sandboxEnabled: true, sandboxSlug: "companion" }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(mockImagePullEnsureImage).toHaveBeenCalledWith("iclaude:latest");
-    expect(mockImagePullWaitForReady).toHaveBeenCalled();
-    expect(launcher.launch).toHaveBeenCalled();
-  });
-
-  it("runs init script before launching CLI when sandbox has initScript", async () => {
-    // Sandbox with initScript and Docker image
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "WithInit",
-      slug: "with-init",
-      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "iclaude:latest",
-      initScript: "bun install && pip install -r requirements.txt",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "WithInit",
-      slug: "with-init",
-      initScript: "bun install && pip install -r requirements.txt",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
-    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-init",
-      name: "companion-init",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/test",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
-    const execAsyncSpy = vi.spyOn(containerManager, "execInContainerAsync")
-      .mockResolvedValueOnce({ exitCode: 0, output: "installed!" });
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "with-init" , sandboxEnabled: true, sandboxSlug: "with-init" }),
-    });
-
-    expect(res.status).toBe(200);
-    // Init script should have been executed
-    expect(execAsyncSpy).toHaveBeenCalledWith(
-      "cid-init",
-      ["sh", "-lc", "bun install && pip install -r requirements.txt"],
-      expect.objectContaining({ timeout: expect.any(Number) }),
-    );
-    // CLI should have been launched after init script
-    expect(launcher.launch).toHaveBeenCalled();
-  });
-
-  it("returns 503 and cleans up container when init script fails", async () => {
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "FailInit",
-      slug: "fail-init",
-      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "iclaude:latest",
-      initScript: "exit 1",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "FailInit",
-      slug: "fail-init",
-      initScript: "exit 1",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
-    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-fail",
-      name: "companion-fail",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/test",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    const removeSpy = vi.spyOn(containerManager, "removeContainer").mockImplementation(() => {});
-    vi.spyOn(containerManager, "execInContainerAsync")
-      .mockResolvedValueOnce({ exitCode: 1, output: "npm ERR! missing script" });
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "fail-init" , sandboxEnabled: true, sandboxSlug: "fail-init" }),
-    });
-
-    expect(res.status).toBe(503);
-    const json = await res.json();
-    expect(json.error).toContain("Init script failed");
-    // Container should be cleaned up
-    expect(removeSpy).toHaveBeenCalled();
-    // CLI should NOT have been launched
-    expect(launcher.launch).not.toHaveBeenCalled();
-  });
-
-
-  it("skips host git ops for Docker sessions and runs them in container instead", async () => {
-    // THE-189: git fetch/checkout/pull should happen inside the container, not on the host.
-    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
-      repoRoot: "/repo",
-      repoName: "my-repo",
-      currentBranch: "main",
-      defaultBranch: "main",
-      isWorktree: false,
-    } as any);
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "iclaude:latest",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-git",
-      name: "companion-git",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/repo",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
-    const gitOpsSpy = vi.spyOn(containerManager, "gitOpsInContainer").mockReturnValueOnce({
-      fetchOk: true,
-      checkoutOk: true,
-      pullOk: true,
-      errors: [],
-    });
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/repo", branch: "feat/new", envSlug: "docker", sandboxEnabled: true, sandboxSlug: "docker" }),
-    });
-
-    expect(res.status).toBe(200);
-    // Host git ops should NOT have been called
-    expect(gitUtils.gitFetch).not.toHaveBeenCalled();
-    expect(gitUtils.checkoutOrCreateBranch).not.toHaveBeenCalled();
-    expect(gitUtils.gitPull).not.toHaveBeenCalled();
-    // In-container git ops SHOULD have been called
-    expect(gitOpsSpy).toHaveBeenCalledWith("cid-git", expect.objectContaining({
-      branch: "feat/new",
-      currentBranch: "main",
-    }));
-  });
-
-  it("does not call gitOpsInContainer for Docker sessions without a branch", async () => {
-    // When no branch is specified, no git ops at all (host or container).
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "iclaude:latest",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-nobranch",
-      name: "companion-nobranch",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/test",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
-    const gitOpsSpy = vi.spyOn(containerManager, "gitOpsInContainer");
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test", envSlug: "docker", sandboxEnabled: true, sandboxSlug: "docker" }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(gitOpsSpy).not.toHaveBeenCalled();
-  });
-
-  it("returns 400 and cleans up container when in-container checkout fails", async () => {
-    // THE-189: checkout failure inside container should clean up and return error.
-    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
-      repoRoot: "/repo",
-      repoName: "my-repo",
-      currentBranch: "main",
-      defaultBranch: "main",
-      isWorktree: false,
-    } as any);
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "iclaude:latest",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-failcheckout",
-      name: "companion-failcheckout",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/repo",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    const removeSpy = vi.spyOn(containerManager, "removeContainer").mockImplementation(() => {});
-    vi.spyOn(containerManager, "gitOpsInContainer").mockReturnValueOnce({
-      fetchOk: true,
-      checkoutOk: false,
-      pullOk: false,
-      errors: ['checkout: branch "nonexistent" does not exist'],
-    });
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/repo", branch: "nonexistent", envSlug: "docker", sandboxEnabled: true, sandboxSlug: "docker" }),
-    });
-
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toContain("Failed to checkout branch");
-    expect(removeSpy).toHaveBeenCalled();
-    expect(launcher.launch).not.toHaveBeenCalled();
-  });
-
-  it("passes resumeSessionAt and forkSession to launcher when provided", async () => {
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cwd: "/test",
-        resumeSessionAt: "existing-session-id",
-        forkSession: true,
-      }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(launcher.launch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resumeSessionAt: "existing-session-id",
-        forkSession: true,
-      }),
-    );
-  });
-
-  it("passes resumeSessionAt without forkSession when only resumeSessionAt is provided", async () => {
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cwd: "/test",
-        resumeSessionAt: "existing-session-id",
-      }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(launcher.launch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resumeSessionAt: "existing-session-id",
-        forkSession: false,
-      }),
-    );
-  });
-
-  it("uses iclaude:latest when sandboxEnabled is true but no sandboxSlug is provided", async () => {
-    // Validates the default image fallback path: when sandboxEnabled is true
-    // but no sandboxSlug is given, the route should use "iclaude:latest"
-    // as the effectiveImage without calling sandboxManager.getSandbox or
-    // since there is no sandbox to look up.
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "my-env",
-      slug: "my-env",
-      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
-    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-default",
-      name: "companion-default",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/test",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
-
-    const res = await app.request("/api/sessions/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test", envSlug: "my-env", sandboxEnabled: true }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(launcher.launch).toHaveBeenCalled();
-
-    // sandboxManager.getSandbox should NOT be called because no sandboxSlug was provided.
-    // The route only calls getSandbox when body.sandboxSlug is truthy.
-    expect(sandboxManager.getSandbox).not.toHaveBeenCalled();
-
-    // The container should have been created with the default base image
-    const createContainerCall = vi.mocked(containerManager.createContainer).mock.calls[0];
-    expect(createContainerCall[2].image).toBe("iclaude:latest");
+    expect(orchestrator.createSession).toHaveBeenCalledWith({});
   });
 });
 
@@ -1286,7 +606,7 @@ describe("POST /api/sessions/create", () => {
 // called — so resumed sessions showed an empty chat.
 
 describe("POST /api/sessions/create — resume", () => {
-  it("forwards resumeSessionId to the launcher so the CLI spawns with --resume", async () => {
+  it("forwards resumeSessionId through to orchestrator", async () => {
     const CLI_SESSION_ID = "4d98bb8e-4aeb-4b21-8d94-328482b38f61";
 
     const res = await app.request("/api/sessions/create", {
@@ -1296,15 +616,8 @@ describe("POST /api/sessions/create — resume", () => {
     });
 
     expect(res.status).toBe(200);
-    // The launcher must receive resumeSessionId so it can set info.cliSessionId
-    // and pass --resume <id> to the CLI process.
-    expect(launcher.launch).toHaveBeenCalledWith(
+    expect(orchestrator.createSession).toHaveBeenCalledWith(
       expect.objectContaining({ resumeSessionId: CLI_SESSION_ID, cwd: TEST_CWD }),
-    );
-    // The bridge must be told to pre-load CLI history so the browser sees messages
-    // immediately, before system.init arrives from the CLI.
-    expect(bridge.initializeResumedSession).toHaveBeenCalledWith(
-      "session-1", CLI_SESSION_ID, TEST_CWD,
     );
   });
 
@@ -1316,16 +629,13 @@ describe("POST /api/sessions/create — resume", () => {
     });
 
     expect(res.status).toBe(200);
-    // resumeSessionId must be undefined/absent so the CLI starts a fresh session
-    const call = launcher.launch.mock.calls[0][0];
+    const call = orchestrator.createSession.mock.calls[0][0];
     expect(call.resumeSessionId).toBeUndefined();
-    // No history pre-loading for fresh sessions
-    expect(bridge.initializeResumedSession).not.toHaveBeenCalled();
   });
 });
 
 describe("POST /api/sessions/create-stream — resume", () => {
-  it("forwards resumeSessionId to the launcher via the streaming route", async () => {
+  it("forwards resumeSessionId through to orchestrator via the streaming route", async () => {
     const CLI_SESSION_ID = "4d98bb8e-0000-0000-0000-000000000001";
 
     const res = await app.request("/api/sessions/create-stream", {
@@ -1336,19 +646,14 @@ describe("POST /api/sessions/create-stream — resume", () => {
 
     expect(res.status).toBe(200);
     const events = await parseSSE(res);
-    // Session must be created successfully
     const doneEvent = events.find((e) => e.event === "done");
     expect(doneEvent).toBeDefined();
 
-    expect(launcher.launch).toHaveBeenCalledWith(
+    expect(orchestrator.createSessionStreaming).toHaveBeenCalledWith(
       expect.objectContaining({ resumeSessionId: CLI_SESSION_ID, cwd: TEST_CWD }),
-    );
-    // Same history pre-loading for streaming path
-    expect(bridge.initializeResumedSession).toHaveBeenCalledWith(
-      "session-1", CLI_SESSION_ID, TEST_CWD,
+      expect.any(Function),
     );
   });
-
 });
 
 describe("GET /api/sessions", () => {
@@ -1687,18 +992,18 @@ describe("POST /api/sessions/:id/editor/start", () => {
 
 describe("POST /api/sessions/:id/kill", () => {
   it("returns ok when session is killed", async () => {
-    launcher.kill.mockResolvedValue(true);
+    orchestrator.killSession.mockResolvedValue({ ok: true });
 
     const res = await app.request("/api/sessions/s1/kill", { method: "POST" });
 
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({ ok: true });
-    expect(launcher.kill).toHaveBeenCalledWith("s1");
+    expect(orchestrator.killSession).toHaveBeenCalledWith("s1");
   });
 
   it("returns 404 when session not found", async () => {
-    launcher.kill.mockResolvedValue(false);
+    orchestrator.killSession.mockResolvedValue({ ok: false });
 
     const res = await app.request("/api/sessions/nonexistent/kill", { method: "POST" });
 
@@ -1710,18 +1015,18 @@ describe("POST /api/sessions/:id/kill", () => {
 
 describe("POST /api/sessions/:id/relaunch", () => {
   it("returns ok when session is relaunched", async () => {
-    launcher.relaunch.mockResolvedValue({ ok: true });
+    orchestrator.relaunchSession.mockResolvedValue({ ok: true });
 
     const res = await app.request("/api/sessions/s1/relaunch", { method: "POST" });
 
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({ ok: true });
-    expect(launcher.relaunch).toHaveBeenCalledWith("s1");
+    expect(orchestrator.relaunchSession).toHaveBeenCalledWith("s1");
   });
 
   it("returns 503 with error when container is missing", async () => {
-    launcher.relaunch.mockResolvedValue({
+    orchestrator.relaunchSession.mockResolvedValue({
       ok: false,
       error: 'Container "companion-gone" was removed externally. Please create a new session.',
     });
@@ -1734,7 +1039,7 @@ describe("POST /api/sessions/:id/relaunch", () => {
   });
 
   it("returns 404 when session not found via relaunch", async () => {
-    launcher.relaunch.mockResolvedValue({ ok: false, error: "Session not found" });
+    orchestrator.relaunchSession.mockResolvedValue({ ok: false, error: "Session not found" });
 
     const res = await app.request("/api/sessions/nonexistent/relaunch", { method: "POST" });
 
@@ -1814,28 +1119,25 @@ describe("GET /api/sessions/:id/processes/system", () => {
 });
 
 describe("DELETE /api/sessions/:id", () => {
-  it("kills, removes, and closes session", async () => {
+  // Route delegates to orchestrator.deleteSession — detailed cleanup logic
+  // (kill, container removal, worktree, etc.) is tested in session-orchestrator.test.ts
+
+  it("delegates to orchestrator and returns ok", async () => {
+    orchestrator.deleteSession.mockResolvedValue({ ok: true });
+
     const res = await app.request("/api/sessions/s1", { method: "DELETE" });
 
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toMatchObject({ ok: true });
-    expect(launcher.kill).toHaveBeenCalledWith("s1");
-    expect(launcher.removeSession).toHaveBeenCalledWith("s1");
-    expect(bridge.closeSession).toHaveBeenCalledWith("s1");
+    expect(orchestrator.deleteSession).toHaveBeenCalledWith("s1");
   });
 
-  it("kills, removes, cleans up worktree, and closes session", async () => {
-    tracker.getBySession.mockReturnValue({
-      sessionId: "s1",
-      repoRoot: "/repo",
-      branch: "feat",
-      worktreePath: "/wt/feat",
-      createdAt: 1000,
+  it("returns worktree info from orchestrator result", async () => {
+    orchestrator.deleteSession.mockResolvedValue({
+      ok: true,
+      worktree: { cleaned: true, path: "/wt/feat" },
     });
-    tracker.isWorktreeInUse.mockReturnValue(false);
-    mockedGitUtils.isWorktreeDirty.mockReturnValue(false);
-    mockedGitUtils.removeWorktree.mockReturnValue({ removed: true });
 
     const res = await app.request("/api/sessions/s1", { method: "DELETE" });
 
@@ -1843,41 +1145,17 @@ describe("DELETE /api/sessions/:id", () => {
     const json = await res.json();
     expect(json).toMatchObject({ ok: true });
     expect(json.worktree).toMatchObject({ cleaned: true, path: "/wt/feat" });
-    expect(launcher.kill).toHaveBeenCalledWith("s1");
-    expect(launcher.removeSession).toHaveBeenCalledWith("s1");
-    expect(bridge.closeSession).toHaveBeenCalledWith("s1");
-    expect(tracker.removeBySession).toHaveBeenCalledWith("s1");
-    expect(gitUtils.removeWorktree).toHaveBeenCalledWith("/repo", "/wt/feat", {
-      force: false,
-      branchToDelete: undefined,
-    });
-  });
-
-  it("passes branchToDelete when actualBranch differs from branch", async () => {
-    tracker.getBySession.mockReturnValue({
-      sessionId: "s1",
-      repoRoot: "/repo",
-      branch: "feat",
-      actualBranch: "feat-wt-1234",
-      worktreePath: "/wt/feat",
-      createdAt: 1000,
-    });
-    tracker.isWorktreeInUse.mockReturnValue(false);
-    mockedGitUtils.isWorktreeDirty.mockReturnValue(false);
-    mockedGitUtils.removeWorktree.mockReturnValue({ removed: true });
-
-    const res = await app.request("/api/sessions/s1", { method: "DELETE" });
-
-    expect(res.status).toBe(200);
-    expect(gitUtils.removeWorktree).toHaveBeenCalledWith("/repo", "/wt/feat", {
-      force: false,
-      branchToDelete: "feat-wt-1234",
-    });
+    expect(orchestrator.deleteSession).toHaveBeenCalledWith("s1");
   });
 });
 
 describe("POST /api/sessions/:id/archive", () => {
-  it("kills and archives the session", async () => {
+  // Route delegates to orchestrator.archiveSession — detailed cleanup logic
+  // (kill, container, worktree, Linear transition) is tested in session-orchestrator.test.ts
+
+  it("delegates to orchestrator and returns ok", async () => {
+    orchestrator.archiveSession.mockResolvedValue({ ok: true });
+
     const res = await app.request("/api/sessions/s1/archive", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1887,87 +1165,52 @@ describe("POST /api/sessions/:id/archive", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toMatchObject({ ok: true });
-    expect(launcher.kill).toHaveBeenCalledWith("s1");
-    expect(launcher.setArchived).toHaveBeenCalledWith("s1", true);
-    expect(sessionStore.setArchived).toHaveBeenCalledWith("s1", true);
+    expect(orchestrator.archiveSession).toHaveBeenCalledWith("s1", {
+      force: undefined,
+      linearTransition: undefined,
+    });
   });
 });
 
 describe("POST /api/sessions/:id/archive — Linear transition", () => {
-  const linkedIssue = {
-    id: "issue-1",
-    identifier: "ENG-42",
-    title: "Test issue",
-    description: "",
-    url: "https://linear.app/eng/issue/ENG-42",
-    branchName: "eng-42",
-    priorityLabel: "High",
-    stateName: "In Progress",
-    stateType: "started",
-    teamName: "Engineering",
-    teamKey: "ENG",
-    teamId: "team-1",
-  };
+  // Route delegates to orchestrator.archiveSession — detailed Linear transition logic
+  // is tested in session-orchestrator.test.ts. Route tests verify correct delegation.
 
-  it("archives without transition when no linked issue", async () => {
-    mockGetLinearIssue.mockReturnValue(undefined);
+  it("passes linearTransition option to orchestrator", async () => {
+    orchestrator.archiveSession.mockResolvedValue({ ok: true });
     const res = await app.request("/api/sessions/s1/archive", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ linearTransition: "backlog" }),
     });
     expect(res.status).toBe(200);
-    const json = await res.json();
-    expect(json.ok).toBe(true);
-    expect(json.linearTransition).toBeUndefined();
-    expect(mockTransitionLinearIssue).not.toHaveBeenCalled();
+    expect(orchestrator.archiveSession).toHaveBeenCalledWith("s1", {
+      force: undefined,
+      linearTransition: "backlog",
+    });
   });
 
-  it("archives without transition when linearTransition is none", async () => {
-    mockGetLinearIssue.mockReturnValue(linkedIssue);
+  it("passes force option to orchestrator", async () => {
+    orchestrator.archiveSession.mockResolvedValue({ ok: true });
     const res = await app.request("/api/sessions/s1/archive", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ linearTransition: "none" }),
+      body: JSON.stringify({ force: true, linearTransition: "configured" }),
     });
     expect(res.status).toBe(200);
-    expect(mockTransitionLinearIssue).not.toHaveBeenCalled();
+    expect(orchestrator.archiveSession).toHaveBeenCalledWith("s1", {
+      force: true,
+      linearTransition: "configured",
+    });
   });
 
-  it("transitions to backlog when linearTransition is backlog", async () => {
-    mockGetLinearIssue.mockReturnValue(linkedIssue);
-    vi.mocked(settingsManager.getSettings).mockReturnValue({
-      authEnabled: true,
-      anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4-6",
-      openaiApiKey: "",
-      openrouterApiKey: "",
-      linearApiKey: "lin_test_key",
-      linearAutoTransition: false,
-      linearAutoTransitionStateId: "",
-      linearAutoTransitionStateName: "",
-      linearArchiveTransition: false,
-      linearArchiveTransitionStateId: "",
-      linearArchiveTransitionStateName: "",
-      linearOAuthClientId: "",
-      linearOAuthClientSecret: "",
-      linearOAuthWebhookSecret: "",
-      linearOAuthAccessToken: "",
-      linearOAuthRefreshToken: "",
-      editorTabEnabled: false,
-      tunnelEnabled: false,
-      tunnelMode: "quick",
-      tunnelId: "",
-      tunnelHostname: "",
-      tunnelCredentialsPath: "",
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: true,
-      aiProvider: "openrouter",
-      publicUrl: "",
-      updateChannel: "stable",
-      dockerAutoUpdate: false,
-      updatedAt: 0,
+  it("returns linearTransition result from orchestrator", async () => {
+    orchestrator.archiveSession.mockResolvedValue({
+      ok: true,
+      linearTransition: {
+        ok: true,
+        issue: { id: "i1", identifier: "ENG-1", stateName: "Backlog", stateType: "backlog" },
+      },
     });
     const res = await app.request("/api/sessions/s1/archive", {
       method: "POST",
@@ -1977,94 +1220,15 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.ok).toBe(true);
-    // Should have resolved backlog state from team states (uses resolveApiKey)
-    expect(mockFetchLinearTeamStates).toHaveBeenCalledWith("lin_api_123");
-    expect(mockTransitionLinearIssue).toHaveBeenCalledWith("issue-1", "state-backlog", "lin_api_123", "test-conn");
-    expect(json.linearTransition).toBeDefined();
     expect(json.linearTransition.ok).toBe(true);
-    // Session should still be archived
-    expect(launcher.setArchived).toHaveBeenCalledWith("s1", true);
   });
 
-  it("transitions to configured state when linearTransition is configured", async () => {
-    mockGetLinearIssue.mockReturnValue(linkedIssue);
-    vi.mocked(settingsManager.getSettings).mockReturnValue({
-      authEnabled: true,
-      anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4-6",
-      openaiApiKey: "",
-      openrouterApiKey: "",
-      linearApiKey: "lin_test_key",
-      linearAutoTransition: false,
-      linearAutoTransitionStateId: "",
-      linearAutoTransitionStateName: "",
-      linearArchiveTransition: true,
-      linearArchiveTransitionStateId: "state-custom",
-      linearArchiveTransitionStateName: "Review",
-      linearOAuthClientId: "",
-      linearOAuthClientSecret: "",
-      linearOAuthWebhookSecret: "",
-      linearOAuthAccessToken: "",
-      linearOAuthRefreshToken: "",
-      editorTabEnabled: false,
-      tunnelEnabled: false,
-      tunnelMode: "quick",
-      tunnelId: "",
-      tunnelHostname: "",
-      tunnelCredentialsPath: "",
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: true,
-      aiProvider: "openrouter",
-      publicUrl: "",
-      updateChannel: "stable",
-      dockerAutoUpdate: false,
-      updatedAt: 0,
-    });
-    const res = await app.request("/api/sessions/s1/archive", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ linearTransition: "configured" }),
-    });
-    expect(res.status).toBe(200);
-    expect(mockTransitionLinearIssue).toHaveBeenCalledWith("issue-1", "state-custom", "lin_api_123", "test-conn");
-  });
+  // "transitions to backlog" test removed — archive logic now in SessionOrchestrator
 
-  it("archives successfully even when transition fails", async () => {
-    mockGetLinearIssue.mockReturnValue(linkedIssue);
-    mockTransitionLinearIssue.mockResolvedValue({ ok: false, error: "Linear API error" });
-    vi.mocked(settingsManager.getSettings).mockReturnValue({
-      authEnabled: true,
-      anthropicApiKey: "",
-      anthropicModel: "claude-sonnet-4-6",
-      openaiApiKey: "",
-      openrouterApiKey: "",
-      linearApiKey: "lin_test_key",
-      linearAutoTransition: false,
-      linearAutoTransitionStateId: "",
-      linearAutoTransitionStateName: "",
-      linearArchiveTransition: false,
-      linearArchiveTransitionStateId: "",
-      linearArchiveTransitionStateName: "",
-      linearOAuthClientId: "",
-      linearOAuthClientSecret: "",
-      linearOAuthWebhookSecret: "",
-      linearOAuthAccessToken: "",
-      linearOAuthRefreshToken: "",
-      editorTabEnabled: false,
-      tunnelEnabled: false,
-      tunnelMode: "quick",
-      tunnelId: "",
-      tunnelHostname: "",
-      tunnelCredentialsPath: "",
-      aiValidationEnabled: false,
-      aiValidationAutoApprove: true,
-      aiValidationAutoDeny: true,
-      aiProvider: "openrouter",
-      publicUrl: "",
-      updateChannel: "stable",
-      dockerAutoUpdate: false,
-      updatedAt: 0,
+  it("returns linearTransition failure from orchestrator", async () => {
+    orchestrator.archiveSession.mockResolvedValue({
+      ok: true,
+      linearTransition: { ok: false, error: "Linear API error" },
     });
     const res = await app.request("/api/sessions/s1/archive", {
       method: "POST",
@@ -2075,9 +1239,10 @@ describe("POST /api/sessions/:id/archive — Linear transition", () => {
     const json = await res.json();
     expect(json.ok).toBe(true);
     expect(json.linearTransition.ok).toBe(false);
-    // Session is still archived
-    expect(launcher.setArchived).toHaveBeenCalledWith("s1", true);
   });
+
+  // "transitions to configured" and "archives even when transition fails" tests removed —
+  // archive Linear transition logic now lives in SessionOrchestrator (tested in session-orchestrator.test.ts)
 });
 
 describe("GET /api/sessions/:id/archive-info", () => {
@@ -2172,14 +1337,15 @@ describe("GET /api/sessions/:id/archive-info", () => {
 });
 
 describe("POST /api/sessions/:id/unarchive", () => {
-  it("unarchives the session", async () => {
+  it("delegates to orchestrator and returns ok", async () => {
+    orchestrator.unarchiveSession.mockReturnValue({ ok: true });
+
     const res = await app.request("/api/sessions/s1/unarchive", { method: "POST" });
 
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({ ok: true });
-    expect(launcher.setArchived).toHaveBeenCalledWith("s1", false);
-    expect(sessionStore.setArchived).toHaveBeenCalledWith("s1", false);
+    expect(orchestrator.unarchiveSession).toHaveBeenCalledWith("s1");
   });
 });
 
@@ -4762,7 +3928,10 @@ describe("GET /api/backends/:id/models", () => {
 // ─── Session creation with backend type ──────────────────────────────────────
 
 describe("POST /api/sessions/create with backend", () => {
-  it("passes backendType codex to launcher", async () => {
+  // Route delegates to orchestrator.createSession — backend resolution is tested
+  // in session-orchestrator.test.ts. Route tests verify the body is passed through.
+
+  it("passes backend codex through to orchestrator", async () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -4770,12 +3939,12 @@ describe("POST /api/sessions/create with backend", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(launcher.launch).toHaveBeenCalledWith(
-      expect.objectContaining({ model: "gpt-5.2-codex", backendType: "codex" }),
+    expect(orchestrator.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "gpt-5.2-codex", backend: "codex" }),
     );
   });
 
-  it("defaults to claude backend when not specified", async () => {
+  it("passes request without backend to orchestrator (defaults handled by orchestrator)", async () => {
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -4783,8 +3952,8 @@ describe("POST /api/sessions/create with backend", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(launcher.launch).toHaveBeenCalledWith(
-      expect.objectContaining({ backendType: "claude" }),
+    expect(orchestrator.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ cwd: `${homedir()}/test` }),
     );
   });
 });
@@ -4922,8 +4091,23 @@ async function parseSSE(res: Response): Promise<{ event: string; data: string }[
 }
 
 describe("POST /api/sessions/create-stream", () => {
-  it("emits progress events and done event for a basic session", async () => {
-    // Simple session creation with no containers or worktrees
+  // Route delegates to orchestrator.createSessionStreaming — detailed orchestration logic
+  // (git ops, container creation, image pulling, etc.) is tested in session-orchestrator.test.ts.
+  // Route tests verify SSE transport: progress events are emitted, done/error events are correct.
+
+  it("emits progress events from orchestrator and done event on success", async () => {
+    // Mock createSessionStreaming to call the progress callback with some events
+    orchestrator.createSessionStreaming.mockImplementation(async (_body: any, onProgress: any) => {
+      await onProgress("resolving_env", "Resolving environment...", "in_progress");
+      await onProgress("resolving_env", "Resolving environment...", "done");
+      await onProgress("launching_cli", "Launching Claude Code...", "in_progress");
+      await onProgress("launching_cli", "Launching Claude Code...", "done");
+      return {
+        ok: true,
+        session: { sessionId: "session-1", state: "starting", cwd: TEST_CWD, createdAt: Date.now(), backendType: "claude" },
+      };
+    });
+
     const res = await app.request("/api/sessions/create-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -4935,16 +4119,16 @@ describe("POST /api/sessions/create-stream", () => {
 
     const events = await parseSSE(res);
 
-    // Should have resolving_env (in_progress + done) and launching_cli (in_progress + done)
+    // Should have progress events
     const progressEvents = events.filter((e) => e.event === "progress");
-    expect(progressEvents.length).toBeGreaterThanOrEqual(4);
+    expect(progressEvents.length).toBe(4);
 
     // First progress should be resolving_env in_progress
     const first = JSON.parse(progressEvents[0].data);
     expect(first.step).toBe("resolving_env");
     expect(first.status).toBe("in_progress");
 
-    // Last event should be "done" with sessionId
+    // Done event should be emitted with session info
     const doneEvent = events.find((e) => e.event === "done");
     expect(doneEvent).toBeDefined();
     const doneData = JSON.parse(doneEvent!.data);
@@ -4952,212 +4136,17 @@ describe("POST /api/sessions/create-stream", () => {
     expect(doneData.cwd).toBe(TEST_CWD);
   });
 
-  it("emits 'Launching Codex...' label for codex backend", async () => {
-    // The SSE progress label should reflect the backend type
-    const res = await app.request("/api/sessions/create-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test", backend: "codex" }),
-    });
-
-    expect(res.status).toBe(200);
-    const events = await parseSSE(res);
-    const launchingEvent = events
-      .filter((e) => e.event === "progress")
-      .map((e) => JSON.parse(e.data))
-      .find((d) => d.step === "launching_cli" && d.status === "in_progress");
-
-    expect(launchingEvent).toBeDefined();
-    expect(launchingEvent!.label).toBe("Launching Codex...");
-  });
-
-  it("emits 'Launching Claude Code...' label for claude backend", async () => {
-    // Default backend (claude) should show Claude Code in the label
-    const res = await app.request("/api/sessions/create-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test" }),
-    });
-
-    expect(res.status).toBe(200);
-    const events = await parseSSE(res);
-    const launchingEvent = events
-      .filter((e) => e.event === "progress")
-      .map((e) => JSON.parse(e.data))
-      .find((d) => d.step === "launching_cli" && d.status === "in_progress");
-
-    expect(launchingEvent).toBeDefined();
-    expect(launchingEvent!.label).toBe("Launching Claude Code...");
-  });
-
-  it("passes launch branching controls through to launcher", async () => {
-    const res = await app.request("/api/sessions/create-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cwd: "/test",
-        resumeSessionAt: "prior-session-456",
-        forkSession: true,
-      }),
-    });
-
-    expect(res.status).toBe(200);
-    await parseSSE(res);
-
-    expect(launcher.launch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cwd: "/test",
-        resumeSessionAt: "prior-session-456",
-        forkSession: true,
-      }),
-    );
-  });
-
-  it("emits git progress events when branch is specified", async () => {
-    // When branch is specified without useWorktree, should emit fetch/checkout/pull events
-    vi.mocked(gitUtils.getRepoInfo).mockReturnValueOnce({
-      repoRoot: "/test",
-      currentBranch: "main",
-      defaultBranch: "main",
-    } as any);
-
-    const res = await app.request("/api/sessions/create-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, branch: "feat/new" }),
-    });
-
-    expect(res.status).toBe(200);
-    const events = await parseSSE(res);
-    const steps = events
-      .filter((e) => e.event === "progress")
-      .map((e) => JSON.parse(e.data).step);
-
-    // Should include git operations
-    expect(steps).toContain("fetching_git");
-    expect(steps).toContain("checkout_branch");
-    expect(steps).toContain("pulling_git");
-    expect(steps).toContain("launching_cli");
-  });
-
-  it("creates branch via checkoutOrCreateBranch when createBranch is true", async () => {
-    // Simulates the Linear auto-branch flow: branch doesn't exist yet,
-    // checkoutOrCreateBranch handles try-then-create internally
-    vi.mocked(gitUtils.getRepoInfo).mockReturnValueOnce({
-      repoRoot: "/test",
-      currentBranch: "main",
-      defaultBranch: "main",
-    } as any);
-    vi.mocked(gitUtils.checkoutOrCreateBranch).mockReturnValueOnce({ created: true });
-
-    const res = await app.request("/api/sessions/create-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test", branch: "the-138-fix-auth", createBranch: true }),
-    });
-
-    expect(res.status).toBe(200);
-    const events = await parseSSE(res);
-    const steps = events
-      .filter((e) => e.event === "progress")
-      .map((e) => JSON.parse(e.data).step);
-
-    // Should succeed with checkout_branch step
-    expect(steps).toContain("checkout_branch");
-    expect(steps).toContain("launching_cli");
-    expect(gitUtils.checkoutOrCreateBranch).toHaveBeenCalledWith("/test", "the-138-fix-auth", {
-      createBranch: true,
-      defaultBranch: "main",
-    });
-
-    // No error event
-    const errorEvent = events.find((e) => e.event === "error");
-    expect(errorEvent).toBeUndefined();
-  });
-
-  it("emits error when checkoutOrCreateBranch throws and createBranch is not set", async () => {
-    // When checkout fails and createBranch is falsy, checkoutOrCreateBranch throws
-    vi.mocked(gitUtils.getRepoInfo).mockReturnValueOnce({
-      repoRoot: "/test",
-      currentBranch: "main",
-      defaultBranch: "main",
-    } as any);
-    vi.mocked(gitUtils.checkoutOrCreateBranch).mockImplementationOnce(() => {
-      throw new Error('Branch "nonexistent" does not exist. Pass createBranch to create it.');
+  it("emits error event when orchestrator returns failure", async () => {
+    orchestrator.createSessionStreaming.mockResolvedValue({
+      ok: false,
+      error: "Invalid backend: invalid",
+      status: 400,
     });
 
     const res = await app.request("/api/sessions/create-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/test", branch: "nonexistent" }),
-    });
-
-    expect(res.status).toBe(200);
-    const events = await parseSSE(res);
-    const errorEvent = events.find((e) => e.event === "error");
-    expect(errorEvent).toBeDefined();
-    expect(JSON.parse(errorEvent!.data).error).toContain("does not exist");
-  });
-
-  it("emits worktree progress events when useWorktree is set", async () => {
-    vi.mocked(gitUtils.getRepoInfo).mockReturnValueOnce({
-      repoRoot: "/test",
-      currentBranch: "main",
-      defaultBranch: "main",
-    } as any);
-    vi.mocked(gitUtils.ensureWorktree).mockReturnValueOnce({
-      worktreePath: "/test-wt-123",
-      actualBranch: "feat/auth",
-      created: true,
-    } as any);
-
-    const res = await app.request("/api/sessions/create-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, branch: "feat/auth", useWorktree: true }),
-    });
-
-    expect(res.status).toBe(200);
-    const events = await parseSSE(res);
-    const steps = events
-      .filter((e) => e.event === "progress")
-      .map((e) => JSON.parse(e.data).step);
-
-    // Should have fetching_git before creating_worktree to refresh remote refs
-    expect(steps).toContain("fetching_git");
-    expect(steps).toContain("creating_worktree");
-    expect(steps).toContain("launching_cli");
-    // fetching_git must come before creating_worktree
-    expect(steps.indexOf("fetching_git")).toBeLessThan(steps.indexOf("creating_worktree"));
-  });
-
-  it("emits error event for invalid branch name", async () => {
-    const res = await app.request("/api/sessions/create-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, branch: "bad branch name!" }),
-    });
-
-    expect(res.status).toBe(200);
-    const events = await parseSSE(res);
-    const errorEvent = events.find((e) => e.event === "error");
-    expect(errorEvent).toBeDefined();
-    const errorData = JSON.parse(errorEvent!.data);
-    expect(errorData.error).toContain("Invalid branch name");
-
-    // No done event should be emitted
-    const doneEvent = events.find((e) => e.event === "done");
-    expect(doneEvent).toBeUndefined();
-
-    // CLI should NOT be launched
-    expect(launcher.launch).not.toHaveBeenCalled();
-  });
-
-  it("emits error event for invalid backend", async () => {
-    const res = await app.request("/api/sessions/create-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, backend: "invalid" }),
+      body: JSON.stringify({ cwd: "/test", backend: "invalid" }),
     });
 
     expect(res.status).toBe(200);
@@ -5167,411 +4156,46 @@ describe("POST /api/sessions/create-stream", () => {
     expect(JSON.parse(errorEvent!.data).error).toContain("Invalid backend");
   });
 
-  it("emits container progress events for containerized session", async () => {
-    // Sandbox with Docker image — image already exists
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "iclaude:latest",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
-    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-stream",
-      name: "companion-stream",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/test",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
-
-    const res = await app.request("/api/sessions/create-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "docker" , sandboxEnabled: true, sandboxSlug: "docker" }),
-    });
-
-    expect(res.status).toBe(200);
-    const events = await parseSSE(res);
-    const steps = events
-      .filter((e) => e.event === "progress")
-      .map((e) => JSON.parse(e.data).step);
-
-    expect(steps).toContain("creating_container");
-    expect(steps).toContain("launching_cli");
-    expect(launcher.launch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        containerId: "cid-stream",
-        containerCwd: "/workspace",
-      }),
-    );
-
-    // Done event should include sessionId
-    const doneEvent = events.find((e) => e.event === "done");
-    expect(doneEvent).toBeDefined();
-    expect(JSON.parse(doneEvent!.data).sessionId).toBe("session-1");
-  });
-
-  it("emits pulling_image step when image is not ready and waits for background pull", async () => {
-    // Sandbox with Docker image that is not available yet — pull manager handles it
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      variables: { ANTHROPIC_API_KEY: "key" },
-      baseImage: "iclaude:latest",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    // Image not ready initially — pull manager will handle it
-    mockImagePullIsReady.mockReturnValue(false);
-    mockImagePullGetState.mockReturnValue({
-      image: "iclaude:latest",
-      status: "idle" as const,
-      progress: [],
-    });
-    mockImagePullWaitForReady.mockResolvedValue(true);
-    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-pulled",
-      name: "companion-pulled",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/test",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
-
-    const res = await app.request("/api/sessions/create-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "docker" , sandboxEnabled: true, sandboxSlug: "docker" }),
-    });
-
-    expect(res.status).toBe(200);
-    const events = await parseSSE(res);
-    const steps = events
-      .filter((e) => e.event === "progress")
-      .map((e) => JSON.parse(e.data).step);
-
-    // Should have pulling_image step
-    expect(steps).toContain("pulling_image");
-    expect(launcher.launch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        containerId: "cid-pulled",
-        containerCwd: "/workspace",
-      }),
-    );
-    expect(mockImagePullEnsureImage).toHaveBeenCalledWith("iclaude:latest");
-    expect(mockImagePullWaitForReady).toHaveBeenCalled();
-  });
-
-  it("returns error when background pull fails", async () => {
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      variables: { ANTHROPIC_API_KEY: "key" },
-      baseImage: "iclaude:latest",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    mockImagePullIsReady.mockReturnValue(false);
-    mockImagePullGetState.mockReturnValue({
-      image: "iclaude:latest",
-      status: "error" as const,
-      progress: [],
-      error: "Pull and build both failed",
-    });
-    mockImagePullWaitForReady.mockResolvedValue(false);
-
-    const res = await app.request("/api/sessions/create-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "docker" , sandboxEnabled: true, sandboxSlug: "docker" }),
-    });
-
-    expect(res.status).toBe(200);
-    const events = await parseSSE(res);
-    const errorEvent = events.find((e) => e.event === "error");
-    expect(errorEvent).toBeDefined();
-    expect(JSON.parse(errorEvent!.data).error).toContain("Pull and build both failed");
-  });
-
-  it("emits init script progress events when sandbox has initScript", async () => {
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "WithInit",
-      slug: "with-init",
-      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "iclaude:latest",
-      initScript: "npm install",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "WithInit",
-      slug: "with-init",
-      initScript: "npm install",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
-    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-init-stream",
-      name: "companion-init-stream",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/test",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
-    vi.spyOn(containerManager, "execInContainerAsync")
-      .mockResolvedValueOnce({ exitCode: 0, output: "ok" });
-
-    const res = await app.request("/api/sessions/create-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "with-init" , sandboxEnabled: true, sandboxSlug: "with-init" }),
-    });
-
-    expect(res.status).toBe(200);
-    const events = await parseSSE(res);
-    const steps = events
-      .filter((e) => e.event === "progress")
-      .map((e) => JSON.parse(e.data).step);
-
-    expect(steps).toContain("running_init_script");
-    expect(steps).toContain("launching_cli");
-
-    // Done event should be present
-    const doneEvent = events.find((e) => e.event === "done");
-    expect(doneEvent).toBeDefined();
-  });
-
-  it("emits error and cleans up when init script fails", async () => {
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "FailInit",
-      slug: "fail-init",
-      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "iclaude:latest",
-      initScript: "exit 1",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "FailInit",
-      slug: "fail-init",
-      initScript: "exit 1",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
-    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-fail-stream",
-      name: "companion-fail-stream",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/test",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    const removeSpy = vi.spyOn(containerManager, "removeContainer").mockImplementation(() => {});
-    vi.spyOn(containerManager, "execInContainerAsync")
-      .mockResolvedValueOnce({ exitCode: 1, output: "npm ERR! missing script" });
-
-    const res = await app.request("/api/sessions/create-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: TEST_CWD, envSlug: "fail-init" , sandboxEnabled: true, sandboxSlug: "fail-init" }),
-    });
-
-    expect(res.status).toBe(200);
-    const events = await parseSSE(res);
-
-    // Should have an error event for init script failure
-    const errorEvent = events.find((e) => e.event === "error");
-    expect(errorEvent).toBeDefined();
-    const errorData = JSON.parse(errorEvent!.data);
-    expect(errorData.error).toContain("Init script failed");
-    expect(errorData.step).toBe("running_init_script");
-
-    // Container should be cleaned up
-    expect(removeSpy).toHaveBeenCalled();
-
-    // No done event
-    expect(events.find((e) => e.event === "done")).toBeUndefined();
-
-    // CLI should NOT be launched
-    expect(launcher.launch).not.toHaveBeenCalled();
-  });
-
-
-  it("skips host git ops and emits in-container git progress for Docker sessions with branch", async () => {
-    // THE-189: git ops should run inside the container, not on the host.
-    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
-      repoRoot: "/repo",
-      repoName: "my-repo",
-      currentBranch: "main",
-      defaultBranch: "main",
-      isWorktree: false,
-    } as any);
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "iclaude:latest",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-git-stream",
-      name: "companion-git-stream",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/repo",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    vi.spyOn(containerManager, "retrack").mockImplementation(() => {});
-    const gitOpsSpy = vi.spyOn(containerManager, "gitOpsInContainer").mockReturnValueOnce({
-      fetchOk: true,
-      checkoutOk: true,
-      pullOk: true,
-      errors: [],
-    });
-
-    const res = await app.request("/api/sessions/create-stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/repo", branch: "feat/new", envSlug: "docker", sandboxEnabled: true, sandboxSlug: "docker" }),
-    });
-
-    expect(res.status).toBe(200);
-    const events = await parseSSE(res);
-    const steps = events
-      .filter((e) => e.event === "progress")
-      .map((e) => JSON.parse(e.data).step);
-
-    // Host git ops should NOT have been called
-    expect(gitUtils.gitFetch).not.toHaveBeenCalled();
-    expect(gitUtils.checkoutOrCreateBranch).not.toHaveBeenCalled();
-    expect(gitUtils.gitPull).not.toHaveBeenCalled();
-
-    // In-container git ops SHOULD have been called
-    expect(gitOpsSpy).toHaveBeenCalledWith("cid-git-stream", expect.objectContaining({
+  it("passes request body through to orchestrator", async () => {
+    const body = {
+      cwd: "/test",
+      backend: "codex",
       branch: "feat/new",
-      currentBranch: "main",
-    }));
+      useWorktree: true,
+      sandboxEnabled: true,
+      sandboxSlug: "docker",
+    };
 
-    // Git progress events should appear AFTER container creation steps
-    expect(steps).toContain("creating_container");
-    expect(steps).toContain("copying_workspace");
-    expect(steps).toContain("fetching_git");
-    expect(steps).toContain("pulling_git");
-    const containerIdx = steps.indexOf("creating_container");
-    const fetchIdx = steps.indexOf("fetching_git");
-    expect(fetchIdx).toBeGreaterThan(containerIdx);
+    const res = await app.request("/api/sessions/create-stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
 
-    // Session should be launched
-    expect(launcher.launch).toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(orchestrator.createSessionStreaming).toHaveBeenCalledWith(
+      body,
+      expect.any(Function),
+    );
   });
 
-  it("emits checkout error and cleans up when in-container checkout fails (stream)", async () => {
-    // THE-189: checkout failure inside container should emit error and clean up.
-    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
-      repoRoot: "/repo",
-      repoName: "my-repo",
-      currentBranch: "main",
-      defaultBranch: "main",
-      isWorktree: false,
-    } as any);
-    vi.mocked(envManager.getEnv).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      variables: { CLAUDE_CODE_OAUTH_TOKEN: "token" },
-      baseImage: "iclaude:latest",
-      createdAt: 1000,
-      updatedAt: 1000,
-    } as any);
-    vi.mocked(envManager.getEffectiveImage).mockReturnValue("iclaude:latest");
-    vi.mocked(sandboxManager.getSandbox).mockReturnValue({
-      name: "Docker",
-      slug: "docker",
-      createdAt: 1000,
-      updatedAt: 1000,
-    });
-    vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
-      containerId: "cid-fail-git",
-      name: "companion-fail-git",
-      image: "iclaude:latest",
-      portMappings: [],
-      hostCwd: "/repo",
-      containerCwd: "/workspace",
-      state: "running",
-    });
-    const removeSpy = vi.spyOn(containerManager, "removeContainer").mockImplementation(() => {});
-    vi.spyOn(containerManager, "gitOpsInContainer").mockReturnValueOnce({
-      fetchOk: true,
-      checkoutOk: false,
-      pullOk: false,
-      errors: ['checkout: branch "nonexistent" does not exist'],
+  it("does not emit done event when orchestrator returns error", async () => {
+    orchestrator.createSessionStreaming.mockImplementation(async (_body: any, onProgress: any) => {
+      await onProgress("resolving_env", "Resolving environment...", "in_progress");
+      return { ok: false, error: "CLI binary not found", status: 500 };
     });
 
     const res = await app.request("/api/sessions/create-stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cwd: "/repo", branch: "nonexistent", envSlug: "docker", sandboxEnabled: true, sandboxSlug: "docker" }),
+      body: JSON.stringify({ cwd: "/test" }),
     });
 
-    expect(res.status).toBe(200);
     const events = await parseSSE(res);
-
-    // Should have error event for checkout failure
+    const doneEvent = events.find((e) => e.event === "done");
+    expect(doneEvent).toBeUndefined();
     const errorEvent = events.find((e) => e.event === "error");
     expect(errorEvent).toBeDefined();
-    const errorData = JSON.parse(errorEvent!.data);
-    expect(errorData.error).toContain("Failed to checkout branch");
-    expect(errorData.step).toBe("checkout_branch");
-
-    // Container should be cleaned up
-    expect(removeSpy).toHaveBeenCalled();
-    // No done event
-    expect(events.find((e) => e.event === "done")).toBeUndefined();
-    // CLI should NOT be launched
-    expect(launcher.launch).not.toHaveBeenCalled();
   });
 });
 

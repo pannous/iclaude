@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
-import { streamSSE, type SSEStreamingApi } from "hono/streaming";
+import { streamSSE } from "hono/streaming";
 import { execSync } from "node:child_process";
 import { resolveBinary } from "./path-resolver.js";
 import { getTunnelPort } from "./tunnel-manager.js";
@@ -11,22 +11,17 @@ import { homedir } from "node:os";
 import { COMPANION_HOME } from "./paths.js";
 import { existsSync, readFileSync, createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
+import type { SessionOrchestrator } from "./session-orchestrator.js";
 import type { CliLauncher } from "./cli-launcher.js";
 import type { WsBridge } from "./ws-bridge.js";
 import { stripSystemTags } from "./ws-bridge.js";
 import type { SessionStore } from "./session-store.js";
 import type { WorktreeTracker } from "./worktree-tracker.js";
 import type { TerminalManager } from "./terminal-manager.js";
-import * as envManager from "./env-manager.js";
-import * as sandboxManager from "./sandbox-manager.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
 import * as sessionLinearIssues from "./session-linear-issues.js";
-import { containerManager, ContainerManager, type ContainerConfig, type ContainerInfo } from "./container-manager.js";
-import type { CreationStepId } from "./session-types.js";
-import { hasContainerClaudeAuth } from "./claude-container-auth.js";
-import { hasContainerCodexAuth } from "./codex-container-auth.js";
-import { imagePullManager } from "./image-pull-manager.js";
+import { containerManager } from "./container-manager.js";
 import { registerFsRoutes } from "./routes/fs-routes.js";
 import { registerPanelRoutes } from "./routes/panels-routes.js";
 import { registerEnvRoutes } from "./routes/env-routes.js";
@@ -35,7 +30,6 @@ import { registerCronRoutes } from "./routes/cron-routes.js";
 import { registerAgentRoutes } from "./routes/agent-routes.js";
 import { registerLinearAgentWebhookRoute, registerLinearAgentProtectedRoutes } from "./routes/linear-agent-routes.js";
 import { registerPromptRoutes } from "./routes/prompt-routes.js";
-import { discoverCommandsAndSkills } from "./commands-discovery.js";
 import { registerSettingsRoutes } from "./routes/settings-routes.js";
 import { registerTailscaleRoutes } from "./routes/tailscale-routes.js";
 import { registerGitRoutes } from "./routes/git-routes.js";
@@ -44,21 +38,17 @@ import { registerLinearRoutes, transitionLinearIssue, fetchLinearTeamStates } fr
 import { registerCompleteRoutes } from "./routes/complete-routes.js";
 import { registerLinearConnectionRoutes } from "./routes/linear-connection-routes.js";
 import { getConnection, listConnections, resolveApiKey } from "./linear-connections.js";
-import { buildLinearSystemPrompt } from "./linear-prompt-builder.js";
 import { getSettings, updateSettings } from "./settings-manager.js";
 import { discoverClaudeSessions } from "./claude-session-discovery.js";
 import { getClaudeSessionHistoryPage } from "./claude-session-history.js";
 import { verifyToken, getToken, getLanAddress, regenerateToken, getAllAddresses, isAuthEnabled } from "./auth-manager.js";
 import QRCode from "qrcode";
-import { isHomeServer } from "./constants.js";
+import { isHomeServer, VSCODE_EDITOR_CONTAINER_PORT, NOVNC_CONTAINER_PORT } from "./constants.js";
 
 const UPDATE_CHECK_STALE_MS = 5 * 60 * 1000;
 const ROUTES_DIR = dirname(fileURLToPath(import.meta.url));
 const WEB_DIR = dirname(ROUTES_DIR);
-const VSCODE_EDITOR_CONTAINER_PORT = 13337;
-const CODEX_APP_SERVER_CONTAINER_PORT = Number(process.env.COMPANION_CODEX_CONTAINER_WS_PORT || "4502");
 const VSCODE_EDITOR_HOST_PORT = Number(process.env.COMPANION_EDITOR_PORT || "13338");
-const NOVNC_CONTAINER_PORT = 6080;
 
 function shellEscapeArg(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
@@ -68,98 +58,8 @@ function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/**
- * Merge environment variables from the request body and optional companion env profile.
- */
-function prepareEnvVars(
-  body: Record<string, unknown>,
-  envMgr: typeof envManager,
-): Record<string, string> | undefined {
-  let envVars = body.env as Record<string, string> | undefined;
-  if (body.envSlug) {
-    const companionEnv = envMgr.getEnv(body.envSlug as string);
-    if (companionEnv) {
-      envVars = { ...companionEnv.variables, ...body.env as Record<string, string> };
-    } else {
-      console.warn(`[routes] Environment "${body.envSlug}" not found, ignoring`);
-    }
-  }
-  return envVars;
-}
-
-/**
- * Handle git worktree creation or branch checkout based on request body.
- * Returns updated cwd and optional worktree metadata.
- */
-function setupWorktree(
-  body: Record<string, unknown>,
-  cwd: string | undefined,
-): {
-  cwd: string | undefined;
-  worktreeInfo?: {
-    isWorktree: boolean;
-    repoRoot: string;
-    branch: string;
-    actualBranch: string;
-    worktreePath: string;
-  };
-  error?: string;
-} {
-  if (body.branch && !/^[a-zA-Z0-9/_.\-]+$/.test(body.branch as string)) {
-    return { cwd, error: "Invalid branch name" };
-  }
-
-  if (body.useWorktree && body.branch && cwd) {
-    const repoInfo = gitUtils.getRepoInfo(cwd);
-    if (repoInfo) {
-      // Fetch latest remote refs so ensureWorktree bases new branches on up-to-date origin/{defaultBranch}
-      const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
-      if (!fetchResult.success) {
-        console.warn(`[routes] git fetch failed (non-fatal): ${fetchResult.output}`);
-      }
-
-      const result = gitUtils.ensureWorktree(repoInfo.repoRoot, body.branch as string, {
-        baseBranch: repoInfo.defaultBranch,
-        createBranch: body.createBranch as boolean | undefined,
-        forceNew: true,
-      });
-      return {
-        cwd: result.worktreePath,
-        worktreeInfo: {
-          isWorktree: true,
-          repoRoot: repoInfo.repoRoot,
-          branch: body.branch as string,
-          actualBranch: result.actualBranch,
-          worktreePath: result.worktreePath,
-        },
-      };
-    }
-  } else if (body.branch && cwd) {
-    const repoInfo = gitUtils.getRepoInfo(cwd);
-    if (repoInfo) {
-      const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
-      if (!fetchResult.success) {
-        console.warn(`[routes] git fetch failed (non-fatal): ${fetchResult.output}`);
-      }
-
-      if (repoInfo.currentBranch !== body.branch) {
-        gitUtils.checkoutOrCreateBranch(repoInfo.repoRoot, body.branch as string, {
-          createBranch: body.createBranch as boolean | undefined,
-          defaultBranch: repoInfo.defaultBranch,
-        });
-      }
-
-      const pullResult = gitUtils.gitPull(repoInfo.repoRoot);
-      if (!pullResult.success) {
-        console.warn(`[routes] git pull warning (non-fatal): ${pullResult.output}`);
-      }
-    }
-  }
-
-  return { cwd };
-}
-
 export function createRoutes(
+  orchestrator: SessionOrchestrator,
   launcher: CliLauncher,
   wsBridge: WsBridge,
   sessionStore: SessionStore,
@@ -172,7 +72,6 @@ export function createRoutes(
   tunnelManager?: import("./tunnel-manager.js").TunnelManager,
   linearAgentBridge?: import("./linear-agent-bridge.js").LinearAgentBridge,
   port?: number,
-  clearAutoRelaunchCount?: (sessionId: string) => void,
 ) {
   const api = new Hono();
 
@@ -184,8 +83,6 @@ export function createRoutes(
   api.post("/auth/verify", async (c) => {
     const body = await c.req.json().catch(() => ({} as { token?: string }));
     if (verifyToken(body.token)) {
-      // Set cookie so the dynamic manifest can embed the token in start_url.
-      // This bridges auth from Safari to standalone PWA on iOS (isolated storage).
       setCookie(c, "companion_auth", body.token!, {
         path: "/",
         httpOnly: true,
@@ -208,7 +105,6 @@ export function createRoutes(
         return { label: a.label, url: `http://${a.ip}:${port}`, qrDataUrl };
       }),
     );
-    // Add Universal Link QR for Listen app (only on the author's home server)
     if (isHomeServer()) {
       const universalUrl = `https://claude.pannous.com/auth?token=${authToken}`;
       const universalQr = await QRCode.toDataURL(universalUrl, { width: 256, margin: 2 });
@@ -218,7 +114,6 @@ export function createRoutes(
   }
 
   api.get("/auth/qr", async (c) => {
-    // QR endpoint requires auth — only authenticated users can generate QR for mobile
     const authHeader = c.req.header("Authorization");
     const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
     if (!isLocalhostRequest(c) && !verifyToken(token)) {
@@ -228,14 +123,7 @@ export function createRoutes(
   });
 
   // ─── Localhost auto-auth (exempt from auth middleware) ────────────
-  // Localhost users are on the same machine as the server, so they can
-  // auto-authenticate without a token. This makes first-launch seamless.
-
-  // Check if the request comes from localhost (same machine as the server).
-  // Uses Bun's requestIP which returns the actual TCP source address.
-  // Returns false in test environments where c.env is not a Bun server.
   function isLocalhostRequest(c: { env: unknown; req: { raw: Request; header: (name: string) => string | undefined } }): boolean {
-    // Requests via the external tunnel proxy have this header set by Apache — not local
     if (c.req.header("X-Companion-Tunnel")) return false;
     const bunServer = c.env as { requestIP?: (req: Request) => { address: string } | null };
     const ip = bunServer?.requestIP?.(c.req.raw);
@@ -244,7 +132,6 @@ export function createRoutes(
   }
 
   api.get("/auth/auto", (c) => {
-    // LOCAL: when auth is disabled, always return a token (everyone is trusted)
     if (!isAuthEnabled() || isLocalhostRequest(c)) {
       const token = getToken();
       setCookie(c, "companion_auth", token, {
@@ -255,8 +142,6 @@ export function createRoutes(
       });
       return c.json({ ok: true, token });
     }
-    // Tunnel requests with a valid cookie: return the token so the React app
-    // can store it in localStorage (httpOnly cookies aren't readable by JS)
     const cookieToken = getCookie(c, "companion_auth");
     if (cookieToken && verifyToken(cookieToken)) {
       return c.json({ ok: true, token: cookieToken });
@@ -264,13 +149,11 @@ export function createRoutes(
     return c.json({ ok: false });
   });
 
-  // Auth status — lets the frontend know if auth is enabled
   api.get("/auth/status", (c) => {
     return c.json({ enabled: isAuthEnabled() });
   });
 
   // ─── Linear Agent SDK webhook route (exempt from auth middleware) ────────
-  // Uses HMAC-SHA256 signature verification, not Companion auth tokens.
   if (linearAgentBridge) {
     registerLinearAgentWebhookRoute(api, linearAgentBridge);
   }
@@ -278,24 +161,18 @@ export function createRoutes(
   // ─── Auth middleware (protects all routes below) ───────────────────
 
   api.use("/*", async (c, next) => {
-    // LOCAL: when auth is disabled, skip all authentication
     if (!isAuthEnabled()) return next();
 
-    // Skip auth for the verify endpoint (handled above)
     if (c.req.path === "/auth/verify") {
       return next();
     }
 
-    // Localhost bypass — same machine as the server, always trusted
     if (isLocalhostRequest(c)) {
       return next();
     }
 
-    // Accept token from Authorization header or cookie (same as global gate)
     const authHeader = c.req.header("Authorization");
     const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    // Also check the companion_auth cookie — iframes (browser preview) can't
-    // send Authorization headers, but browsers do forward cookies automatically.
     const cookieToken = getCookie(c, "companion_auth") ?? null;
     if (!verifyToken(bearer) && !verifyToken(cookieToken)) {
       return c.json({ error: "unauthorized" }, 401);
@@ -321,272 +198,12 @@ export function createRoutes(
 
   api.post("/sessions/create", async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    console.log(`[routes] sessions/create: cwd="${body.cwd}" backend="${body.backend}"`);
-    try {
-      const resumeSessionAt = typeof body.resumeSessionAt === "string" && body.resumeSessionAt.trim()
-        ? body.resumeSessionAt.trim()
-        : undefined;
-      const forkSession = body.forkSession === true;
-      const backend = body.backend ?? "claude";
-      if (backend !== "claude" && backend !== "codex") {
-        return c.json({ error: `Invalid backend: ${String(backend)}` }, 400);
-      }
-
-      let envVars = prepareEnvVars(body, envManager);
-
-      // Resolve sandbox configuration
-      const sandboxEnabled = body.sandboxEnabled === true;
-      const companionSandbox = body.sandboxSlug ? sandboxManager.getSandbox(body.sandboxSlug) : null;
-      if (sandboxEnabled && body.sandboxSlug && !companionSandbox) {
-        return c.json({ error: `Sandbox "${body.sandboxSlug}" not found` }, 404);
-      }
-
-      // Inject LINEAR_API_KEY if a Linear connection is specified
-      let linearSystemPrompt: string | undefined;
-      if (body.linearConnectionId) {
-        const conn = getConnection(body.linearConnectionId);
-        if (conn?.apiKey) {
-          envVars = { ...envVars, LINEAR_API_KEY: conn.apiKey };
-          linearSystemPrompt = buildLinearSystemPrompt(conn, body.linearIssue);
-        }
-      }
-
-      // Resolve Docker image early so we know whether git ops should run on host or in container
-      const companionEnv = body.envSlug ? envManager.getEnv(body.envSlug) : null;
-      let effectiveImage: string | null = null;
-      if (sandboxEnabled) {
-        effectiveImage = "iclaude:latest";
-      } else if (body.container?.image) {
-        effectiveImage = body.container.image;
-      }
-      const isDockerSession = !!effectiveImage;
-
-      // For Docker sessions, skip host git ops — they'll run inside the container after workspace copy.
-      const wtResult = isDockerSession
-        ? { cwd: body.cwd, worktreeInfo: undefined, error: undefined }
-        : setupWorktree(body, body.cwd);
-      if (wtResult.error) {
-        return c.json({ error: wtResult.error }, 400);
-      }
-      let cwd: string = (wtResult.cwd ?? body.cwd) as string;
-      // Validate cwd exists — Bun.spawn throws a misleading ENOENT on the
-      // binary when the cwd directory is missing.
-      if (!cwd) {
-        console.warn(`[routes] No cwd provided (body.cwd=${body.cwd}), falling back to $HOME`);
-        cwd = process.env.HOME || "/tmp";
-      } else if (!existsSync(cwd)) {
-        console.warn(`[routes] cwd "${cwd}" does not exist, falling back to $HOME`);
-        cwd = process.env.HOME || "/tmp";
-      }
-      const worktreeInfo = wtResult.worktreeInfo;
-
-
-      let containerInfo: ContainerInfo | undefined;
-      let containerId: string | undefined;
-      let containerName: string | undefined;
-      let containerImage: string | undefined;
-
-      // Containers cannot use host keychain auth.
-      // Fail fast with a clear error when no container-compatible auth is present.
-      if (effectiveImage && backend === "claude" && !hasContainerClaudeAuth(envVars)) {
-        return c.json({
-          error:
-            "Containerized Claude requires auth available inside the container. " +
-            "Set ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN / CLAUDE_CODE_AUTH_TOKEN) in the selected environment.",
-        }, 400);
-      }
-      if (effectiveImage && backend === "codex" && !hasContainerCodexAuth(envVars)) {
-        return c.json({
-          error:
-            "Containerized Codex requires auth available inside the container. " +
-            "Set OPENAI_API_KEY in the selected environment, or ensure ~/.codex/auth.json exists on the host.",
-        }, 400);
-      }
-
-      // Create container if a Docker image is available.
-      // Do not silently fall back to host execution: if container startup fails,
-      // return an explicit error.
-      if (effectiveImage) {
-        if (!imagePullManager.isReady(effectiveImage)) {
-          // Image not available — use the pull manager to get it
-          const pullState = imagePullManager.getState(effectiveImage);
-          if (pullState.status === "idle" || pullState.status === "error") {
-            imagePullManager.ensureImage(effectiveImage);
-          }
-          const ready = await imagePullManager.waitForReady(effectiveImage, 300_000);
-          if (!ready) {
-            const state = imagePullManager.getState(effectiveImage);
-            return c.json({
-              error: state.error
-                || `Docker image ${effectiveImage} could not be pulled or built. Use the environment manager to pull/build the image first.`,
-            }, 503);
-          }
-        }
-
-        const tempId = crypto.randomUUID().slice(0, 8);
-        const requestedPorts = Array.isArray(body.container?.ports)
-          ? body.container.ports.map(Number).filter((n: number) => n > 0)
-          : [];
-        const containerPorts: (number | { port: number; hostIp?: string })[] = [
-          ...Array.from(new Set([
-            ...requestedPorts.filter((p: number) => p !== NOVNC_CONTAINER_PORT),
-            VSCODE_EDITOR_CONTAINER_PORT,
-            ...(backend === "codex" ? [CODEX_APP_SERVER_CONTAINER_PORT] : []),
-          ])),
-          { port: NOVNC_CONTAINER_PORT, hostIp: "127.0.0.1" },
-        ];
-        const cConfig: ContainerConfig = {
-          image: effectiveImage,
-          ports: containerPorts,
-          volumes: body.container?.volumes,
-          env: { ...(envVars ?? {}), DISPLAY: ":99" },
-        };
-        try {
-          containerInfo = containerManager.createContainer(tempId, cwd, cConfig);
-        } catch (err) {
-          const reason = getErrorMessage(err);
-          return c.json({
-            error:
-              `Docker is required to run this environment image (${effectiveImage}) ` +
-              `but container startup failed: ${reason}`,
-          }, 503);
-        }
-        containerId = containerInfo.containerId;
-        containerName = containerInfo.name;
-        containerImage = effectiveImage;
-
-        try {
-          await containerManager.copyWorkspaceToContainer(containerInfo.containerId, cwd);
-          containerManager.reseedGitAuth(containerInfo.containerId);
-        } catch (err) {
-          containerManager.removeContainer(tempId);
-          const reason = getErrorMessage(err);
-          return c.json({
-            error: `Failed to copy workspace to container: ${reason}`,
-          }, 503);
-        }
-
-        // Run git fetch/checkout/pull inside the container (instead of on host)
-        if (body.branch) {
-          const repoInfo = cwd ? gitUtils.getRepoInfo(cwd) : null;
-          const gitResult = containerManager.gitOpsInContainer(containerInfo.containerId, {
-            branch: body.branch,
-            currentBranch: repoInfo?.currentBranch || "HEAD",
-            createBranch: body.createBranch,
-            defaultBranch: repoInfo?.defaultBranch,
-          });
-          if (gitResult.errors.length > 0) {
-            console.warn(`[routes] In-container git ops warnings: ${gitResult.errors.join("; ")}`);
-          }
-          if (!gitResult.checkoutOk) {
-            containerManager.removeContainer(tempId);
-            return c.json({
-              error: `Failed to checkout branch "${body.branch}" inside container: ${gitResult.errors.join("; ")}`,
-            }, 400);
-          }
-        }
-
-        // Run per-sandbox init script if configured
-        const initScript = companionSandbox?.initScript?.trim();
-        if (initScript) {
-          try {
-            console.log(`[routes] Running init script for sandbox "${companionSandbox?.name || "sandbox"}" in container ${containerInfo.name}...`);
-            const initTimeout = Number(process.env.COMPANION_INIT_SCRIPT_TIMEOUT) || 120_000;
-            const result = await containerManager.execInContainerAsync(
-              containerInfo.containerId,
-              ["sh", "-lc", initScript],
-              { timeout: initTimeout },
-            );
-            if (result.exitCode !== 0) {
-              console.error(
-                `[routes] Init script failed for sandbox "${companionSandbox?.name || "sandbox"}" (exit ${result.exitCode}):\n${result.output}`,
-              );
-              containerManager.removeContainer(tempId);
-              const truncated = result.output.length > 2000
-                ? result.output.slice(0, 500) + "\n...[truncated]...\n" + result.output.slice(-1500)
-                : result.output;
-              return c.json({
-                error: `Init script failed (exit ${result.exitCode}):\n${truncated}`,
-              }, 503);
-            }
-            console.log(`[routes] Init script completed successfully for sandbox "${companionSandbox?.name || "sandbox"}"`);
-          } catch (e) {
-            containerManager.removeContainer(tempId);
-            const reason = getErrorMessage(e);
-            return c.json({
-              error: `Init script execution failed: ${reason}`,
-            }, 503);
-          }
-        }
-      }
-
-      const session = launcher.launch({
-        model: body.model,
-        permissionMode: body.permissionMode ?? "bypassPermissions",
-        cwd,
-        claudeBinary: body.claudeBinary,
-        codexBinary: body.codexBinary,
-        codexInternetAccess: backend === "codex",
-        codexSandbox: backend === "codex" ? "danger-full-access" : undefined,
-        allowedTools: body.allowedTools,
-        env: envVars,
-        backendType: backend,
-        resumeSessionId: body.resumeSessionId,
-        containerId,
-        containerName,
-        containerImage,
-        containerCwd: containerInfo?.containerCwd,
-        resumeSessionAt,
-        forkSession,
-        systemPrompt: backend === "codex" ? linearSystemPrompt : undefined,
-        sandboxSlug: sandboxEnabled ? (body.sandboxSlug || undefined) : undefined,
-        name: body.name,
-      });
-
-      // Pre-load conversation history from CLI session file so the browser
-      // sees it immediately, before system.init arrives from the CLI.
-      // Covers both paths: resumeSessionAt (HomePage branching) and resumeSessionId (Sidebar resume).
-      const resumeCliId = resumeSessionAt || body.resumeSessionId;
-      if (resumeCliId) {
-        wsBridge.initializeResumedSession(session.sessionId, resumeCliId, cwd);
-      }
-
-      // Re-track container with real session ID and mark session as containerized
-      // so the bridge preserves the host cwd for sidebar grouping
-      if (containerInfo) {
-        containerManager.retrack(containerInfo.containerId, session.sessionId);
-        wsBridge.markContainerized(session.sessionId, cwd);
-      }
-
-      if (worktreeInfo) {
-        worktreeTracker.addMapping({
-          sessionId: session.sessionId,
-          repoRoot: worktreeInfo.repoRoot,
-          branch: worktreeInfo.branch,
-          actualBranch: worktreeInfo.actualBranch,
-          worktreePath: worktreeInfo.worktreePath,
-          createdAt: Date.now(),
-        });
-      }
-
-      wsBridge.broadcastGlobal({ type: "sessions_updated" });
-
-      // Inject Linear context into the CLI's system prompt (must happen before first user message)
-      if (linearSystemPrompt && backend === "claude") {
-        wsBridge.injectSystemPrompt(session.sessionId, linearSystemPrompt);
-      }
-
-      // Pre-populate slash commands and skills from filesystem so the slash
-      // menu works before system.init arrives from the CLI
-      const discovered = await discoverCommandsAndSkills(cwd).catch(() => ({ slash_commands: [] as string[], skills: [] as string[] }));
-      wsBridge.prePopulateCommands(session.sessionId, discovered.slash_commands, discovered.skills);
-
-      return c.json(session);
-    } catch (e: unknown) {
-      const msg = getErrorMessage(e);
-      console.error("[routes] Failed to create session:", msg);
-      return c.json({ error: msg }, 500);
+    const result = await orchestrator.createSession(body);
+    if (!result.ok) {
+      return c.json({ error: result.error }, result.status as any);
     }
+    wsBridge.broadcastGlobal({ type: "sessions_updated" });
+    return c.json(result.session);
   });
 
   // ─── SSE Session Creation (with progress streaming) ─────────────────────
@@ -594,438 +211,38 @@ export function createRoutes(
   api.post("/sessions/create-stream", async (c) => {
     const body = await c.req.json().catch(() => ({}));
 
-    const emitProgress = (
-      stream: SSEStreamingApi,
-      step: CreationStepId,
-      label: string,
-      status: "in_progress" | "done" | "error",
-      detail?: string,
-    ) =>
-      stream.writeSSE({
-        event: "progress",
-        data: JSON.stringify({ step, label, status, detail }),
-      });
-
     return streamSSE(c, async (stream) => {
-      try {
-        const resumeSessionAt = typeof body.resumeSessionAt === "string" && body.resumeSessionAt.trim()
-          ? body.resumeSessionAt.trim()
-          : undefined;
-        const forkSession = body.forkSession === true;
-        const backend = body.backend ?? "claude";
-        if (backend !== "claude" && backend !== "codex") {
+      const result = await orchestrator.createSessionStreaming(
+        body,
+        async (step, label, status, detail) => {
           await stream.writeSSE({
-            event: "error",
-            data: JSON.stringify({ error: `Invalid backend: ${String(backend)}` }),
+            event: "progress",
+            data: JSON.stringify({ step, label, status, detail }),
           });
-          return;
-        }
+        },
+      );
 
-        // --- Step: Resolve environment ---
-        await emitProgress(stream, "resolving_env", "Resolving environment...", "in_progress");
-
-        let envVars: Record<string, string> | undefined = body.env;
-        const companionEnv = body.envSlug ? envManager.getEnv(body.envSlug) : null;
-        if (body.envSlug && companionEnv) {
-          envVars = { ...companionEnv.variables, ...body.env };
-        }
-
-        // Resolve sandbox configuration
-        const sandboxEnabled = body.sandboxEnabled === true;
-        const companionSandbox = body.sandboxSlug ? sandboxManager.getSandbox(body.sandboxSlug) : null;
-        if (sandboxEnabled && body.sandboxSlug && !companionSandbox) {
-          await stream.writeSSE({
-            event: "error",
-            data: JSON.stringify({ error: `Sandbox "${body.sandboxSlug}" not found`, step: "resolving_env" }),
-          });
-          return;
-        }
-
-        // Inject LINEAR_API_KEY if a Linear connection is specified
-        let linearSystemPrompt: string | undefined;
-        if (body.linearConnectionId) {
-          const conn = getConnection(body.linearConnectionId);
-          if (conn?.apiKey) {
-            envVars = { ...envVars, LINEAR_API_KEY: conn.apiKey };
-            linearSystemPrompt = buildLinearSystemPrompt(conn, body.linearIssue);
-          }
-        }
-
-        // Resolve Docker image early so we know whether git ops should run on host or in container
-        let effectiveImage: string | null = null;
-        if (sandboxEnabled) {
-          effectiveImage = "iclaude:latest";
-        } else if (body.container?.image) {
-          effectiveImage = body.container.image;
-        }
-        const isDockerSession = !!effectiveImage;
-
-        await emitProgress(stream, "resolving_env", "Environment resolved", "done");
-
-        let cwd = body.cwd;
-        if (!cwd) {
-          console.warn(`[routes] No cwd provided (body.cwd=${body.cwd}), falling back to $HOME`);
-          cwd = process.env.HOME || "/tmp";
-        } else if (!existsSync(cwd)) {
-          console.warn(`[routes] cwd "${cwd}" does not exist, falling back to $HOME`);
-          cwd = process.env.HOME || "/tmp";
-        }
-        let worktreeInfo: { isWorktree: boolean; repoRoot: string; branch: string; actualBranch: string; worktreePath: string } | undefined;
-
-        if (body.branch && !/^[a-zA-Z0-9/_.\-]+$/.test(body.branch)) {
-          await stream.writeSSE({
-            event: "error",
-            data: JSON.stringify({ error: "Invalid branch name", step: "checkout_branch" }),
-          });
-          return;
-        }
-
-        // --- Step: Git operations (host only — Docker sessions do this inside the container) ---
-        if (!isDockerSession && body.useWorktree && body.branch && cwd) {
-          const repoInfo = gitUtils.getRepoInfo(cwd);
-          if (repoInfo) {
-            // Fetch latest remote refs so ensureWorktree bases new branches on up-to-date origin/{defaultBranch}
-            await emitProgress(stream, "fetching_git", "Fetching from remote...", "in_progress");
-            const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
-            if (!fetchResult.success) {
-              console.warn(`[routes] git fetch failed (non-fatal): ${fetchResult.output}`);
-            }
-            await emitProgress(stream, "fetching_git", fetchResult.success ? "Fetch complete" : "Fetch skipped (offline?)", "done");
-
-            await emitProgress(stream, "creating_worktree", "Creating worktree...", "in_progress");
-            const result = gitUtils.ensureWorktree(repoInfo.repoRoot, body.branch, {
-              baseBranch: repoInfo.defaultBranch,
-              createBranch: body.createBranch,
-              forceNew: true,
-            });
-            cwd = result.worktreePath;
-            worktreeInfo = {
-              isWorktree: true,
-              repoRoot: repoInfo.repoRoot,
-              branch: body.branch,
-              actualBranch: result.actualBranch,
-              worktreePath: result.worktreePath,
-            };
-          }
-          await emitProgress(stream, "creating_worktree", "Worktree ready", "done");
-        } else if (!isDockerSession && body.branch && cwd) {
-          const repoInfo = gitUtils.getRepoInfo(cwd);
-          if (repoInfo) {
-            await emitProgress(stream, "fetching_git", "Fetching from remote...", "in_progress");
-            const fetchResult = gitUtils.gitFetch(repoInfo.repoRoot);
-            if (!fetchResult.success) {
-              console.warn(`[routes] git fetch failed (non-fatal): ${fetchResult.output}`);
-            }
-            await emitProgress(stream, "fetching_git", fetchResult.success ? "Fetch complete" : "Fetch skipped (offline?)", "done");
-
-            if (repoInfo.currentBranch !== body.branch) {
-              await emitProgress(stream, "checkout_branch", `Checking out ${body.branch}...`, "in_progress");
-              gitUtils.checkoutOrCreateBranch(repoInfo.repoRoot, body.branch, {
-                createBranch: body.createBranch,
-                defaultBranch: repoInfo.defaultBranch,
-              });
-              await emitProgress(stream, "checkout_branch", `On branch ${body.branch}`, "done");
-            }
-
-            await emitProgress(stream, "pulling_git", "Pulling latest changes...", "in_progress");
-            const pullResult = gitUtils.gitPull(repoInfo.repoRoot);
-            if (!pullResult.success) {
-              console.warn(`[routes] git pull warning (non-fatal): ${pullResult.output}`);
-            }
-            await emitProgress(stream, "pulling_git", "Up to date", "done");
-          }
-        }
-
-        let containerInfo: ContainerInfo | undefined;
-        let containerId: string | undefined;
-        let containerName: string | undefined;
-        let containerImage: string | undefined;
-
-        if (effectiveImage && backend === "claude" && !hasContainerClaudeAuth(envVars)) {
-          await stream.writeSSE({
-            event: "error",
-            data: JSON.stringify({
-              error:
-                "Containerized Claude requires auth available inside the container. " +
-                "Set ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN / CLAUDE_CODE_AUTH_TOKEN) in the selected environment.",
-            }),
-          });
-          return;
-        }
-        if (effectiveImage && backend === "codex" && !hasContainerCodexAuth(envVars)) {
-          await stream.writeSSE({
-            event: "error",
-            data: JSON.stringify({
-              error:
-                "Containerized Codex requires auth available inside the container. " +
-                "Set OPENAI_API_KEY in the selected environment, or ensure ~/.codex/auth.json exists on the host.",
-            }),
-          });
-          return;
-        }
-
-        if (effectiveImage) {
-          if (!imagePullManager.isReady(effectiveImage)) {
-            // Image not available — wait for background pull with progress streaming
-            const pullState = imagePullManager.getState(effectiveImage);
-            if (pullState.status === "idle" || pullState.status === "error") {
-              imagePullManager.ensureImage(effectiveImage);
-            }
-
-            await emitProgress(stream, "pulling_image", "Pulling Docker image...", "in_progress");
-
-            // Stream pull progress lines to the client
-            const unsub = imagePullManager.onProgress(effectiveImage, (line) => {
-              emitProgress(stream, "pulling_image", "Pulling Docker image...", "in_progress", line).catch(() => {});
-            });
-
-            const ready = await imagePullManager.waitForReady(effectiveImage, 300_000);
-            unsub();
-
-            if (ready) {
-              await emitProgress(stream, "pulling_image", "Image ready", "done");
-            } else {
-              const state = imagePullManager.getState(effectiveImage);
-              await stream.writeSSE({
-                event: "error",
-                data: JSON.stringify({
-                  error: state.error
-                    || `Docker image ${effectiveImage} could not be pulled or built. Use the environment manager to pull/build the image first.`,
-                  step: "pulling_image",
-                }),
-              });
-              return;
-            }
-          }
-
-          // --- Step: Create container ---
-          await emitProgress(stream, "creating_container", "Starting container...", "in_progress");
-          const tempId = crypto.randomUUID().slice(0, 8);
-          const requestedPorts = Array.isArray(body.container?.ports)
-            ? body.container.ports.map(Number).filter((n: number) => n > 0)
-            : [];
-          const containerPorts: (number | { port: number; hostIp?: string })[] = [
-            ...Array.from(new Set([
-              ...requestedPorts.filter((p: number) => p !== NOVNC_CONTAINER_PORT),
-              VSCODE_EDITOR_CONTAINER_PORT,
-              ...(backend === "codex" ? [CODEX_APP_SERVER_CONTAINER_PORT] : []),
-            ])),
-            { port: NOVNC_CONTAINER_PORT, hostIp: "127.0.0.1" },
-          ];
-          const cConfig: ContainerConfig = {
-            image: effectiveImage,
-            ports: containerPorts,
-            volumes: body.container?.volumes,
-            env: { ...(envVars ?? {}), DISPLAY: ":99" },
-          };
-          try {
-            containerInfo = containerManager.createContainer(tempId, cwd, cConfig);
-          } catch (err) {
-            const reason = getErrorMessage(err);
-            await stream.writeSSE({
-              event: "error",
-              data: JSON.stringify({
-                error: `Container startup failed: ${reason}`,
-                step: "creating_container",
-              }),
-            });
-            return;
-          }
-          containerId = containerInfo.containerId;
-          containerName = containerInfo.name;
-          containerImage = effectiveImage;
-          await emitProgress(stream, "creating_container", "Container running", "done");
-
-          // --- Step: Copy workspace into isolated volume ---
-          await emitProgress(stream, "copying_workspace", "Copying workspace files...", "in_progress");
-          try {
-            await containerManager.copyWorkspaceToContainer(containerInfo.containerId, cwd);
-            containerManager.reseedGitAuth(containerInfo.containerId);
-            await emitProgress(stream, "copying_workspace", "Workspace copied", "done");
-          } catch (err) {
-            containerManager.removeContainer(tempId);
-            const reason = getErrorMessage(err);
-            await stream.writeSSE({
-              event: "error",
-              data: JSON.stringify({
-                error: `Failed to copy workspace: ${reason}`,
-                step: "copying_workspace",
-              }),
-            });
-            return;
-          }
-
-          // --- Step: Git operations inside container ---
-          if (body.branch) {
-            const repoInfo = cwd ? gitUtils.getRepoInfo(cwd) : null;
-
-            await emitProgress(stream, "fetching_git", "Fetching from remote (in container)...", "in_progress");
-            const gitResult = containerManager.gitOpsInContainer(containerInfo.containerId, {
-              branch: body.branch,
-              currentBranch: repoInfo?.currentBranch || "HEAD",
-              createBranch: body.createBranch,
-              defaultBranch: repoInfo?.defaultBranch,
-            });
-            await emitProgress(stream, "fetching_git", gitResult.fetchOk ? "Fetch complete" : "Fetch skipped", "done");
-
-            if (repoInfo?.currentBranch !== body.branch) {
-              await emitProgress(stream, "checkout_branch",
-                gitResult.checkoutOk ? `On branch ${body.branch}` : `Checkout failed`,
-                gitResult.checkoutOk ? "done" : "error",
-              );
-            }
-
-            await emitProgress(stream, "pulling_git", gitResult.pullOk ? "Up to date" : "Pull skipped", "done");
-
-            if (gitResult.errors.length > 0) {
-              console.warn(`[routes] In-container git ops warnings: ${gitResult.errors.join("; ")}`);
-            }
-            if (!gitResult.checkoutOk) {
-              containerManager.removeContainer(tempId);
-              await stream.writeSSE({
-                event: "error",
-                data: JSON.stringify({
-                  error: `Failed to checkout branch "${body.branch}" inside container: ${gitResult.errors.join("; ")}`,
-                  step: "checkout_branch",
-                }),
-              });
-              return;
-            }
-          }
-
-          // --- Step: Init script ---
-          const initScript = companionSandbox?.initScript?.trim();
-          if (initScript) {
-            await emitProgress(stream, "running_init_script", "Running init script...", "in_progress");
-            try {
-              const initTimeout = Number(process.env.COMPANION_INIT_SCRIPT_TIMEOUT) || 120_000;
-              const result = await containerManager.execInContainerAsync(
-                containerInfo.containerId,
-                ["sh", "-lc", initScript],
-                {
-                  timeout: initTimeout,
-                  onOutput: (line) => {
-                    emitProgress(stream, "running_init_script", "Running init script...", "in_progress", line).catch(() => {});
-                  },
-                },
-              );
-              if (result.exitCode !== 0) {
-                console.error(
-                  `[routes] Init script failed for sandbox "${companionSandbox?.name || "sandbox"}" (exit ${result.exitCode}):\n${result.output}`,
-                );
-                containerManager.removeContainer(tempId);
-                const truncated = result.output.length > 2000
-                  ? result.output.slice(0, 500) + "\n...[truncated]...\n" + result.output.slice(-1500)
-                  : result.output;
-                await stream.writeSSE({
-                  event: "error",
-                  data: JSON.stringify({
-                    error: `Init script failed (exit ${result.exitCode}):\n${truncated}`,
-                    step: "running_init_script",
-                  }),
-                });
-                return;
-              }
-              await emitProgress(stream, "running_init_script", "Init script complete", "done");
-            } catch (e) {
-              containerManager.removeContainer(tempId);
-              const reason = getErrorMessage(e);
-              await stream.writeSSE({
-                event: "error",
-                data: JSON.stringify({
-                  error: `Init script execution failed: ${reason}`,
-                  step: "running_init_script",
-                }),
-              });
-              return;
-            }
-          }
-        }
-
-        // --- Step: Launch CLI ---
-        await emitProgress(stream, "launching_cli", `Launching ${backend === "codex" ? "Codex" : "Claude Code"}...`, "in_progress");
-
-        const session = launcher.launch({
-          model: body.model,
-          permissionMode: body.permissionMode ?? "bypassPermissions",
-          cwd,
-          claudeBinary: body.claudeBinary,
-          codexBinary: body.codexBinary,
-          codexInternetAccess: backend === "codex",
-          codexSandbox: backend === "codex" ? "danger-full-access" : undefined,
-          allowedTools: body.allowedTools,
-          env: envVars,
-          backendType: backend,
-          resumeSessionId: body.resumeSessionId,
-          containerId,
-          containerName,
-          containerImage,
-          containerCwd: containerInfo?.containerCwd,
-          resumeSessionAt,
-          forkSession,
-          systemPrompt: backend === "codex" ? linearSystemPrompt : undefined,
-          sandboxSlug: sandboxEnabled ? (body.sandboxSlug || undefined) : undefined,
-          name: body.name,
-        });
-
-        // Pre-load conversation history from CLI session file so the browser
-        // sees it immediately, before system.init arrives from the CLI.
-        // Covers both paths: resumeSessionAt (HomePage branching) and resumeSessionId (Sidebar resume).
-        const resumeCliId = resumeSessionAt || body.resumeSessionId;
-        if (resumeCliId) {
-          wsBridge.initializeResumedSession(session.sessionId, resumeCliId, cwd);
-        }
-
-        if (containerInfo) {
-          containerManager.retrack(containerInfo.containerId, session.sessionId);
-          wsBridge.markContainerized(session.sessionId, cwd);
-        }
-
-        if (worktreeInfo) {
-          worktreeTracker.addMapping({
-            sessionId: session.sessionId,
-            repoRoot: worktreeInfo.repoRoot,
-            branch: worktreeInfo.branch,
-            actualBranch: worktreeInfo.actualBranch,
-            worktreePath: worktreeInfo.worktreePath,
-            createdAt: Date.now(),
-          });
-        }
-
-        // Inject Linear context into the CLI's system prompt (must happen before first user message)
-        if (linearSystemPrompt && backend === "claude") {
-          wsBridge.injectSystemPrompt(session.sessionId, linearSystemPrompt);
-        }
-
-        // Pre-populate slash commands and skills from filesystem so the slash
-        // menu works before system.init arrives from the CLI
-        const discovered = await discoverCommandsAndSkills(cwd).catch(() => ({ slash_commands: [] as string[], skills: [] as string[] }));
-        wsBridge.prePopulateCommands(session.sessionId, discovered.slash_commands, discovered.skills);
-
-        await emitProgress(stream, "launching_cli", "Session started", "done");
-
-        wsBridge.broadcastGlobal({ type: "sessions_updated" });
-
-        // --- Done ---
-        await stream.writeSSE({
-          event: "done",
-          data: JSON.stringify({
-            sessionId: session.sessionId,
-            state: session.state,
-            cwd: session.cwd,
-            backendType: session.backendType,
-            resumeSessionAt: session.resumeSessionAt,
-            forkSession: session.forkSession,
-          }),
-        });
-      } catch (e: unknown) {
-        const msg = getErrorMessage(e);
-        console.error("[routes] Failed to create session (stream):", msg);
+      if (!result.ok) {
         await stream.writeSSE({
           event: "error",
-          data: JSON.stringify({ error: msg }),
+          data: JSON.stringify({ error: result.error }),
         });
+        return;
       }
+
+      wsBridge.broadcastGlobal({ type: "sessions_updated" });
+
+      await stream.writeSSE({
+        event: "done",
+        data: JSON.stringify({
+          sessionId: result.session.sessionId,
+          state: result.session.state,
+          cwd: result.session.cwd,
+          backendType: result.session.backendType,
+          resumeSessionAt: result.session.resumeSessionAt,
+          forkSession: result.session.forkSession,
+        }),
+      });
     });
   });
 
@@ -1035,9 +252,6 @@ export function createRoutes(
     const bridgeStates = wsBridge.getAllSessions();
     const bridgeMap = new Map(bridgeStates.map((s) => [s.session_id, s]));
     const now = Date.now();
-    // Filter out orphaned sessions (connected, 0 turns, no name, no title, age > 2min)
-    // Sessions with a title have had real activity and must never be filtered.
-    // Never filter sessions that a browser is actively viewing.
     const sessions = allSessions.filter((s) => {
       if (s.state === "connected" && !s.name && !s.title && !names[s.sessionId]) {
         if (wsBridge.hasBrowsers(s.sessionId)) return true;
@@ -1050,8 +264,6 @@ export function createRoutes(
       const bridge = bridgeMap.get(s.sessionId);
       return {
         ...s,
-        // Bridge state is the source of truth for runtime cwd updates
-        // (notably containerized sessions mapped back to host paths).
         cwd: bridge?.cwd || s.cwd,
         name: names[s.sessionId] ?? s.name,
         title: s.title ? stripSystemTags(s.title) : s.title,
@@ -1067,8 +279,6 @@ export function createRoutes(
 
   api.get("/sessions/resumable", async (c) => {
     try {
-      // Use discoverClaudeSessions so project uses the real cwd from JSONL metadata
-      // (directory-name decoding breaks for agent sessions stored under session-ID dirs)
       const discovered = discoverClaudeSessions({ limit: 40 });
 
       const TARGET = 16;
@@ -1104,7 +314,6 @@ export function createRoutes(
     return c.json(enriched);
   });
 
-  // Lazy-load tool result content (stripped from subagent messages to save browser memory)
   api.get("/sessions/:id/tool-result/:toolUseId", (c) => {
     const id = c.req.param("id");
     const toolUseId = c.req.param("toolUseId");
@@ -1143,8 +352,6 @@ export function createRoutes(
     const session = launcher.getSession(id);
     if (!session) return c.json({ error: "Session not found" }, 404);
 
-    // For container sessions, try code-server inside the container first.
-    // If unavailable, fall through to host code-server with the host-mapped cwd.
     let hostFallbackCwd = session.cwd;
 
     if (session.containerId) {
@@ -1186,7 +393,6 @@ export function createRoutes(
           ].join(" ");
           containerManager.execInContainer(container.containerId, ["sh", "-lc", startCmd], 10_000);
 
-          // Wait for code-server to be ready (up to 5s)
           const containerEditorUrl = `http://localhost:${portMapping.hostPort}${editorPathSuffix}`;
           for (let i = 0; i < 25; i++) {
             try {
@@ -1215,8 +421,6 @@ export function createRoutes(
         }
       }
 
-      // Container doesn't have code-server — fall through to host code-server
-      // using the host-mapped workspace path
       if (container) {
         hostFallbackCwd = container.hostCwd;
       }
@@ -1244,7 +448,6 @@ export function createRoutes(
       const startHostCmd = `mkdir -p ${shellEscapeArg(COMPANION_HOME)} && ${startCmd}`;
       execSync(startHostCmd, { encoding: "utf-8", timeout: 10_000 });
 
-      // Wait for code-server to be ready (up to 5s)
       const editorUrl = `http://localhost:${VSCODE_EDITOR_HOST_PORT}${editorPathSuffix}`;
       for (let i = 0; i < 25; i++) {
         try {
@@ -1325,12 +528,11 @@ export function createRoutes(
       return c.json({
         available: false,
         mode: "container" as const,
-        message: "Browser preview requires Xvfb and noVNC in the container image. Rebuild with the latest the-companion image.",
+        message: "Browser preview requires Xvfb and noVNC in the container image. Rebuild with the latest iclaude image.",
       });
     }
 
     try {
-      // Start display stack (idempotent — guarded by pgrep)
       const startScript = [
         "export DISPLAY=:99",
         'if ! pgrep -f "Xvfb :99" >/dev/null 2>&1; then',
@@ -1351,7 +553,6 @@ export function createRoutes(
         { timeout: 15_000 },
       );
 
-      // Optionally launch Chromium to a URL (validate scheme if provided)
       let targetUrl = "about:blank";
       if (body.url && typeof body.url === "string") {
         try {
@@ -1385,7 +586,6 @@ export function createRoutes(
         { timeout: 10_000 },
       );
 
-      // Wait for noVNC to be ready (up to 10s)
       let noVncReady = false;
       for (let i = 0; i < 50; i++) {
         try {
@@ -1436,7 +636,6 @@ export function createRoutes(
     const url = body.url;
     if (!url || typeof url !== "string") return c.json({ error: "url is required" }, 400);
 
-    // Validate URL scheme — only allow http/https to prevent file:// access
     try {
       const parsed = new URL(url);
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -1450,11 +649,8 @@ export function createRoutes(
     if (!container) return c.json({ error: "Container not found" }, 404);
 
     try {
-      // Use xdotool to send the URL to the existing Chromium window's address bar
-      // instead of spawning a new Chromium process each time
       const navScript = [
         "export DISPLAY=:99",
-        // Focus the Chromium window and navigate via keyboard shortcut
         'xdotool search --onlyvisible --name "Chromium" windowactivate --sync key --clearmodifiers ctrl+l',
         "sleep 0.1",
         `xdotool type --clearmodifiers ${shellEscapeArg(url)}`,
@@ -1471,7 +667,6 @@ export function createRoutes(
     }
   });
 
-  // HTTP proxy for noVNC static files — serves through the companion's port
   api.get("/sessions/:id/browser/proxy/*", async (c) => {
     const id = c.req.param("id");
     const session = launcher.getSession(id);
@@ -1486,12 +681,10 @@ export function createRoutes(
     );
     if (!portMapping) return c.json({ error: "Browser preview port not mapped" }, 400);
 
-    // Extract the wildcard path after /browser/proxy/
     const fullPath = c.req.path;
     const proxyPrefix = `/api/sessions/${id}/browser/proxy/`;
     const subPath = fullPath.startsWith(proxyPrefix) ? fullPath.slice(proxyPrefix.length) : "";
 
-    // Block path traversal (defense-in-depth)
     if (subPath.includes("..")) {
       return c.json({ error: "Invalid path" }, 400);
     }
@@ -1516,7 +709,6 @@ export function createRoutes(
   });
 
 
-  // HTTP proxy for host browser preview — proxies localhost requests through the companion’s port
   const HOP_BY_HOP = new Set(["connection", "keep-alive", "transfer-encoding", "upgrade", "proxy-connection", "te", "trailer"]);
   api.all("/sessions/:id/browser/host-proxy/:port/*", async (c) => {
     const id = c.req.param("id");
@@ -1529,19 +721,16 @@ export function createRoutes(
       return c.json({ error: "Invalid port" }, 400);
     }
 
-    // Block well-known sensitive service ports to limit SSRF surface area
     const BLOCKED_PORTS = new Set([22, 23, 25, 110, 143, 3306, 5432, 6379, 27017, 11211]);
     const serverPort = port || (process.env.NODE_ENV === "production" ? 3456 : 3457);
     if (portNum === serverPort || BLOCKED_PORTS.has(portNum)) {
       return c.json({ error: "Port not allowed" }, 400);
     }
 
-    // Reconstruct path from wildcard — only take path, query comes separately
     const fullPath = c.req.path;
     const proxyPrefix = `/api/sessions/${id}/browser/host-proxy/${portNum}/`;
     const subPath = fullPath.startsWith(proxyPrefix) ? fullPath.slice(proxyPrefix.length) : "";
 
-    // Block path traversal (Hono decodes %2e%2e before c.req.path)
     if (subPath.includes("..")) {
       return c.json({ error: "Invalid path" }, 400);
     }
@@ -1560,7 +749,6 @@ export function createRoutes(
         signal: controller.signal,
       });
       clearTimeout(timeout);
-      // Forward response headers, stripping hop-by-hop headers
       const headers = new Headers();
       upstream.headers.forEach((value, key) => {
         if (!HOP_BY_HOP.has(key.toLowerCase())) {
@@ -1577,7 +765,7 @@ export function createRoutes(
     }
   });
 
-    api.patch("/sessions/:id/name", async (c) => {
+  api.patch("/sessions/:id/name", async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json().catch(() => ({}));
     if (typeof body.name !== "string" || !body.name.trim()) {
@@ -1592,19 +780,14 @@ export function createRoutes(
 
   api.post("/sessions/:id/kill", async (c) => {
     const id = c.req.param("id");
-    const killed = await launcher.kill(id);
-    if (!killed)
-      return c.json({ error: "Session not found or already exited" }, 404);
-
-    containerManager.removeContainer(id);
-
+    const result = await orchestrator.killSession(id);
+    if (!result.ok) return c.json({ error: "Session not found or already exited" }, 404);
     return c.json({ ok: true });
   });
 
   api.post("/sessions/:id/relaunch", async (c) => {
     const id = c.req.param("id");
-    clearAutoRelaunchCount?.(id);
-    const result = await launcher.relaunch(id);
+    const result = await orchestrator.relaunchSession(id);
     if (!result.ok) {
       const status = result.error?.includes("not found") || result.error?.includes("Session not found") ? 404 : 503;
       return c.json({ error: result.error || "Relaunch failed" }, status);
@@ -1612,12 +795,10 @@ export function createRoutes(
     return c.json({ ok: true });
   });
 
-  // Kill a background process spawned by a session
   api.post("/sessions/:id/processes/:taskId/kill", async (c) => {
     const sessionId = c.req.param("id");
     const taskId = c.req.param("taskId");
 
-    // Validate taskId to prevent command injection (hex string from Claude Code)
     if (!/^[a-f0-9]+$/i.test(taskId)) {
       return c.json({ error: "Invalid task ID format" }, 400);
     }
@@ -1628,10 +809,6 @@ export function createRoutes(
 
     try {
       const { execFileSync } = await import("node:child_process");
-      // The taskId appears in the output file path of the background process,
-      // so pkill -f matches it reliably.
-      // Use execFileSync (array form) to avoid shell injection — taskId is passed
-      // as an argument, never interpolated into a shell string.
       if (session.containerId) {
         containerManager.execInContainer(
           session.containerId,
@@ -1655,7 +832,6 @@ export function createRoutes(
     }
   });
 
-  // Kill all background processes for a session
   api.post("/sessions/:id/processes/kill-all", async (c) => {
     const sessionId = c.req.param("id");
     const body = await c.req.json().catch(() => ({} as { taskIds?: string[] }));
@@ -1695,7 +871,6 @@ export function createRoutes(
     return c.json({ ok: true, results });
   });
 
-  // Scan for dev-related processes listening on TCP ports
   const DEV_COMMANDS = new Set([
     "node", "bun", "deno", "ts-node", "tsx",
     "python", "python3", "uvicorn", "gunicorn", "flask",
@@ -1709,7 +884,6 @@ export function createRoutes(
     "webpack", "esbuild", "rollup", "parcel",
     "tsc",
   ]);
-  // System/IDE processes to exclude even if they listen on a port
   const EXCLUDE_COMMANDS = new Set([
     "launchd", "mDNSResponder", "rapportd", "systemd",
     "sshd", "cupsd", "httpd", "nginx", "postgres", "mysqld",
@@ -1720,8 +894,6 @@ export function createRoutes(
   ]);
 
   function parseLsofCwd(raw: string): string | undefined {
-    // `lsof -Fn` emits records like:
-    // p1234\nfcwd\nn/Users/me/project\n
     const match = raw.match(/^n(.+)$/m);
     const cwd = match?.[1]?.trim();
     return cwd || undefined;
@@ -1755,8 +927,7 @@ export function createRoutes(
         });
       }
 
-      // Parse lsof output: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
-      const lines = raw.trim().split("\n").slice(1); // skip header
+      const lines = raw.trim().split("\n").slice(1);
       const pidMap = new Map<number, { command: string; ports: Set<number> }>();
 
       for (const line of lines) {
@@ -1767,8 +938,6 @@ export function createRoutes(
         if (isNaN(pid)) continue;
         if (EXCLUDE_COMMANDS.has(command)) continue;
 
-        // macOS lsof NAME ends like `TCP *:3000 (LISTEN)`, so the final token is
-        // often `(LISTEN)` rather than the address. Parse from the full line.
         const portMatch = line.match(/:(\d+)\s+\(LISTEN\)\s*$/) ?? line.match(/:(\d+)\s*$/);
         if (!portMatch) continue;
         const port = parseInt(portMatch[1], 10);
@@ -1781,7 +950,6 @@ export function createRoutes(
         }
       }
 
-      // Get full command line for each PID
       const processes: {
         pid: number;
         command: string;
@@ -1792,7 +960,6 @@ export function createRoutes(
       }[] = [];
 
       for (const [pid, info] of pidMap) {
-        // Skip if command isn't dev-related (check both exact name and prefix)
         const lowerCmd = info.command.toLowerCase();
         const isDev = DEV_COMMANDS.has(lowerCmd)
           || DEV_COMMANDS.has(info.command)
@@ -1877,7 +1044,6 @@ export function createRoutes(
     }
   });
 
-  // Kill a system process by PID
   api.post("/sessions/:id/processes/system/:pid/kill", async (c) => {
     const sessionId = c.req.param("id");
     const pidStr = c.req.param("pid");
@@ -1890,7 +1056,6 @@ export function createRoutes(
     const session = launcher.getSession(sessionId);
     if (!session) return c.json({ error: "Session not found" }, 404);
 
-    // Safety: don't allow killing iClaude server or Claude CLI process itself
     if (pid === process.pid) {
       return c.json({ error: "Cannot kill iClaude server" }, 403);
     }
@@ -1931,16 +1096,9 @@ export function createRoutes(
 
   api.delete("/sessions/:id", async (c) => {
     const id = c.req.param("id");
-    await launcher.kill(id);
-
-    containerManager.removeContainer(id);
-
-    const worktreeResult = cleanupWorktree(id, true);
-    prPoller?.unwatch(id);
-    sessionLinearIssues.removeLinearIssue(id);
-    launcher.removeSession(id);
-    wsBridge.closeSession(id);
-    return c.json({ ok: true, worktree: worktreeResult });
+    const result = await orchestrator.deleteSession(id);
+    wsBridge.broadcastGlobal({ type: "sessions_updated" });
+    return c.json({ ok: true, worktree: result.worktree });
   });
 
   api.get("/sessions/:id/archive-info", async (c) => {
@@ -1968,7 +1126,6 @@ export function createRoutes(
       });
     }
 
-    // Issue is not done — check if backlog state is available and if archive transition is configured
     const resolved = resolveApiKey(linkedIssue.connectionId);
     let hasBacklogState = false;
     if (resolved && linkedIssue.teamId) {
@@ -1979,7 +1136,6 @@ export function createRoutes(
       }
     }
 
-    // Use connection-level archive settings if available, fall back to global settings
     const settings = getSettings();
     const conn = resolved && resolved.connectionId !== "legacy" ? getConnection(resolved.connectionId) : null;
     const archiveTransitionConfigured = conn
@@ -2008,67 +1164,19 @@ export function createRoutes(
   api.post("/sessions/:id/archive", async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json().catch(() => ({}));
-
-    // ─── Best-effort Linear transition before archive ─────────────────
-    let linearTransitionResult: { ok: boolean; skipped?: boolean; error?: string; issue?: { id: string; identifier: string; stateName: string; stateType: string } } | undefined;
-    const linearTransition = body.linearTransition as string | undefined;
-
-    if (linearTransition && linearTransition !== "none") {
-      const linkedIssue = sessionLinearIssues.getLinearIssue(id);
-      if (linkedIssue) {
-        const resolved = resolveApiKey(linkedIssue.connectionId);
-        if (resolved) {
-          const { apiKey: linearApiKey, connectionId: resolvedConnId } = resolved;
-          const settings = getSettings();
-          // Use connection-level archive settings if available, else fall back to global
-          const conn = resolvedConnId !== "legacy" ? getConnection(resolvedConnId) : null;
-          let targetStateId = "";
-
-          if (linearTransition === "backlog" && linkedIssue.teamId) {
-            // Resolve backlog state for the issue's team
-            const teams = await fetchLinearTeamStates(linearApiKey);
-            const team = teams.find((t) => t.id === linkedIssue.teamId);
-            const backlogState = team?.states.find((s) => s.type === "backlog");
-            if (backlogState) {
-              targetStateId = backlogState.id;
-            }
-          } else if (linearTransition === "configured") {
-            const archiveStateId = conn ? conn.archiveTransitionStateId : settings.linearArchiveTransitionStateId;
-            targetStateId = archiveStateId.trim();
-          }
-
-          if (targetStateId) {
-            try {
-              linearTransitionResult = await transitionLinearIssue(linkedIssue.id, targetStateId, linearApiKey, resolvedConnId);
-            } catch {
-              linearTransitionResult = { ok: false, error: "Transition failed unexpectedly" };
-            }
-          } else {
-            linearTransitionResult = { ok: true, skipped: true };
-          }
-        }
-      }
-    }
-
-    // ─── Existing archive logic ───────────────────────────────────────
-    await launcher.kill(id);
-
-    containerManager.removeContainer(id);
-
-    prPoller?.unwatch(id);
-
-    const worktreeResult = cleanupWorktree(id, body.force);
-    launcher.setArchived(id, true);
-    sessionStore.setArchived(id, true);
-    // Notify browser clients so they disconnect immediately rather than reconnecting
+    const result = await orchestrator.archiveSession(id, {
+      force: body.force,
+      linearTransition: body.linearTransition,
+    });
     wsBridge.broadcastToSession(id, { type: "session_archived" });
-    return c.json({ ok: true, worktree: worktreeResult, linearTransition: linearTransitionResult });
+    wsBridge.broadcastGlobal({ type: "sessions_updated" });
+    return c.json({ ok: true, worktree: result.worktree, linearTransition: result.linearTransition });
   });
 
   api.post("/sessions/:id/unarchive", (c) => {
     const id = c.req.param("id");
-    launcher.setArchived(id, false);
-    sessionStore.setArchived(id, false);
+    orchestrator.unarchiveSession(id);
+    wsBridge.broadcastGlobal({ type: "sessions_updated" });
     return c.json({ ok: true });
   });
 
@@ -2105,14 +1213,12 @@ export function createRoutes(
 
   // ─── HTML Fragment bridge (state + console) ──────────────────
 
-  // Return all cached fragment states for a session (accepts Companion or CLI session ID)
   api.get("/sessions/:id/fragments", (c) => {
     const session = wsBridge.resolveSession(c.req.param("id"));
     if (!session) return c.json({ error: "Session not found" }, 404);
     return c.json(wsBridge.getAllFragmentStates(session.id));
   });
 
-  // Return last state pushed by a fragment via vibeReportState (accepts Companion or CLI session ID)
   api.get("/sessions/:id/fragments/:fid/state", (c) => {
     const session = wsBridge.resolveSession(c.req.param("id"));
     const fid = c.req.param("fid");
@@ -2120,14 +1226,12 @@ export function createRoutes(
     return c.json({ fragmentId: fid, state: wsBridge.getFragmentState(session.id, fid) });
   });
 
-  // Return all console logs for all fragments in a session
   api.get("/sessions/:id/fragments/console", (c) => {
     const session = wsBridge.resolveSession(c.req.param("id"));
     if (!session) return c.json({ error: "Session not found" }, 404);
     return c.json(wsBridge.getAllFragmentConsole(session.id));
   });
 
-  // Return console logs for a specific fragment
   api.get("/sessions/:id/fragments/:fid/console", (c) => {
     const session = wsBridge.resolveSession(c.req.param("id"));
     const fid = c.req.param("fid");
@@ -2150,7 +1254,6 @@ export function createRoutes(
     const backendId = c.req.param("id");
 
     if (backendId === "codex") {
-      // Read Codex model list from its local cache file
       const cachePath = join(homedir(), ".codex", "models_cache.json");
       if (!existsSync(cachePath)) {
         return c.json({ error: "Codex models cache not found. Run codex once to populate it." }, 404);
@@ -2197,9 +1300,6 @@ export function createRoutes(
   });
 
   // ─── Simple ask endpoint (for Siri Shortcuts / Apple Watch) ────────
-  // POST /api/ask        JSON { "text": "..." }  → JSON { "response": "..." }
-  // GET  /api/ask?text=  or  POST form text=     → JSON { "response": "..." }
-  // GET/POST /api/ask/text                       → plain text (for Shortcuts)
 
   const claudeAsk = async (text: string, cwd?: string): Promise<string> => {
     const binary = resolveBinary("claude");
@@ -2211,7 +1311,6 @@ export function createRoutes(
     ).trim();
   };
 
-  // shortcut session key → Claude CLI session ID (for --resume)
   const shortcutSessions = new Map<string, string>();
 
   const claudeAskWithSession = async (text: string, sessionKey: string, cwd?: string): Promise<string> => {
@@ -2224,7 +1323,6 @@ export function createRoutes(
       `${binary} -p ${shellEscapeArg(text)} ${resumeFlag} --output-format stream-json --dangerously-skip-permissions`,
       { cwd: cwd ?? homedir(), encoding: "utf-8", timeout: 120_000, env }
     ).trim();
-    // Parse NDJSON: capture session ID from system.init and text from result
     let response = "";
     let newCliSessionId = cliSessionId;
     for (const line of raw.split("\n")) {
@@ -2244,7 +1342,6 @@ export function createRoutes(
   const extractSessionParam = (form: FormData | null, body: Record<string, string | undefined> | null, key: string) =>
     ((form ? (form.get(key) as string ?? "") : (body?.[key] ?? "")) || "default").trim();
 
-  // Plain-text variant — used by Siri Shortcuts (avoids JSON parsing on Watch)
   api.get("/ask/text", async (c) => {
     const text = (c.req.query("text") ?? c.req.query("q") ?? "").trim();
     if (!text) return c.text("Missing text parameter", 400);
@@ -2309,42 +1406,6 @@ export function createRoutes(
   registerCronRoutes(api, cronScheduler);
   registerAgentRoutes(api, agentExecutor);
 
-  // ─── Worktree cleanup helper ────────────────────────────────────
-
-  function cleanupWorktree(
-    sessionId: string,
-    force?: boolean,
-  ): { cleaned?: boolean; dirty?: boolean; path?: string } | undefined {
-    const mapping = worktreeTracker.getBySession(sessionId);
-    if (!mapping) return undefined;
-
-    // Check if other sessions still use this worktree
-    if (worktreeTracker.isWorktreeInUse(mapping.worktreePath, sessionId)) {
-      worktreeTracker.removeBySession(sessionId);
-      return { cleaned: false, path: mapping.worktreePath };
-    }
-
-    // Auto-remove if clean, or force-remove if requested
-    const dirty = gitUtils.isWorktreeDirty(mapping.worktreePath);
-    if (dirty && !force) {
-      return { cleaned: false, dirty: true, path: mapping.worktreePath };
-    }
-
-    // Delete companion-managed branch if it differs from the user-selected branch
-    const branchToDelete =
-      mapping.actualBranch && mapping.actualBranch !== mapping.branch
-        ? mapping.actualBranch
-        : undefined;
-    const result = gitUtils.removeWorktree(mapping.repoRoot, mapping.worktreePath, {
-      force: dirty,
-      branchToDelete,
-    });
-    if (result.removed) {
-      worktreeTracker.removeBySession(sessionId);
-    }
-    return { cleaned: result.removed, path: mapping.worktreePath };
-  }
-
   // ─── Tunnel management ────────────────────────────────────────────────
   api.get("/tunnel/status", (c) => {
     if (!tunnelManager) return c.json({ state: "stopped", url: null, provider: null, error: "Tunnel manager not available" });
@@ -2381,13 +1442,11 @@ export function createRoutes(
     return c.json({ url: status.url, qrDataUrl });
   });
 
-  // Named tunnel info (login status, existing config)
   api.get("/tunnel/named/info", (c) => {
     if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
     return c.json(tunnelManager.getNamedTunnelInfo());
   });
 
-  // Setup a persistent named tunnel: creates tunnel + routes DNS + saves settings
   api.post("/tunnel/named/setup", async (c) => {
     if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
     const body = await c.req.json<{ name: string; hostname: string }>();
@@ -2402,7 +1461,6 @@ export function createRoutes(
     }
   });
 
-  // Delete the named tunnel and revert to quick mode
   api.post("/tunnel/named/delete", async (c) => {
     if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
     try {
@@ -2413,8 +1471,6 @@ export function createRoutes(
     }
   });
 
-  // Generate an Apple Shortcut (.shortcut) file pre-filled with the tunnel URL.
-  // The shortcut opens the authenticated tunnel URL and is Apple Watch compatible.
   api.get("/tunnel/shortcut", async (c) => {
     if (!tunnelManager) return c.json({ error: "Tunnel manager not available" }, 500);
     const status = tunnelManager.getStatus();
@@ -2432,7 +1488,6 @@ export function createRoutes(
   return api;
 }
 
-/** Generate an Apple Shortcut XML plist that opens a URL. WatchKit-compatible. */
 function generateShortcutPlist(name: string, url: string): string {
   const escaped = url.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -2534,7 +1589,6 @@ async function extractSessionTitle(filePath: string): Promise<string> {
           resolve(stripTitleGenPrompt(data.summary?.slice(0, 120) || ""));
           return;
         }
-        // isMeta entries are local-command caveats — never user content, never a title.
         if (data.type !== "user" || data.isMeta === true) return;
         const msg = data.message;
         if (!msg) return;
@@ -2551,7 +1605,6 @@ async function extractSessionTitle(filePath: string): Promise<string> {
           rawText = content;
         }
         if (!rawText) return;
-        // Strip system-injected tags before using as title.
         const clean = stripTitleGenPrompt(stripSystemTags(rawText.slice(0, 500)));
         if (!clean) return;
         found = true;
