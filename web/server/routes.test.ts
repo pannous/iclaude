@@ -765,8 +765,6 @@ describe("POST /api/sessions/create", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockImplementationOnce(() => {
       throw new Error("docker daemon timeout");
@@ -803,8 +801,6 @@ describe("POST /api/sessions/create", () => {
       updatedAt: 1000,
     });
 
-
-
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -833,8 +829,6 @@ describe("POST /api/sessions/create", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     const createSpy = vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-codex",
@@ -881,8 +875,6 @@ describe("POST /api/sessions/create", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     const createSpy = vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-vscode",
       name: "companion-vscode",
@@ -924,8 +916,6 @@ describe("POST /api/sessions/create", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     mockImagePullIsReady.mockReturnValue(false);
     mockImagePullGetState.mockReturnValue({
       image: "iclaude:latest",
@@ -975,8 +965,6 @@ describe("POST /api/sessions/create", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-init",
@@ -1026,8 +1014,6 @@ describe("POST /api/sessions/create", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-fail",
@@ -1082,8 +1068,6 @@ describe("POST /api/sessions/create", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-git",
       name: "companion-git",
@@ -1136,8 +1120,6 @@ describe("POST /api/sessions/create", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-nobranch",
       name: "companion-nobranch",
@@ -1184,8 +1166,6 @@ describe("POST /api/sessions/create", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-failcheckout",
       name: "companion-failcheckout",
@@ -1255,9 +1235,9 @@ describe("POST /api/sessions/create", () => {
     );
   });
 
-  it("uses the-companion:latest when sandboxEnabled is true but no sandboxSlug is provided", async () => {
+  it("uses iclaude:latest when sandboxEnabled is true but no sandboxSlug is provided", async () => {
     // Validates the default image fallback path: when sandboxEnabled is true
-    // but no sandboxSlug is given, the route should use "the-companion:latest"
+    // but no sandboxSlug is given, the route should use "iclaude:latest"
     // as the effectiveImage without calling sandboxManager.getSandbox or
     // since there is no sandbox to look up.
     vi.mocked(envManager.getEnv).mockReturnValue({
@@ -1271,7 +1251,7 @@ describe("POST /api/sessions/create", () => {
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-default",
       name: "companion-default",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/test",
       containerCwd: "/workspace",
@@ -5204,8 +5184,6 @@ describe("POST /api/sessions/create-stream", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-stream",
@@ -5262,8 +5240,6 @@ describe("POST /api/sessions/create-stream", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     // Image not ready initially — pull manager will handle it
     mockImagePullIsReady.mockReturnValue(false);
     mockImagePullGetState.mockReturnValue({
@@ -5323,8 +5299,6 @@ describe("POST /api/sessions/create-stream", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     mockImagePullIsReady.mockReturnValue(false);
     mockImagePullGetState.mockReturnValue({
       image: "iclaude:latest",
@@ -5365,8 +5339,6 @@ describe("POST /api/sessions/create-stream", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-init-stream",
@@ -5419,8 +5391,6 @@ describe("POST /api/sessions/create-stream", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     vi.spyOn(containerManager, "imageExists").mockReturnValueOnce(true);
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-fail-stream",
@@ -5486,8 +5456,6 @@ describe("POST /api/sessions/create-stream", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-git-stream",
       name: "companion-git-stream",
@@ -5565,8 +5533,6 @@ describe("POST /api/sessions/create-stream", () => {
       createdAt: 1000,
       updatedAt: 1000,
     });
-
-
     vi.spyOn(containerManager, "createContainer").mockReturnValueOnce({
       containerId: "cid-fail-git",
       name: "companion-fail-git",
@@ -6091,7 +6057,7 @@ describe("POST /api/sessions/:id/browser/start", () => {
     vi.spyOn(containerManager, "getContainer").mockReturnValue({
       containerId: "cid-1",
       name: "companion-s1",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [{ containerPort: 6080, hostPort: 49200 }],
       hostCwd: "/repo",
       containerCwd: "/workspace",
@@ -6124,7 +6090,7 @@ describe("POST /api/sessions/:id/browser/start", () => {
     vi.spyOn(containerManager, "getContainer").mockReturnValue({
       containerId: "cid-1",
       name: "companion-s1",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [{ containerPort: 6080, hostPort: 49200 }],
       hostCwd: "/repo",
       containerCwd: "/workspace",
@@ -6162,7 +6128,7 @@ describe("POST /api/sessions/:id/browser/start", () => {
     vi.spyOn(containerManager, "getContainer").mockReturnValue({
       containerId: "cid-1",
       name: "companion-s1",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [{ containerPort: 6080, hostPort: 49200 }],
       hostCwd: "/repo",
       containerCwd: "/workspace",
@@ -6196,7 +6162,7 @@ describe("POST /api/sessions/:id/browser/start", () => {
     vi.spyOn(containerManager, "getContainer").mockReturnValue({
       containerId: "cid-1",
       name: "companion-s1",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [{ containerPort: 6080, hostPort: 49200 }],
       hostCwd: "/repo",
       containerCwd: "/workspace",
@@ -6277,7 +6243,7 @@ describe("POST /api/sessions/:id/browser/navigate", () => {
     vi.spyOn(containerManager, "getContainer").mockReturnValue({
       containerId: "cid-1",
       name: "companion-s1",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [],
       hostCwd: "/repo",
       containerCwd: "/workspace",
@@ -6333,7 +6299,7 @@ describe("GET /api/sessions/:id/browser/proxy/*", () => {
     vi.spyOn(containerManager, "getContainer").mockReturnValue({
       containerId: "cid-1",
       name: "companion-s1",
-      image: "the-companion:latest",
+      image: "iclaude:latest",
       portMappings: [{ containerPort: 6080, hostPort: 49200 }],
       hostCwd: "/repo",
       containerCwd: "/workspace",
