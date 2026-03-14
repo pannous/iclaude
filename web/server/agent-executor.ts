@@ -172,6 +172,7 @@ export class AgentExecutor {
           ? (agent.permissionMode === "bypassPermissions" ? "danger-full-access" : "workspace-write")
           : undefined,
         sessionId: opts?.sessionId,
+        name: agent.name,
       });
 
       execution.sessionId = sessionInfo.sessionId;

@@ -229,6 +229,27 @@ describe("launch", () => {
     }
   });
 
+  it("passes --name when provided", () => {
+    launcher.launch({ name: "my-session", cwd: "/tmp" });
+
+    const [cmdAndArgs] = mockSpawn.mock.calls[0];
+    const nameIdx = cmdAndArgs.indexOf("--name");
+    expect(nameIdx).toBeGreaterThan(-1);
+    expect(cmdAndArgs[nameIdx + 1]).toBe("my-session");
+  });
+
+  it("stores name on session info when provided", () => {
+    const info = launcher.launch({ name: "test-session", cwd: "/tmp" });
+    expect(info.name).toBe("test-session");
+  });
+
+  it("omits --name when not provided", () => {
+    launcher.launch({ cwd: "/tmp" });
+
+    const [cmdAndArgs] = mockSpawn.mock.calls[0];
+    expect(cmdAndArgs.indexOf("--name")).toBe(-1);
+  });
+
   it("downgrades bypassPermissions to acceptEdits for containerized Claude sessions", () => {
     launcher.launch({
       cwd: "/tmp/project",

@@ -355,9 +355,7 @@ export function createRoutes(
       const companionEnv = body.envSlug ? envManager.getEnv(body.envSlug) : null;
       let effectiveImage: string | null = null;
       if (sandboxEnabled) {
-        effectiveImage = companionSandbox
-          ? sandboxManager.getEffectiveImage(body.sandboxSlug)
-          : "iclaude:latest";
+        effectiveImage = "iclaude:latest";
       } else if (companionEnv && body.envSlug) {
         effectiveImage = envManager.getEffectiveImage(body.envSlug);
       } else if (body.container?.image) {
@@ -544,6 +542,7 @@ export function createRoutes(
         forkSession,
         systemPrompt: backend === "codex" ? linearSystemPrompt : undefined,
         sandboxSlug: sandboxEnabled ? (body.sandboxSlug || undefined) : undefined,
+        name: body.name,
       });
 
       // Pre-load conversation history from CLI session file so the browser
@@ -657,9 +656,7 @@ export function createRoutes(
         // Resolve Docker image early so we know whether git ops should run on host or in container
         let effectiveImage: string | null = null;
         if (sandboxEnabled) {
-          effectiveImage = companionSandbox
-            ? sandboxManager.getEffectiveImage(body.sandboxSlug)
-            : "the-companion:latest";
+          effectiveImage = "the-companion:latest";
         } else if (body.container?.image) {
           effectiveImage = body.container.image;
         }
@@ -948,7 +945,7 @@ export function createRoutes(
         }
 
         // --- Step: Launch CLI ---
-        await emitProgress(stream, "launching_cli", "Launching Claude Code...", "in_progress");
+        await emitProgress(stream, "launching_cli", `Launching ${backend === "codex" ? "Codex" : "Claude Code"}...`, "in_progress");
 
         const session = launcher.launch({
           model: body.model,
@@ -970,6 +967,7 @@ export function createRoutes(
           forkSession,
           systemPrompt: backend === "codex" ? linearSystemPrompt : undefined,
           sandboxSlug: sandboxEnabled ? (body.sandboxSlug || undefined) : undefined,
+          name: body.name,
         });
 
         // Pre-load conversation history from CLI session file so the browser

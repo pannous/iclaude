@@ -131,6 +131,7 @@ export class CronScheduler {
         codexSandbox: job.backendType === "codex"
           ? (job.permissionMode === "bypassPermissions" ? "danger-full-access" : "workspace-write")
           : undefined,
+        name: job.name ? `cron: ${job.name}` : undefined,
       });
 
       execution.sessionId = sessionInfo.sessionId;

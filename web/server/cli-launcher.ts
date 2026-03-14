@@ -173,6 +173,8 @@ export interface LaunchOptions {
   systemPrompt?: string;
   /** Sandbox profile slug used for this session */
   sandboxSlug?: string;
+  /** Display name for the CLI session (passed as --name to Claude Code). */
+  name?: string;
 }
 
 /**
@@ -359,6 +361,11 @@ export class CliLauncher {
     if (backendType === "codex") {
       info.codexInternetAccess = options.codexInternetAccess === true;
       info.codexSandbox = options.codexSandbox;
+    }
+
+    // Store display name if provided
+    if (options.name) {
+      info.name = options.name;
     }
 
     // Store sandbox slug if provided
@@ -584,6 +591,9 @@ export class CliLauncher {
       for (const tool of options.allowedTools) {
         args.push("--allowedTools", tool);
       }
+    }
+    if (options.name) {
+      args.push("--name", options.name);
     }
     if (options.resumeSessionAt) {
       args.push("--resume", options.resumeSessionAt);
