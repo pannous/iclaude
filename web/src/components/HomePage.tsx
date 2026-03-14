@@ -296,9 +296,7 @@ export function HomePage() {
 
     if (!sandboxEnabled) return;
 
-    // Determine effective image
-    const sandbox = sandboxes.find((s) => s.slug === selectedSandbox);
-    const effectiveImage = sandbox?.imageTag || "the-companion:latest";
+    const effectiveImage = "the-companion:latest";
 
     const checkAndPull = () => {
       api.getImageStatus(effectiveImage).then((state) => {
@@ -324,7 +322,7 @@ export function HomePage() {
         sandboxImagePollRef.current = null;
       }
     };
-  }, [sandboxEnabled, selectedSandbox, sandboxes]);
+  }, [sandboxEnabled]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -686,8 +684,8 @@ export function HomePage() {
           permissionMode: mode,
           cwd: effectiveCwd || undefined,
           envSlug: selectedEnv || undefined,
-          sandboxEnabled: backend === "claude" && sandboxEnabled ? true : undefined,
-          sandboxSlug: backend === "claude" && sandboxEnabled && selectedSandbox ? selectedSandbox : undefined,
+          sandboxEnabled: sandboxEnabled ? true : undefined,
+          sandboxSlug: sandboxEnabled && selectedSandbox ? selectedSandbox : undefined,
           branch: effectiveBranch,
           createBranch: effectiveCreateBranch ? true : undefined,
           useWorktree: effectiveUseWorktree ? true : undefined,
@@ -1201,8 +1199,8 @@ export function HomePage() {
             )}
           </div>
 
-          {/* Sandbox selector — only available for Claude Code backend */}
-          {backend === "claude" && <div className="relative" ref={sandboxDropdownRef}>
+          {/* Sandbox selector */}
+          <div className="relative" ref={sandboxDropdownRef}>
             <button
               onClick={() => {
                 if (!showSandboxDropdown) {
@@ -1292,9 +1290,6 @@ export function HomePage() {
                     }`}
                   >
                     <span className="truncate">{sb.name}</span>
-                    {sb.imageTag && (
-                      <span className="text-[10px] px-1 py-0.5 rounded bg-blue-500/10 text-blue-400 ml-auto shrink-0">custom</span>
-                    )}
                   </button>
                 ))}
                 <div className="border-t border-cc-border mt-1 pt-1">
@@ -1308,7 +1303,7 @@ export function HomePage() {
                 </div>
               </div>
             )}
-          </div>}
+          </div>
 
           {/* Model selector */}
           <div className="relative" ref={modelDropdownRef}>

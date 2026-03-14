@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { captureException } from "../analytics.js";
+import { safeStorage } from "../utils/safe-storage.js";
 
 export function UpdateBanner() {
   const updateInfo = useStore((s) => s.updateInfo);
@@ -15,10 +16,13 @@ export function UpdateBanner() {
   const handleUpdate = async () => {
     setUpdating(true);
     try {
+      // Flag so the Docker image update dialog appears after restart
+      safeStorage.setItem("companion_docker_prompt_pending", "1");
       await api.triggerUpdate();
       // Show the full-screen updating overlay
       useStore.getState().setUpdateOverlayActive(true);
     } catch (err) {
+      safeStorage.removeItem("companion_docker_prompt_pending");
       captureException(err);
       setUpdating(false);
     }

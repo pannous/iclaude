@@ -356,8 +356,6 @@ export function createRoutes(
       let effectiveImage: string | null = null;
       if (sandboxEnabled) {
         effectiveImage = "iclaude:latest";
-      } else if (companionEnv && body.envSlug) {
-        effectiveImage = envManager.getEffectiveImage(body.envSlug);
       } else if (body.container?.image) {
         effectiveImage = body.container.image;
       }
@@ -656,7 +654,7 @@ export function createRoutes(
         // Resolve Docker image early so we know whether git ops should run on host or in container
         let effectiveImage: string | null = null;
         if (sandboxEnabled) {
-          effectiveImage = "the-companion:latest";
+          effectiveImage = "iclaude:latest";
         } else if (body.container?.image) {
           effectiveImage = body.container.image;
         }

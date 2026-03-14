@@ -4,6 +4,7 @@ import { connectSession, disconnectSession, sendToSession } from "./ws.js";
 import { api, autoAuth, verifyAuthToken } from "./api.js";
 import { parseHash, navigateToSession, navigateHome, type Route } from "./utils/routing.js";
 import { handleKeyDown, createMouseHandler } from "./utils/keybindings.js";
+import { safeStorage } from "./utils/safe-storage.js";
 import { LoginPage } from "./components/LoginPage.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { ChatView } from "./components/ChatView.js";
@@ -17,6 +18,7 @@ import { SessionTerminalDock } from "./components/SessionTerminalDock.js";
 import { SessionEditorPane } from "./components/SessionEditorPane.js";
 import { SessionBrowserPane } from "./components/SessionBrowserPane.js";
 import { UpdateOverlay } from "./components/UpdateOverlay.js";
+import { DockerUpdateDialog } from "./components/DockerUpdateDialog.js";
 
 // Extract named export as lazy component — eliminates repetitive .then() boilerplate
 function lazyNamed<T extends Record<string, ComponentType<any>>>(loader: () => Promise<T>, name: keyof T) {
@@ -31,7 +33,6 @@ const LinearSettingsPage = lazyNamed(() => import("./components/LinearSettingsPa
 const TailscalePage = lazyNamed(() => import("./components/TailscalePage.js"), "TailscalePage");
 const PromptsPage = lazyNamed(() => import("./components/PromptsPage.js"), "PromptsPage");
 const EnvManager = lazyNamed(() => import("./components/EnvManager.js"), "EnvManager");
-const DockerBuilderPage = lazyNamed(() => import("./components/DockerBuilderPage.js"), "DockerBuilderPage");
 const SandboxManager = lazyNamed(() => import("./components/SandboxManager.js"), "SandboxManager");
 const CronManager = lazyNamed(() => import("./components/CronManager.js"), "CronManager");
 const AgentsPage = lazyNamed(() => import("./components/AgentsPage.js"), "AgentsPage");
@@ -51,7 +52,6 @@ const PAGE_MAP: Partial<Record<Route["page"], { component: ComponentType<any>; p
   "integration-tailscale": { component: TailscalePage, props: { embedded: true } },
   terminal: { component: TerminalPage },
   environments: { component: EnvManager, props: { embedded: true } },
-  "docker-builder": { component: DockerBuilderPage },
   sandboxes: { component: SandboxManager, props: { embedded: true } },
   scheduled: { component: CronManager, props: { embedded: true } },
   panels: { component: PanelsPage },
@@ -336,6 +336,14 @@ export default function App() {
     }).catch(() => {});
   }, [isAuthenticated]);
 
+  // Show Docker image update dialog if an app update just completed
+  useEffect(() => {
+    if (safeStorage.getItem("companion_docker_prompt_pending") === "1") {
+      safeStorage.removeItem("companion_docker_prompt_pending");
+      useStore.getState().setDockerUpdateDialogOpen(true);
+    }
+  }, []);
+
   // LOCAL: auth gate — show nothing while autoAuth is in flight to avoid login-page flash
   if (authChecking) return null;
   if (!isAuthenticated) {
@@ -536,6 +544,7 @@ export default function App() {
         </>
       )}
       <UpdateOverlay active={updateOverlayActive} />
+      <DockerUpdateDialog />
     </div>
   );
 }

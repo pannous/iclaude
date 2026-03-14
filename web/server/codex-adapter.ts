@@ -891,10 +891,26 @@ export class CodexAdapter {
     };
 
     if (this.options.threadId) {
-      return await this.transport.call("thread/resume", {
-        threadId: this.options.threadId,
-        ...payload,
-      }) as { thread: { id: string } };
+      try {
+        return await this.transport.call("thread/resume", {
+          threadId: this.options.threadId,
+          ...payload,
+        }) as { thread: { id: string } };
+      } catch (resumeErr) {
+        // If resume fails with a non-transient error (e.g. "no rollout found"),
+        // fall back to starting a fresh thread instead of failing entirely.
+        const isTransport = resumeErr instanceof Error && resumeErr.message === "Transport closed";
+        if (isTransport) throw resumeErr;
+        console.warn(
+          `[codex-adapter] thread/resume failed for ${this.sessionId} (threadId=${this.options.threadId}), falling back to thread/start: ${resumeErr instanceof Error ? resumeErr.message : String(resumeErr)}`,
+        );
+        const freshResult = await this.transport.call("thread/start", {
+          ...payload,
+          ...(this.options.systemPrompt ? { instructions: this.options.systemPrompt } : {}),
+        }) as { thread: { id: string } };
+        this.options.threadId = freshResult.thread.id;
+        return freshResult;
+      }
     }
 
     return await this.transport.call("thread/start", {

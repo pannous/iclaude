@@ -3,6 +3,7 @@ import { api, type KeyHealthEntry } from "../api.js";
 import { useStore } from "../store.js";
 import { getTelemetryPreferenceEnabled, setTelemetryPreferenceEnabled } from "../analytics.js";
 import { navigateToSession, navigateHome } from "../utils/routing.js";
+import { safeStorage } from "../utils/safe-storage.js";
 
 interface SettingsPageProps {
   embedded?: boolean;
@@ -285,10 +286,13 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     setUpdateStatus("");
     setUpdateError("");
     try {
+      // Flag so the Docker image update dialog appears after restart
+      safeStorage.setItem("companion_docker_prompt_pending", "1");
       const res = await api.triggerUpdate();
       setUpdateStatus(res.message);
       setUpdateOverlayActive(true);
     } catch (err: unknown) {
+      safeStorage.removeItem("companion_docker_prompt_pending");
       setUpdateError(err instanceof Error ? err.message : String(err));
       setUpdatingApp(false);
     }

@@ -121,6 +121,7 @@ interface AppState {
   updateInfo: UpdateInfo | null;
   updateDismissedVersion: string | null;
   updateOverlayActive: boolean;
+  dockerUpdateDialogOpen: boolean;
 
   creationProgress: CreationProgressEvent[] | null;
   creationError: string | null;
@@ -236,6 +237,7 @@ interface AppState {
   setUpdateInfo: (info: UpdateInfo | null) => void;
   dismissUpdate: (version: string) => void;
   setUpdateOverlayActive: (active: boolean) => void;
+  setDockerUpdateDialogOpen: (open: boolean) => void;
   setEditorTabEnabled: (enabled: boolean) => void;
 
   setActiveTab: (tab: string) => void;
@@ -359,6 +361,7 @@ export const useStore = create<AppState>((set) => ({
   updateInfo: null,
   updateDismissedVersion: initString("cc-update-dismissed"),
   updateOverlayActive: false,
+  dockerUpdateDialogOpen: false,
   theme: initTheme(),
   darkMode: resolveThemeDark(initTheme()),
   notificationSound: initBool("cc-notification-sound", true),
@@ -853,6 +856,7 @@ export const useStore = create<AppState>((set) => ({
     set({ updateDismissedVersion: version });
   },
   setUpdateOverlayActive: (active) => set({ updateOverlayActive: active }),
+  setDockerUpdateDialogOpen: (open) => set({ dockerUpdateDialogOpen: open }),
   setEditorTabEnabled: (enabled) => set({ editorTabEnabled: enabled }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),

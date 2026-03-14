@@ -563,8 +563,8 @@ describe("HomePage", () => {
   it("opens environment dropdown and selects an environment", async () => {
     // The env dropdown should list available environments and allow selection.
     const testEnvs = [
-      { slug: "dev", name: "Development", variables: { API_KEY: "xxx" }, baseImage: "", imageTag: "" },
-      { slug: "prod", name: "Production", variables: { A: "1", B: "2" }, baseImage: "", imageTag: "" },
+      { slug: "dev", name: "Development", variables: { API_KEY: "xxx" } },
+      { slug: "prod", name: "Production", variables: { A: "1", B: "2" } },
     ];
     mockApi.listEnvs.mockResolvedValue(testEnvs);
 
@@ -621,7 +621,7 @@ describe("HomePage", () => {
     // Selecting "No environment" should clear the env selection and localStorage value.
     // First select an env through the dropdown, then clear it.
     const testEnvs = [
-      { slug: "dev", name: "Development", variables: { API_KEY: "xxx" }, baseImage: "", imageTag: "" },
+      { slug: "dev", name: "Development", variables: { API_KEY: "xxx" } },
     ];
     mockApi.listEnvs.mockResolvedValue(testEnvs);
 
@@ -1318,25 +1318,25 @@ describe("HomePage", () => {
 
 
   describe("Sandbox toggle", () => {
-    it("shows sandbox toggle only for Claude backend", async () => {
-      // The sandbox toggle should only appear when the backend is "claude"
+    it("shows sandbox toggle for all backends", async () => {
+      // The sandbox toggle should appear regardless of which backend is selected
       render(<HomePage />);
       await screen.findByLabelText("Task description");
 
-      // Claude backend shows sandbox toggle
       expect(screen.getByText("Sandbox")).toBeInTheDocument();
     });
 
-    it("hides sandbox toggle for codex backend", async () => {
-      // When the backend is "codex", the sandbox toggle should be hidden
+    it("shows sandbox toggle for codex backend", async () => {
+      // The sandbox toggle should also appear when the backend is "codex"
       mockApi.getBackends.mockResolvedValue([
         { id: "codex", name: "Codex", available: true },
       ]);
+      mockApi.getBackendModels.mockResolvedValue([]);
       localStorage.setItem("cc-backend", "codex");
       render(<HomePage />);
       await screen.findByLabelText("Task description");
 
-      expect(screen.queryByText("Sandbox")).not.toBeInTheDocument();
+      expect(screen.getByText("Sandbox")).toBeInTheDocument();
     });
 
     it("toggles sandbox enabled state on click", async () => {
@@ -1398,15 +1398,52 @@ describe("HomePage", () => {
       expect(localStorage.getItem("cc-selected-sandbox")).toBe("my-sandbox");
     });
 
-    it("does not send sandbox flags for codex backend", async () => {
-      // Even if sandbox was previously enabled in localStorage,
-      // creating a session with codex backend should NOT send sandbox flags.
+    it("sends sandbox flags for codex backend when sandbox is enabled", async () => {
+      // When sandbox is enabled in localStorage and the backend is codex,
+      // creating a session should send sandbox flags (sandbox works for all backends).
       mockApi.getBackends.mockResolvedValue([
         { id: "codex", name: "Codex", available: true },
       ]);
+      mockApi.getBackendModels.mockResolvedValue([]);
       localStorage.setItem("cc-backend", "codex");
       localStorage.setItem("cc-sandbox-enabled", "true");
       localStorage.setItem("cc-selected-sandbox", "my-sandbox");
+      createSessionStreamMock.mockReturnValue(new ReadableStream({
+        start(controller) {
+          controller.enqueue(JSON.stringify({ type: "complete", sessionId: "sess-1" }) + "\n");
+          controller.close();
+        },
+      }));
+
+      render(<HomePage />);
+      const textarea = await screen.findByLabelText("Task description");
+      await act(async () => {
+        fireEvent.change(textarea, { target: { value: "test" } });
+      });
+
+      const sendButton = screen.getByTitle("Send message");
+      await act(async () => {
+        fireEvent.click(sendButton);
+      });
+
+      await waitFor(() => {
+        expect(createSessionStreamMock).toHaveBeenCalled();
+      });
+
+      const callArgs = createSessionStreamMock.mock.calls[0][0];
+      expect(callArgs.sandboxEnabled).toBe(true);
+      expect(callArgs.sandboxSlug).toBe("my-sandbox");
+    });
+
+    it("does not send sandbox flags for codex backend when sandbox is disabled", async () => {
+      // When sandbox is explicitly disabled in localStorage, creating a session
+      // with codex backend should NOT send sandbox flags.
+      mockApi.getBackends.mockResolvedValue([
+        { id: "codex", name: "Codex", available: true },
+      ]);
+      mockApi.getBackendModels.mockResolvedValue([]);
+      localStorage.setItem("cc-backend", "codex");
+      localStorage.setItem("cc-sandbox-enabled", "false");
       createSessionStreamMock.mockReturnValue(new ReadableStream({
         start(controller) {
           controller.enqueue(JSON.stringify({ type: "complete", sessionId: "sess-1" }) + "\n");
