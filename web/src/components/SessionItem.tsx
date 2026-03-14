@@ -198,20 +198,20 @@ export function SessionItem({
         <>
           <button
             onClick={(e) => onUnarchive(e, s.id)}
-            className="absolute right-8 top-1/2 -translate-y-1/2 p-1.5 rounded-md can-hover:opacity-0 can-hover:group-hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
+            className="absolute right-10 can-hover:right-8 top-1/2 -translate-y-1/2 p-2.5 can-hover:p-1.5 rounded-md can-hover:opacity-0 can-hover:group-hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
             title="Restore session"
           >
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5 can-hover:w-4 can-hover:h-4">
               <path d="M8 10V3M5 5l3-3 3 3" strokeLinecap="round" strokeLinejoin="round" />
               <path d="M3 13h10" strokeLinecap="round" />
             </svg>
           </button>
           <button
             onClick={(e) => onDelete(e, s.id)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md can-hover:opacity-0 can-hover:group-hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-red-400 transition-all cursor-pointer"
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 can-hover:p-1.5 rounded-md can-hover:opacity-0 can-hover:group-hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-red-400 transition-all cursor-pointer"
             title="Delete permanently"
           >
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5 can-hover:w-4 can-hover:h-4">
               <path d="M4 4l8 8M12 4l-8 8" />
             </svg>
           </button>
@@ -219,10 +219,10 @@ export function SessionItem({
       ) : (
         <button
           onClick={(e) => onArchive(e, s.id)}
-          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md opacity-30 hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 rounded-md opacity-50 can-hover:opacity-30 can-hover:p-1.5 hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
           title="Archive session"
         >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-4 h-4">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5 can-hover:w-4 can-hover:h-4">
             <path d="M3 3h10v2H3zM4 5v7a1 1 0 001 1h6a1 1 0 001-1V5" strokeLinecap="round" strokeLinejoin="round" />
             <path d="M6.5 8h3" strokeLinecap="round" />
           </svg>

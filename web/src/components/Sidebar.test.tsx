@@ -406,7 +406,8 @@ describe("Sidebar", () => {
     render(<Sidebar />);
     const archiveButton = screen.getByTitle("Archive session");
 
-    expect(archiveButton).toHaveClass("opacity-30");
+    expect(archiveButton).toHaveClass("opacity-50");
+    expect(archiveButton).toHaveClass("can-hover:opacity-30");
     expect(archiveButton).toHaveClass("hover:opacity-100");
   });
 
