@@ -1002,7 +1002,11 @@ describe("Browser handlers", () => {
     // The bridge uses the onCLIRelaunchNeededCallback API, not the event bus
     bridge.onCLIRelaunchNeededCallback(relaunchCb);
 
-    bridge.getOrCreateSession("s1");
+    // Simulate a session whose CLI has already terminated (not just booting)
+    const session = bridge.getOrCreateSession("s1");
+    session.stateMachine.transition("initializing", "cli_ws_open");
+    session.stateMachine.transition("ready", "system_init");
+    session.stateMachine.transition("terminated", "disconnect_confirmed");
     const browser = makeBrowserSocket("s1");
     bridge.handleBrowserOpen(browser, "s1");
 
@@ -1056,6 +1060,39 @@ describe("Browser handlers", () => {
     const calls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
     const disconnectedMsg = calls.find((c: any) => c.type === "cli_disconnected");
     expect(disconnectedMsg).toBeUndefined();
+  });
+
+  it("handleBrowserOpen: does NOT send cli_disconnected for sessions still booting (starting/initializing)", () => {
+    // A session in "starting" phase is actively launching the CLI — the adapter
+    // is not yet attached, but we should not flash "CLI disconnected" to the user.
+    const session = bridge.getOrCreateSession("s1");
+    expect(session.stateMachine.phase).toBe("starting");
+
+    const browser = makeBrowserSocket("s1");
+    bridge.handleBrowserOpen(browser, "s1");
+
+    const calls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    const disconnectedMsg = calls.find((c: any) => c.type === "cli_disconnected");
+    expect(disconnectedMsg).toBeUndefined();
+  });
+
+  it("handleCLIOpen: promotes to ready after init grace timeout when system_init is deferred", () => {
+    // Claude CLI 2.x defers system_init until the first user message. The state
+    // machine should still reach "ready" via the grace timer.
+    vi.useFakeTimers();
+
+    const session = bridge.getOrCreateSession("s1");
+    const cli = makeCliSocket("s1");
+    bridge.handleCLIOpen(cli, "s1");
+
+    // Immediately after CLI open, state is "initializing"
+    expect(session.stateMachine.phase).toBe("initializing");
+
+    // After 5s grace period, should auto-promote to "ready"
+    vi.advanceTimersByTime(5_000);
+    expect(session.stateMachine.phase).toBe("ready");
+
+    vi.useRealTimers();
   });
 
   it("handleBrowserOpen: recovers message history via sessionInfoLookup when session has no history", () => {

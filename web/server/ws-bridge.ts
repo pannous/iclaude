@@ -1217,6 +1217,30 @@ export class WsBridge {
       this.broadcastToBrowsers(session, { type: "cli_connected" });
     }
 
+    // Claude CLI 2.x defers system_init until the first user message is sent,
+    // so the state machine can stay stuck in "initializing" indefinitely for
+    // idle sessions. Transition to "ready" after a short grace period if the
+    // CLI hasn't sent system_init by then — keep_alive/hooks prove the CLI is
+    // alive and accepting messages, even without the full init payload.
+    const initGraceTimer = setTimeout(() => {
+      if (session.stateMachine.phase === "initializing") {
+        console.log(`[ws-bridge] CLI did not send system_init for session ${sessionId}, promoting to ready`);
+        session.stateMachine.transition("ready", "init_grace_timeout");
+      }
+    }, 5_000);
+    // Cancel the timer if system_init arrives normally (transition to ready via system_init)
+    const unsub = session.stateMachine.onTransition((evt) => {
+      if (evt.to === "ready" && evt.trigger !== "init_grace_timeout") {
+        clearTimeout(initGraceTimer);
+        unsub();
+      }
+      // Also cancel if session terminates or reconnects
+      if (evt.to === "terminated" || evt.to === "reconnecting") {
+        clearTimeout(initGraceTimer);
+        unsub();
+      }
+    });
+
     // If the session has no message history (e.g. after server restart),
     // try to reload it from the CLI's session file
     if (session.messageHistory.length === 0 && opts?.cliSessionId) {
@@ -1396,8 +1420,11 @@ export class WsBridge {
     // may flip true only after initialize/thread start, and relaunching
     // during that window can kill a healthy startup.
     const backendConnected = !!session.backendAdapter;
+    // Sessions still in "starting" or "initializing" are actively booting the
+    // CLI — don't flash "CLI disconnected" during normal startup.
+    const isBooting = session.stateMachine.phase === "starting" || session.stateMachine.phase === "initializing";
 
-    if (!backendConnected && !this.disconnectTimers.has(sessionId)) {
+    if (!backendConnected && !isBooting && !this.disconnectTimers.has(sessionId)) {
       // Only signal disconnection if we're not within the debounce window
       // (CLI may be mid-reconnect — avoid UI flap and spurious relaunch)
       this.sendToBrowser(ws, { type: "cli_disconnected" });
