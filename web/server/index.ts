@@ -96,6 +96,10 @@ wsBridge.restoreFromDisk();
 sessionStore.purgeGhosts();
 containerManager.restoreState(CONTAINER_STATE_PATH);
 
+// ── Session orchestrator — centralizes lifecycle event wiring ────────────────
+orchestrator.initialize();
+
+// ── Fork-specific lifecycle wiring (not covered by orchestrator) ─────────────
 // Auto-relaunch CLI when a browser connects to a session with no CLI.
 // Uses exponential backoff to prevent rapid relaunch loops when a CLI keeps crashing.
 const relaunchCooldowns = new Map<string, { until: number; attempts: number }>();

@@ -15,6 +15,7 @@ import type { RecorderManager } from "./recorder.js";
 import { CodexAdapter } from "./codex-adapter.js";
 import { resolveBinary, getEnrichedPath } from "./path-resolver.js";
 import { containerManager } from "./container-manager.js";
+import { companionBus } from "./event-bus.js";
 import {
   getLegacyCodexHome,
   resolveCompanionCodexSessionHome,
@@ -696,6 +697,7 @@ export class CliLauncher {
       const stderr = this.stderrBuffers.get(sessionId);
       this.stderrBuffers.delete(sessionId);
       this.persistState();
+      companionBus.emit("session:exited", { sessionId, exitCode });
       for (const handler of this.exitHandlers) {
         try { handler(sessionId, exitCode, stderr); } catch {}
       }
@@ -965,9 +967,7 @@ export class CliLauncher {
     });
 
     // Notify the WsBridge to attach this adapter
-    if (this.onCodexAdapter) {
-      this.onCodexAdapter(sessionId, adapter);
-    }
+    companionBus.emit("backend:codex-adapter-created", { sessionId, adapter });
 
     info.state = "connected";
 
@@ -994,6 +994,7 @@ export class CliLauncher {
       const stderr = this.stderrBuffers.get(sessionId);
       this.stderrBuffers.delete(sessionId);
       this.persistState();
+      companionBus.emit("session:exited", { sessionId, exitCode });
       for (const handler of this.exitHandlers) {
         try { handler(sessionId, exitCode, stderr); } catch {}
       }
@@ -1159,9 +1160,7 @@ export class CliLauncher {
     });
 
     // Notify the WsBridge to attach this adapter
-    if (this.onCodexAdapter) {
-      this.onCodexAdapter(sessionId, adapter);
-    }
+    companionBus.emit("backend:codex-adapter-created", { sessionId, adapter });
 
     // Mark as connected immediately (no WS handshake needed for stdio)
     info.state = "connected";
@@ -1177,6 +1176,7 @@ export class CliLauncher {
       const stderr = this.stderrBuffers.get(sessionId);
       this.stderrBuffers.delete(sessionId);
       this.persistState();
+      companionBus.emit("session:exited", { sessionId, exitCode });
       for (const handler of this.exitHandlers) {
         try { handler(sessionId, exitCode, stderr); } catch {}
       }

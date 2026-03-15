@@ -3,8 +3,38 @@ import type {
   CLIControlResponseMessage,
   BrowserIncomingMessage,
   McpServerDetail,
+  PermissionUpdate,
 } from "./session-types.js";
 import type { Session } from "./ws-bridge-types.js";
+
+export function handlePermissionResponse(
+  session: Session,
+  msg: {
+    type: "permission_response";
+    request_id: string;
+    behavior: "allow" | "deny";
+    updated_input?: Record<string, unknown>;
+    updated_permissions?: PermissionUpdate[];
+    message?: string;
+  },
+  sendToCLI: (session: Session, ndjson: string) => void,
+): void {
+  session.pendingPermissions.delete(msg.request_id);
+  const ndjson = JSON.stringify({
+    type: "control_response",
+    response: {
+      subtype: "success",
+      request_id: msg.request_id,
+      response: {
+        behavior: msg.behavior,
+        updatedInput: msg.updated_input ?? {},
+        ...(msg.updated_permissions ? { updatedPermissions: msg.updated_permissions } : {}),
+        ...(msg.message ? { message: msg.message } : {}),
+      },
+    },
+  });
+  sendToCLI(session, ndjson);
+}
 
 export function handleInterrupt(
   session: Session,

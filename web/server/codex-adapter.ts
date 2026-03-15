@@ -11,6 +11,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { Subprocess } from "bun";
+import type { IBackendAdapter } from "./backend-adapter.js";
 import type {
   BrowserIncomingMessage,
   BrowserOutgoingMessage,
@@ -394,7 +395,7 @@ export class StdioTransport implements ICodexTransport {
 
 // ─── Codex Adapter ────────────────────────────────────────────────────────────
 
-export class CodexAdapter {
+export class CodexAdapter implements IBackendAdapter {
   private static readonly CODEX_MODEL_FALLBACKS: Record<string, string> = {
     "gpt-5.3-codex": "gpt-5.2",
   };
@@ -681,6 +682,12 @@ export class CodexAdapter {
     return this._rateLimits;
   }
 
+  /** IBackendAdapter.send() — unified entry point for browser-originated messages. */
+  send(msg: BrowserOutgoingMessage): boolean {
+    return this.sendBrowserMessage(msg);
+  }
+
+  /** @deprecated Use send() instead. Kept for backward compatibility during migration. */
   sendBrowserMessage(msg: BrowserOutgoingMessage): boolean {
     if (this.disposed) {
       return false;

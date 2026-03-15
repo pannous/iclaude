@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 // ── Module mocks ────────────────────────────────────────────────────────────
 // Must be declared before any imports that reference them.
@@ -126,6 +126,7 @@ vi.mock("./container-manager.js", () => ({
 import { SessionOrchestrator } from "./session-orchestrator.js";
 import type { SessionOrchestratorDeps } from "./session-orchestrator.js";
 import { containerManager } from "./container-manager.js";
+import { companionBus } from "./event-bus.js";
 import * as envManager from "./env-manager.js";
 import * as sandboxManager from "./sandbox-manager.js";
 import * as gitUtils from "./git-utils.js";
@@ -155,8 +156,6 @@ function createMockLauncher() {
     setArchived: vi.fn(),
     removeSession: vi.fn(),
     setCLISessionId: vi.fn(),
-    onCodexAdapterCreated: vi.fn(),
-    onSessionExited: vi.fn(),
     getStartingSessions: vi.fn(() => []),
     setTitle: vi.fn(),
   } as any;
@@ -176,12 +175,7 @@ function createMockBridge() {
     initializeResumedSession: vi.fn(),
     injectSystemPrompt: vi.fn(),
     setTitle: vi.fn(),
-    onCLISessionIdReceived: vi.fn(),
-    onCLIRelaunchNeededCallback: vi.fn(),
-    onIdleKillCallback: vi.fn(),
-    onFirstTurnCompletedCallback: vi.fn(),
-    onSessionGitInfoReadyCallback: vi.fn(),
-    attachCodexAdapter: vi.fn(),
+    attachBackendAdapter: vi.fn(),
   } as any;
 }
 
@@ -226,6 +220,7 @@ describe("SessionOrchestrator", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    companionBus.clear();
     mockImagePullIsReady.mockReturnValue(true);
     // Re-establish mocks that may have been overridden by mockImplementation in
     // previous tests (clearAllMocks resets calls/results but NOT implementations).
@@ -254,25 +249,23 @@ describe("SessionOrchestrator", () => {
   // ── Initialization / Event wiring ─────────────────────────────────────────
 
   describe("initialize()", () => {
-    it("registers all expected callbacks on subsystems", () => {
-      // Verifies that initialize() wires up all event handlers
+    it("registers all expected event handlers on companionBus", () => {
+      // Verifies that initialize() wires up all event handlers via companionBus
       orchestrator.initialize();
 
-      expect(deps.wsBridge.onCLISessionIdReceived).toHaveBeenCalled();
-      expect(deps.launcher.onCodexAdapterCreated).toHaveBeenCalled();
-      expect(deps.launcher.onSessionExited).toHaveBeenCalled();
-      expect(deps.wsBridge.onSessionGitInfoReadyCallback).toHaveBeenCalled();
-      expect(deps.wsBridge.onCLIRelaunchNeededCallback).toHaveBeenCalled();
-      expect(deps.wsBridge.onIdleKillCallback).toHaveBeenCalled();
-      expect(deps.wsBridge.onFirstTurnCompletedCallback).toHaveBeenCalled();
+      expect(companionBus.listenerCount("session:cli-id-received")).toBeGreaterThan(0);
+      expect(companionBus.listenerCount("backend:codex-adapter-created")).toBeGreaterThan(0);
+      expect(companionBus.listenerCount("session:exited")).toBeGreaterThan(0);
+      expect(companionBus.listenerCount("session:git-info-ready")).toBeGreaterThan(0);
+      expect(companionBus.listenerCount("session:relaunch-needed")).toBeGreaterThan(0);
+      expect(companionBus.listenerCount("session:idle-kill")).toBeGreaterThan(0);
+      expect(companionBus.listenerCount("session:first-turn-completed")).toBeGreaterThan(0);
     });
 
     it("CLI session ID callback delegates to launcher.setCLISessionId", () => {
       orchestrator.initialize();
 
-      // Extract the registered callback
-      const cb = deps.wsBridge.onCLISessionIdReceived.mock.calls[0][0];
-      cb("s1", "cli-id-123");
+      companionBus.emit("session:cli-id-received", { sessionId: "s1", cliSessionId: "cli-id-123" });
 
       expect(deps.launcher.setCLISessionId).toHaveBeenCalledWith("s1", "cli-id-123");
     });
@@ -280,8 +273,7 @@ describe("SessionOrchestrator", () => {
     it("session exit callback notifies agentExecutor", () => {
       orchestrator.initialize();
 
-      const cb = deps.launcher.onSessionExited.mock.calls[0][0];
-      cb("s1", 0);
+      companionBus.emit("session:exited", { sessionId: "s1", exitCode: 0 });
 
       expect(deps.agentExecutor.handleSessionExited).toHaveBeenCalledWith("s1", 0);
     });
@@ -289,8 +281,7 @@ describe("SessionOrchestrator", () => {
     it("git info ready callback starts PR polling", () => {
       orchestrator.initialize();
 
-      const cb = deps.wsBridge.onSessionGitInfoReadyCallback.mock.calls[0][0];
-      cb("s1", "/repo", "main");
+      companionBus.emit("session:git-info-ready", { sessionId: "s1", cwd: "/repo", branch: "main" });
 
       expect(deps.prPoller.watch).toHaveBeenCalledWith("s1", "/repo", "main");
     });
@@ -299,8 +290,9 @@ describe("SessionOrchestrator", () => {
       deps.launcher.getSession.mockReturnValue({ archived: true });
       orchestrator.initialize();
 
-      const cb = deps.wsBridge.onIdleKillCallback.mock.calls[0][0];
-      await cb("s1");
+      companionBus.emit("session:idle-kill", { sessionId: "s1" });
+      // Allow async handler to settle
+      await new Promise((r) => setTimeout(r, 0));
 
       // Should not kill because session is archived
       expect(deps.launcher.kill).not.toHaveBeenCalled();
@@ -310,8 +302,8 @@ describe("SessionOrchestrator", () => {
       deps.launcher.getSession.mockReturnValue({ archived: false });
       orchestrator.initialize();
 
-      const cb = deps.wsBridge.onIdleKillCallback.mock.calls[0][0];
-      await cb("s1");
+      companionBus.emit("session:idle-kill", { sessionId: "s1" });
+      await new Promise((r) => setTimeout(r, 0));
 
       expect(deps.launcher.kill).toHaveBeenCalledWith("s1");
     });
@@ -320,15 +312,24 @@ describe("SessionOrchestrator", () => {
       // Guards against accidental re-initialization which would cause
       // all event handlers to fire multiple times per event.
       orchestrator.initialize();
-      orchestrator.initialize();
+      const countsBefore = {
+        cliId: companionBus.listenerCount("session:cli-id-received"),
+        codex: companionBus.listenerCount("backend:codex-adapter-created"),
+        exited: companionBus.listenerCount("session:exited"),
+        relaunch: companionBus.listenerCount("session:relaunch-needed"),
+        idle: companionBus.listenerCount("session:idle-kill"),
+        firstTurn: companionBus.listenerCount("session:first-turn-completed"),
+      };
 
-      // Each callback should only be registered once, not twice
-      expect(deps.wsBridge.onCLISessionIdReceived).toHaveBeenCalledTimes(1);
-      expect(deps.launcher.onCodexAdapterCreated).toHaveBeenCalledTimes(1);
-      expect(deps.launcher.onSessionExited).toHaveBeenCalledTimes(1);
-      expect(deps.wsBridge.onCLIRelaunchNeededCallback).toHaveBeenCalledTimes(1);
-      expect(deps.wsBridge.onIdleKillCallback).toHaveBeenCalledTimes(1);
-      expect(deps.wsBridge.onFirstTurnCompletedCallback).toHaveBeenCalledTimes(1);
+      orchestrator.initialize(); // second call should be a no-op
+
+      // Listener counts should not increase after second initialize()
+      expect(companionBus.listenerCount("session:cli-id-received")).toBe(countsBefore.cliId);
+      expect(companionBus.listenerCount("backend:codex-adapter-created")).toBe(countsBefore.codex);
+      expect(companionBus.listenerCount("session:exited")).toBe(countsBefore.exited);
+      expect(companionBus.listenerCount("session:relaunch-needed")).toBe(countsBefore.relaunch);
+      expect(companionBus.listenerCount("session:idle-kill")).toBe(countsBefore.idle);
+      expect(companionBus.listenerCount("session:first-turn-completed")).toBe(countsBefore.firstTurn);
     });
   });
 
@@ -1113,8 +1114,8 @@ describe("SessionOrchestrator", () => {
       vi.mocked(generateSessionTitle).mockResolvedValue("Test Title");
 
       orchestrator.initialize();
-      const cb = deps.wsBridge.onFirstTurnCompletedCallback.mock.calls[0][0];
-      await cb("s1", "Hello world");
+      companionBus.emit("session:first-turn-completed", { sessionId: "s1", firstUserMessage: "Hello world" });
+      await new Promise((r) => setTimeout(r, 0));
 
       expect(generateSessionTitle).toHaveBeenCalledWith("Hello world");
       expect(sessionNames.setName).toHaveBeenCalledWith("s1", "Test Title");
@@ -1127,8 +1128,8 @@ describe("SessionOrchestrator", () => {
       vi.mocked(sessionNames.getName).mockReturnValue("Existing Name");
 
       orchestrator.initialize();
-      const cb = deps.wsBridge.onFirstTurnCompletedCallback.mock.calls[0][0];
-      await cb("s1", "Hello");
+      companionBus.emit("session:first-turn-completed", { sessionId: "s1", firstUserMessage: "Hello" });
+      await new Promise((r) => setTimeout(r, 0));
 
       expect(generateSessionTitle).not.toHaveBeenCalled();
     });
@@ -1137,8 +1138,8 @@ describe("SessionOrchestrator", () => {
       vi.mocked(settingsManager.getSettings).mockReturnValue({ anthropicApiKey: "" } as any);
 
       orchestrator.initialize();
-      const cb = deps.wsBridge.onFirstTurnCompletedCallback.mock.calls[0][0];
-      await cb("s1", "Hello");
+      companionBus.emit("session:first-turn-completed", { sessionId: "s1", firstUserMessage: "Hello" });
+      await new Promise((r) => setTimeout(r, 0));
 
       expect(generateSessionTitle).not.toHaveBeenCalled();
     });
@@ -1293,10 +1294,8 @@ describe("SessionOrchestrator", () => {
       deps.launcher.getSession.mockReturnValue({ archived: true } as any);
       orchestrator.initialize();
 
-      const cb = deps.wsBridge.onCLIRelaunchNeededCallback.mock.calls[0][0];
-      const promise = cb("s1");
+      companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
       await vi.advanceTimersByTimeAsync(15_000);
-      await promise;
 
       expect(deps.launcher.relaunch).not.toHaveBeenCalled();
     });
@@ -1307,10 +1306,8 @@ describe("SessionOrchestrator", () => {
       deps.wsBridge.isCliConnected.mockReturnValue(true);
       orchestrator.initialize();
 
-      const cb = deps.wsBridge.onCLIRelaunchNeededCallback.mock.calls[0][0];
-      const promise = cb("s1");
+      companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
       await vi.advanceTimersByTimeAsync(15_000);
-      await promise;
 
       expect(deps.launcher.relaunch).not.toHaveBeenCalled();
     });
@@ -1323,10 +1320,8 @@ describe("SessionOrchestrator", () => {
       deps.wsBridge.isCliConnected.mockReturnValue(false);
       orchestrator.initialize();
 
-      const cb = deps.wsBridge.onCLIRelaunchNeededCallback.mock.calls[0][0];
-      const promise = cb("s1");
+      companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
       await vi.advanceTimersByTimeAsync(15_000);
-      await promise;
 
       expect(deps.launcher.relaunch).not.toHaveBeenCalled();
     });
@@ -1340,10 +1335,8 @@ describe("SessionOrchestrator", () => {
       deps.wsBridge.isCliConnected.mockReturnValue(false);
       orchestrator.initialize();
 
-      const cb = deps.wsBridge.onCLIRelaunchNeededCallback.mock.calls[0][0];
-      const promise = cb("s1");
+      companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
       await vi.advanceTimersByTimeAsync(15_000);
-      await promise;
 
       expect(deps.launcher.relaunch).not.toHaveBeenCalled();
     });
@@ -1356,10 +1349,8 @@ describe("SessionOrchestrator", () => {
       deps.wsBridge.isCliConnected.mockReturnValue(false);
       orchestrator.initialize();
 
-      const cb = deps.wsBridge.onCLIRelaunchNeededCallback.mock.calls[0][0];
-      const promise = cb("s1");
+      companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
       await vi.advanceTimersByTimeAsync(15_000);
-      await promise;
 
       expect(deps.launcher.relaunch).toHaveBeenCalledWith("s1");
     });
@@ -1372,19 +1363,15 @@ describe("SessionOrchestrator", () => {
       deps.launcher.relaunch.mockResolvedValue({ ok: false }); // no error string
       orchestrator.initialize();
 
-      const cb = deps.wsBridge.onCLIRelaunchNeededCallback.mock.calls[0][0];
-
       // Trigger 3 silent-failure relaunches (the max)
       for (let i = 0; i < 3; i++) {
-        const p = cb("s1");
+        companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
         await vi.advanceTimersByTimeAsync(15_000);
-        await p;
       }
 
       // 4th attempt should hit the MAX_AUTO_RELAUNCHES limit
-      const p4 = cb("s1");
+      companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
       await vi.advanceTimersByTimeAsync(15_000);
-      await p4;
 
       // Only 3 relaunch calls, 4th was rejected at the limit
       expect(deps.launcher.relaunch).toHaveBeenCalledTimes(3);
@@ -1399,20 +1386,16 @@ describe("SessionOrchestrator", () => {
       deps.launcher.relaunch.mockResolvedValue({ ok: false, error: "crashed again" });
       orchestrator.initialize();
 
-      const cb = deps.wsBridge.onCLIRelaunchNeededCallback.mock.calls[0][0];
-
       // Trigger 3 relaunches (the max). Each needs the relaunchingSet cooldown
       // to clear before the next attempt can proceed.
       for (let i = 0; i < 3; i++) {
-        const p = cb("s1");
+        companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
         await vi.advanceTimersByTimeAsync(15_000);
-        await p;
       }
 
       // 4th attempt should be rejected since count reached MAX_AUTO_RELAUNCHES
-      const p4 = cb("s1");
+      companionBus.emit("session:relaunch-needed", { sessionId: "s1" });
       await vi.advanceTimersByTimeAsync(15_000);
-      await p4;
 
       // relaunch should have been called 3 times, not 4
       expect(deps.launcher.relaunch).toHaveBeenCalledTimes(3);

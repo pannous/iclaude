@@ -82,19 +82,20 @@ export function ProjectGroup({
     : "";
 
   return (
-    <div className={`group/project ${!isFirst ? "my-2 pt-2 border-t border-cc-separator" : ""}`}>
+    <div className={`group/project ${!isFirst ? "mt-3 pt-3 border-t border-cc-separator" : ""}`}>
       {/* Group header */}
       <div className="flex items-center">
-        {/* Toggle: arrow + folder icon — narrow, just the icons */}
+        {/* Toggle: arrow + folder icon -- narrow, just the icons */}
         <button
           onClick={() => onToggleCollapse(group.key)}
           aria-label={isCollapsed ? `Expand ${group.label}` : `Collapse ${group.label}`}
-          className="shrink-0 pl-2 pr-1 py-1.5 flex items-center gap-1.5 hover:bg-cc-hover rounded-md transition-colors cursor-pointer"
+          aria-expanded={!isCollapsed}
+          className="shrink-0 pl-2 pr-1 py-1 flex items-center gap-1.5 hover:bg-cc-hover rounded-md transition-colors cursor-pointer"
         >
           <svg
             viewBox="0 0 16 16"
             fill="currentColor"
-            className={`w-2.5 h-2.5 text-cc-muted transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+            className={`w-2 h-2 text-cc-muted/50 transition-transform duration-150 ${isCollapsed ? "" : "rotate-90"}`}
           >
             <path d="M6 4l4 4-4 4" />
           </svg>
@@ -103,13 +104,13 @@ export function ProjectGroup({
           </svg>
         </button>
 
-        {/* Folder label — opens new session in this folder */}
+        {/* Folder label -- opens new session in this folder */}
         <button
           onClick={() => {
             onFolderClick?.(group.key);
             if (isCollapsed) onToggleCollapse(group.key);
           }}
-          className="min-w-0 py-1.5 pr-1 text-[12px] font-semibold text-cc-fg/80 truncate hover:bg-cc-hover rounded-md transition-colors cursor-pointer"
+          className="min-w-0 py-1 pr-1 text-[11px] font-semibold text-cc-fg/60 truncate uppercase tracking-wide hover:bg-cc-hover rounded-md transition-colors cursor-pointer"
         >
           {group.label}
         </button>
@@ -142,7 +143,7 @@ export function ProjectGroup({
         </span>
 
         {/* Count badge */}
-        <span className="text-[10px] bg-cc-hover rounded-full px-1.5 py-0.5 text-cc-muted shrink-0">
+        <span className="text-[10px] text-cc-muted/50 tabular-nums shrink-0">
           {group.sessions.length}
         </span>
 
@@ -185,14 +186,14 @@ export function ProjectGroup({
 
       {/* Collapsed preview */}
       {isCollapsed && collapsedPreview && (
-        <div className="text-[10px] text-cc-muted/70 truncate pl-7 pb-1">
+        <div className="text-[10px] text-cc-muted/70 truncate pl-5 pb-0.5">
           {collapsedPreview}
         </div>
       )}
 
       {/* Session list */}
       {!isCollapsed && (
-        <div className="space-y-px mt-1">
+        <div className="mt-0.5">
           {group.sessions.map((s) => {
             const permCount = pendingPermissions.get(s.id)?.size ?? 0;
             return (

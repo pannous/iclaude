@@ -111,12 +111,26 @@ export function SessionItem({
           onStartRename(s.id, label);
         }}
         title={dateTooltip}
-        className={`w-full flex items-center gap-1.5 py-2 pl-1 pr-12 min-h-[44px] rounded-lg transition-colors duration-100 cursor-pointer ${
+        onKeyDown={(e) => {
+          if (e.key === "F2" && !isEditing) {
+            e.preventDefault();
+            onStartRename(s.id, label);
+          }
+        }}
+        className={`w-full flex items-center gap-2 py-2 pl-2.5 pr-12 min-h-[44px] rounded-lg transition-all duration-100 cursor-pointer relative ${
           isActive
             ? "bg-cc-active"
             : "hover:bg-cc-hover"
         }`}
       >
+        {/* Left accent edge for active state */}
+        <span
+          aria-hidden
+          className={`absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-full transition-all duration-150 ${
+            isActive ? "h-5 bg-cc-primary" : "h-0 bg-transparent"
+          }`}
+        />
+
         {/* Status dot */}
         {!isEditing && (
           <StatusDot status={derivedStatus} />
@@ -141,14 +155,14 @@ export function SessionItem({
             onBlur={onConfirmRename}
             onClick={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}
-            className="text-[13px] font-medium flex-1 min-w-0 text-cc-fg bg-transparent border border-cc-border rounded px-1.5 py-0.5 outline-none focus:border-cc-primary/50 focus:ring-1 focus:ring-cc-primary/20"
+            className="text-[12.5px] font-medium flex-1 min-w-0 text-cc-fg bg-transparent border border-cc-border rounded-md px-2 py-1 outline-none focus:border-cc-primary/50 focus:ring-1 focus:ring-cc-primary/20"
           />
         ) : (
           <div className="flex-1 min-w-0">
             <span
-              className={`text-[13px] font-medium truncate text-cc-fg leading-snug block ${
-                isRecentlyRenamed ? "animate-name-appear" : ""
-              }`}
+              className={`text-[12.5px] font-medium truncate block leading-snug ${
+                isActive ? "text-cc-fg" : "text-cc-fg/90"
+              } ${isRecentlyRenamed ? "animate-name-appear" : ""}`}
               onAnimationEnd={() => onClearRecentlyRenamed(s.id)}
             >
               {label}
@@ -176,8 +190,8 @@ export function SessionItem({
               </span>
             )}
             {s.cronJobId && (
-              <span className="flex items-center px-1 py-0.5 rounded bg-violet-400/10" title="Scheduled">
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 text-violet-400">
+              <span className="flex items-center px-1 py-0.5 rounded bg-cc-primary/10" title="Scheduled">
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-2.5 h-2.5 text-cc-primary">
                   <path d="M8 2a6 6 0 100 12A6 6 0 008 2zM0 8a8 8 0 1116 0A8 8 0 010 8zm9-3a1 1 0 10-2 0v3a1 1 0 00.293.707l2 2a1 1 0 001.414-1.414L9 7.586V5z" />
                 </svg>
               </span>

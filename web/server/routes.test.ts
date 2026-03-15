@@ -496,7 +496,18 @@ describe("POST /api/sessions/create", () => {
     );
   });
 
-  it("forwards resumeSessionId through to orchestrator", async () => {
+  it("passes the full request body through to orchestrator", async () => {
+    const body = {
+      cwd: "/test",
+      resumeSessionAt: "  prior-session-123  ",
+      forkSession: true,
+      backend: "codex",
+      branch: "feat",
+      useWorktree: true,
+      envSlug: "production",
+      sandboxEnabled: true,
+      sandboxSlug: "my-sandbox",
+    };
     const res = await app.request("/api/sessions/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -615,6 +626,7 @@ describe("POST /api/sessions/create — resume", () => {
       body: JSON.stringify({ cwd: TEST_CWD, resumeSessionId: CLI_SESSION_ID }),
     });
 
+    // Route catches JSON parse errors and defaults to {}
     expect(res.status).toBe(200);
     expect(orchestrator.createSession).toHaveBeenCalledWith(
       expect.objectContaining({ resumeSessionId: CLI_SESSION_ID, cwd: TEST_CWD }),

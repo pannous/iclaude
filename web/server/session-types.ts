@@ -1,5 +1,7 @@
 // Types for the WebSocket bridge between Claude Code CLI and the browser
 
+import type { SessionPhase } from "./session-state-machine.js";
+
 // ─── CLI Message Types (NDJSON from Claude Code CLI) ──────────────────────────
 
 export interface CLISystemInitMessage {
@@ -304,7 +306,8 @@ export type BrowserIncomingMessageBase =
   | { type: "session_archived" }
   | { type: "sessions_updated" }
   | { type: "user_message_queued"; msgId: string }
-  | { type: "user_message_dequeued"; msgId: string };
+  | { type: "user_message_dequeued"; msgId: string }
+  | { type: "session_phase"; phase: SessionPhase; previousPhase: SessionPhase };
 
 export type BrowserIncomingMessage = BrowserIncomingMessageBase & { seq?: number };
 

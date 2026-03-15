@@ -20,6 +20,7 @@ import { hasContainerCodexAuth } from "./codex-container-auth.js";
 import { discoverCommandsAndSkills } from "./commands-discovery.js";
 import { getSettings } from "./settings-manager.js";
 import { generateSessionTitle } from "./auto-namer.js";
+import { companionBus } from "./event-bus.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -145,35 +146,48 @@ export class SessionOrchestrator {
     this._initialized = true;
 
     // When the CLI reports its internal session_id, store it for --resume
-    this.wsBridge.onCLISessionIdReceived((sessionId, cliSessionId) => {
+    companionBus.on("session:cli-id-received", ({ sessionId, cliSessionId }) => {
       this.launcher.setCLISessionId(sessionId, cliSessionId);
     });
 
     // When a Codex adapter is created, attach it to the WsBridge
-    this.launcher.onCodexAdapterCreated((sessionId, adapter) => {
-      this.wsBridge.attachCodexAdapter(sessionId, adapter);
+    companionBus.on("backend:codex-adapter-created", ({ sessionId, adapter }) => {
+      this.wsBridge.attachBackendAdapter(sessionId, adapter, "codex");
     });
 
-    // When a CLI/Codex process exits, notify agent executor + external listeners
-    this.launcher.onSessionExited((sessionId, exitCode) => {
+    // When a CLI/Codex process exits, notify agent executor and external listeners
+    // separately so a throw in one doesn't skip the other (bus isolates each handler).
+    companionBus.on("session:exited", ({ sessionId, exitCode }) => {
       this.agentExecutor.handleSessionExited(sessionId, exitCode);
+    });
+    companionBus.on("session:exited", ({ sessionId, exitCode }) => {
       for (const cb of this.exitCallbacks) {
-        cb(sessionId, exitCode);
+        try {
+          cb(sessionId, exitCode);
+        } catch (err) {
+          console.error("[orchestrator] exitCallback error:", err);
+        }
+      }
+    });
+    companionBus.on("session:exited", ({ sessionId }) => {
+      const session = this.wsBridge.getSession(sessionId);
+      if (session?.stateMachine) {
+        session.stateMachine.transition("terminated", "process_exited");
       }
     });
 
     // Start watching PRs when git info is resolved
-    this.wsBridge.onSessionGitInfoReadyCallback((sessionId, cwd, branch) => {
+    companionBus.on("session:git-info-ready", ({ sessionId, cwd, branch }) => {
       this.prPoller.watch(sessionId, cwd, branch);
     });
 
     // Auto-relaunch CLI when a browser connects to a session with no CLI
-    this.wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
+    companionBus.on("session:relaunch-needed", async ({ sessionId }) => {
       await this.handleAutoRelaunch(sessionId);
     });
 
     // Kill CLI when idle with no browsers for 20 minutes
-    this.wsBridge.onIdleKillCallback(async (sessionId) => {
+    companionBus.on("session:idle-kill", async ({ sessionId }) => {
       const info = this.launcher.getSession(sessionId);
       if (!info || info.archived) return;
       console.log(
@@ -183,7 +197,7 @@ export class SessionOrchestrator {
     });
 
     // Auto-generate session title after first turn completes
-    this.wsBridge.onFirstTurnCompletedCallback(async (sessionId, firstUserMessage) => {
+    companionBus.on("session:first-turn-completed", async ({ sessionId, firstUserMessage }) => {
       await this.handleAutoNaming(sessionId, firstUserMessage);
     });
 
@@ -592,6 +606,10 @@ export class SessionOrchestrator {
       return { ok: false, error: "Session is archived and cannot be relaunched" };
     }
     this.clearAutoRelaunchCount(sessionId);
+    const session = this.wsBridge.getSession(sessionId);
+    if (session?.stateMachine) {
+      session.stateMachine.transition("starting", "relaunch_initiated");
+    }
     return this.launcher.relaunch(sessionId);
   }
 
@@ -676,8 +694,13 @@ export class SessionOrchestrator {
 
   // ── Event registration ─────────────────────────────────────────────────────
 
-  onSessionExited(cb: (sessionId: string, exitCode: number | null) => void): void {
+  /** Register a callback for session exit events. Returns unsubscribe function. */
+  onSessionExited(cb: (sessionId: string, exitCode: number | null) => void): () => void {
     this.exitCallbacks.push(cb);
+    return () => {
+      const idx = this.exitCallbacks.indexOf(cb);
+      if (idx !== -1) this.exitCallbacks.splice(idx, 1);
+    };
   }
 
   // ── Query delegation ───────────────────────────────────────────────────────
@@ -725,6 +748,10 @@ export class SessionOrchestrator {
     if (freshInfo && freshInfo.state !== "starting") {
       this.autoRelaunchCounts.set(sessionId, count + 1);
       console.log(`[orchestrator] Auto-relaunching CLI for session ${sessionId} (attempt ${count + 1}/${MAX_AUTO_RELAUNCHES})`);
+      const session = this.wsBridge.getSession(sessionId);
+      if (session?.stateMachine) {
+        session.stateMachine.transition("starting", "relaunch_initiated");
+      }
       try {
         const result = await this.launcher.relaunch(sessionId);
         if (!result.ok && result.error) {

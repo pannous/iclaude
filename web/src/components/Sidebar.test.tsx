@@ -1100,9 +1100,8 @@ describe("Sidebar", () => {
     expect(screen.getByText("Clear all")).toBeInTheDocument();
   });
 
-  it("clicking 'Delete all' shows confirmation modal for all archived sessions", () => {
-    // LOCAL: our "Clear all" immediately deletes archived sessions without a confirmation modal.
-    // This test verifies that "Clear all" button is present and clickable.
+  it("clicking 'Clear all' shows confirmation modal for all archived sessions", () => {
+    // "Clear all" opens a confirmation modal before deleting archived sessions.
     const sdk1 = makeSdkSession("s1", { archived: true });
     const sdk2 = makeSdkSession("s2", { archived: true });
     const sdk3 = makeSdkSession("s3", { archived: false });
@@ -1111,15 +1110,15 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    // LOCAL: "Clear all" is always visible next to the archived toggle (no need to expand)
     expect(screen.getByText("Clear all")).toBeInTheDocument();
-    // LOCAL: no confirmation modal exists — "Clear all" is direct (with no extra confirmation)
-    expect(screen.queryByText("Delete all archived?")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Clear all"));
+    // Confirmation modal should appear
+    expect(screen.getByText("Delete all archived?")).toBeInTheDocument();
   });
 
   it("confirming delete-all deletes each archived session", async () => {
-    // LOCAL: our "Clear all" directly calls api.deleteSession for each archived session
-    // without a confirmation modal step.
+    // "Clear all" shows a confirmation modal; clicking "Delete all" in the modal
+    // calls api.deleteSession for each archived session.
     const sdk1 = makeSdkSession("s1", { archived: true });
     const sdk2 = makeSdkSession("s2", { archived: true });
     const sdk3 = makeSdkSession("s3", { archived: false });
@@ -1129,6 +1128,8 @@ describe("Sidebar", () => {
 
     render(<Sidebar />);
     fireEvent.click(screen.getByText("Clear all"));
+    // Confirm in the modal
+    fireEvent.click(screen.getByText("Delete all"));
 
     await vi.waitFor(() => {
       expect(mockApi.deleteSession).toHaveBeenCalledWith("s1");
@@ -1141,8 +1142,8 @@ describe("Sidebar", () => {
   });
 
   it("cancelling delete-all closes the modal without deleting", () => {
-    // LOCAL: our "Clear all" button does NOT have a modal — it directly deletes.
-    // This test verifies that the "Clear all" button is present in the archived section.
+    // Clicking "Clear all" opens a confirmation modal; clicking "Cancel" closes it
+    // without deleting any sessions.
     const sdk1 = makeSdkSession("s1", { archived: true });
     const sdk2 = makeSdkSession("s2", { archived: true });
     mockState = createMockState({
@@ -1150,9 +1151,12 @@ describe("Sidebar", () => {
     });
 
     render(<Sidebar />);
-    // LOCAL: "Clear all" is always visible, no modal confirmation
     expect(screen.getByText("Clear all")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Clear all"));
+    expect(screen.getByText("Delete all archived?")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Cancel"));
     expect(screen.queryByText("Delete all archived?")).not.toBeInTheDocument();
+    expect(mockApi.deleteSession).not.toHaveBeenCalled();
   });
 
   // ─── Archive with container confirmation ───────────────────────────────────
@@ -1196,7 +1200,7 @@ describe("Sidebar", () => {
     // Click the "Archive" confirm button in the warning panel
     // (There are multiple "Archive" texts, find the one in the confirmation panel)
     const archiveConfirmBtn = screen.getAllByText("Archive").find(
-      (el) => el.closest(".bg-amber-500\\/10") !== null,
+      (el) => el.closest(".bg-cc-warning\\/10") !== null,
     );
     expect(archiveConfirmBtn).toBeTruthy();
     fireEvent.click(archiveConfirmBtn!);
@@ -1223,7 +1227,7 @@ describe("Sidebar", () => {
 
     // Click Cancel in the warning panel
     const cancelBtn = screen.getAllByText("Cancel").find(
-      (el) => el.closest(".bg-amber-500\\/10") !== null,
+      (el) => el.closest(".bg-cc-warning\\/10") !== null,
     );
     fireEvent.click(cancelBtn!);
 
@@ -1752,26 +1756,21 @@ describe("Sidebar", () => {
   // ─── Delete all singular text ──────────────────────────────────────────────
 
   it("delete-all modal uses singular 'session' when only one archived session", async () => {
-    // LOCAL: our "Clear all" button directly deletes without a modal — no "Delete all" text.
-    // This test verifies that "Clear all" deletes multiple archived sessions.
+    // When only one archived session exists, the confirmation modal text uses singular form.
     const sdk1 = makeSdkSession("s1", { archived: true, title: "archived-one" });
-    const sdk2 = makeSdkSession("s2", { archived: true, title: "archived-two" });
-    const sdk3 = makeSdkSession("s3", { archived: true, title: "archived-three" });
     mockState = createMockState({
-      sdkSessions: [sdk1, sdk2, sdk3],
+      sdkSessions: [sdk1],
     });
 
     render(<Sidebar />);
-    // LOCAL: button says "Clear all" not "Delete all", no confirmation modal
-    expect(screen.getByText("Clear all")).toBeInTheDocument();
-    expect(screen.queryByText("Delete all")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("Clear all"));
+    // Modal should use singular "session" (not "sessions")
+    expect(screen.getByText(/1 archived session\b/)).toBeInTheDocument();
+    // Confirm deletion
+    fireEvent.click(screen.getByText("Delete all"));
 
-    // All 3 archived sessions should be deleted
     await vi.waitFor(() => {
       expect(mockApi.deleteSession).toHaveBeenCalledWith("s1");
-      expect(mockApi.deleteSession).toHaveBeenCalledWith("s2");
-      expect(mockApi.deleteSession).toHaveBeenCalledWith("s3");
     });
   });
 
