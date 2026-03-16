@@ -506,6 +506,25 @@ export interface SystemCronResponse {
   removed?: string;
 }
 
+export interface LaunchAgentEntry {
+  label: string;
+  filename: string;
+  filepath: string;
+  program: string[];
+  workingDirectory: string;
+  runAtLoad: boolean;
+  keepAlive: boolean;
+  startInterval: number | null;
+  startCalendarInterval: Record<string, number> | null;
+  stdoutPath: string;
+  stderrPath: string;
+  envVars: Record<string, string>;
+  loaded: boolean;
+  pid: number | null;
+  exitCode: number | null;
+  disabled: boolean;
+}
+
 export interface McpServerConfigAgent {
   type: "stdio" | "sse" | "http";
   command?: string;
@@ -1165,6 +1184,11 @@ export const api = {
   updateSystemCron: (index: number, data: { schedule?: string; command?: string; enabled?: boolean }) =>
     put<SystemCronResponse>(`/system-cron/${index}`, data),
   deleteSystemCron: (index: number) => del<SystemCronResponse>(`/system-cron/${index}`),
+
+  // LaunchAgents
+  listLaunchAgents: () => get<{ agents: LaunchAgentEntry[] }>("/launch-agents"),
+  loadLaunchAgent: (label: string) => post<{ ok: boolean }>(`/launch-agents/${encodeURIComponent(label)}/load`),
+  unloadLaunchAgent: (label: string) => post<{ ok: boolean }>(`/launch-agents/${encodeURIComponent(label)}/unload`),
 
   // Background process management
   killProcess: (sessionId: string, taskId: string) =>

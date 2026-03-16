@@ -16,6 +16,7 @@ import { AgentEditor, type AgentFormData, EMPTY_FORM } from "./AgentEditor.js";
 import { LinearAgentEditor } from "./LinearAgentEditor.js";
 import { LinearAgentSection } from "./LinearAgentSection.js";
 import { SystemCronSection } from "./SystemCronSection.js";
+import { LaunchAgentSection } from "./LaunchAgentSection.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -587,6 +588,9 @@ export function AgentsPage({ route }: Props) {
 
         {/* System Crontab section */}
         <SystemCronSection />
+
+        {/* LaunchAgents section */}
+        <LaunchAgentSection />
 
         {/* Linear Agents section */}
         {linearOAuthConfigured && !loading && (() => {

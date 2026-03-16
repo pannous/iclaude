@@ -2,8 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Hono } from "hono";
 import { registerSystemCronRoutes } from "./system-cron-routes.js";
 
-// Mock execSync to avoid touching the real crontab
+// Mock filesystem and child_process to avoid touching real system state
 let mockCrontab = "";
+const mockPlistFiles: Record<string, string> = {};
+let mockLaunchctlOutput = "";
+
 vi.mock("node:child_process", () => ({
   execSync: vi.fn((cmd: string, opts?: { input?: string }) => {
     if (cmd === "crontab -l 2>/dev/null") {
@@ -11,13 +14,38 @@ vi.mock("node:child_process", () => ({
       return mockCrontab;
     }
     if (cmd === "crontab -") {
-      // Write operation
       mockCrontab = opts?.input || "";
+      return "";
+    }
+    if (cmd === "launchctl list 2>/dev/null") {
+      return mockLaunchctlOutput;
+    }
+    if (cmd.startsWith("launchctl load") || cmd.startsWith("launchctl unload")) {
       return "";
     }
     throw new Error(`Unexpected command: ${cmd}`);
   }),
 }));
+
+vi.mock("node:fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+  return {
+    ...actual,
+    readdirSync: vi.fn((dir: string) => {
+      if (dir.endsWith("Library/LaunchAgents")) {
+        return Object.keys(mockPlistFiles);
+      }
+      return actual.readdirSync(dir);
+    }),
+    readFileSync: vi.fn((filepath: string, encoding?: string) => {
+      const basename = String(filepath).split("/").pop() || "";
+      if (mockPlistFiles[basename] !== undefined) {
+        return mockPlistFiles[basename];
+      }
+      return actual.readFileSync(filepath, encoding as any);
+    }),
+  };
+});
 
 describe("system-cron-routes", () => {
   let app: Hono;
@@ -26,6 +54,8 @@ describe("system-cron-routes", () => {
     app = new Hono();
     registerSystemCronRoutes(app);
     mockCrontab = "";
+    Object.keys(mockPlistFiles).forEach((k) => delete mockPlistFiles[k]);
+    mockLaunchctlOutput = "";
   });
 
   afterEach(() => {
@@ -214,6 +244,101 @@ describe("system-cron-routes", () => {
       });
       expect(res.status).toBe(200);
       expect(mockCrontab.trim()).toBe("0 * * * * job");
+    });
+  });
+
+  // ─── LaunchAgent routes ─────────────────────────────────────────────
+
+  describe("GET /launch-agents", () => {
+    it("returns empty when no plist files", async () => {
+      const res = await app.request("/launch-agents");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.agents).toEqual([]);
+    });
+
+    it("parses plist files correctly", async () => {
+      mockPlistFiles["com.test.job.plist"] = `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.test.job</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>main.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/me/project</string>
+  <key>StartInterval</key>
+  <integer>3600</integer>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/tmp/test.log</string>
+</dict>
+</plist>`;
+
+      mockLaunchctlOutput = "PID\tStatus\tLabel\n1234\t0\tcom.test.job\n";
+
+      const res = await app.request("/launch-agents");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.agents).toHaveLength(1);
+
+      const agent = body.agents[0];
+      expect(agent.label).toBe("com.test.job");
+      expect(agent.program).toEqual(["/usr/bin/python3", "main.py"]);
+      expect(agent.workingDirectory).toBe("/Users/me/project");
+      expect(agent.startInterval).toBe(3600);
+      expect(agent.stdoutPath).toBe("/tmp/test.log");
+      expect(agent.loaded).toBe(true);
+      expect(agent.pid).toBe(1234);
+    });
+
+    it("marks unloaded agents correctly", async () => {
+      mockPlistFiles["com.test.idle.plist"] = `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.test.idle</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/echo</string>
+    <string>hello</string>
+  </array>
+</dict>
+</plist>`;
+
+      mockLaunchctlOutput = "PID\tStatus\tLabel\n";
+
+      const res = await app.request("/launch-agents");
+      const body = await res.json();
+      expect(body.agents[0].loaded).toBe(false);
+      expect(body.agents[0].pid).toBeNull();
+    });
+
+    it("skips empty dict plists", async () => {
+      mockPlistFiles["com.google.empty.plist"] = `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict/></plist>`;
+
+      const res = await app.request("/launch-agents");
+      const body = await res.json();
+      expect(body.agents).toHaveLength(0);
+    });
+  });
+
+  describe("POST /launch-agents/:label/load", () => {
+    it("returns 404 for unknown label", async () => {
+      const res = await app.request("/launch-agents/com.unknown/load", { method: "POST" });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe("POST /launch-agents/:label/unload", () => {
+    it("returns 404 for unknown label", async () => {
+      const res = await app.request("/launch-agents/com.unknown/unload", { method: "POST" });
+      expect(res.status).toBe(404);
     });
   });
 });
