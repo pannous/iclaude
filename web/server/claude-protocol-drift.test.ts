@@ -37,7 +37,7 @@ describe("Claude ws-bridge method drift vs upstream Agent SDK snapshot", () => {
     const upstreamMessageTypes = extractTypeLiterals(sdk);
 
     // Messages we intentionally support in raw CLI transport but are not part of SDKMessage union.
-    const localRawTransportTypes = new Set(["control_request", "keep_alive"]);
+    const localRawTransportTypes = new Set(["control_request", "keep_alive", "rate_limit_event", "user"]);
 
     for (const method of handledFromCLI) {
       expect(

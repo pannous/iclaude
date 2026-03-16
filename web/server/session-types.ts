@@ -209,6 +209,24 @@ export interface CLIKeepAliveMessage {
   type: "keep_alive";
 }
 
+export interface CLIRateLimitEventMessage {
+  type: "rate_limit_event";
+  retry_after_ms?: number;
+  message?: string;
+  uuid?: string;
+  session_id?: string;
+}
+
+export interface CLIUserEchoMessage {
+  type: "user";
+  message?: {
+    role: "user";
+    content: unknown;
+  };
+  uuid?: string;
+  session_id?: string;
+}
+
 export interface CLIAuthStatusMessage {
   type: "auth_status";
   isAuthenticating: boolean;
@@ -238,7 +256,9 @@ export type CLIMessage =
   | CLIControlRequestMessage
   | CLIControlResponseMessage
   | CLIKeepAliveMessage
-  | CLIAuthStatusMessage;
+  | CLIAuthStatusMessage
+  | CLIRateLimitEventMessage
+  | CLIUserEchoMessage;
 
 // ─── Content Block Types ──────────────────────────────────────────────────────
 
