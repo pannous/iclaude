@@ -312,7 +312,8 @@ const server = Bun.serve<SocketData>({
           return new Response(auth.body || "Unauthorized", { status: auth.status });
         }
       } else {
-        const wsToken = url.searchParams.get("token");
+        const wsToken = url.searchParams.get("token")
+          || req.headers.get("Authorization")?.replace(/^Bearer /, "") || null;
         // LOCAL: skip auth when disabled
         if (isAuthEnabled() && !isLocalhost && !verifyToken(wsToken)) {
           return new Response("Unauthorized", { status: 401 });
@@ -335,7 +336,8 @@ const server = Bun.serve<SocketData>({
           return new Response(auth.body || "Unauthorized", { status: auth.status });
         }
       } else {
-        const wsToken = url.searchParams.get("token");
+        const wsToken = url.searchParams.get("token")
+          || req.headers.get("Authorization")?.replace(/^Bearer /, "") || null;
         // LOCAL: skip auth when disabled
         if (isAuthEnabled() && !isLocalhost && !verifyToken(wsToken)) {
           return new Response("Unauthorized", { status: 401 });
