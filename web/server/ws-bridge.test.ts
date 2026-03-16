@@ -480,6 +480,73 @@ describe("CLI handlers", () => {
     expect(callback).toHaveBeenCalledWith("s1", "cli-internal-id");
   });
 
+  it("handleCLIMessage: system.init preserves Companion session_id (does not overwrite with CLI internal ID)", async () => {
+    // Regression test for duplicate sidebar entries bug.
+    // The CLI sends its own internal session_id in the system.init message.
+    // The bridge must NOT allow this to overwrite session.state.session_id
+    // (which is the Companion's session ID used by the browser as a Map key).
+    // If overwritten, the browser adds the session under the CLI's ID while
+    // the sdkSessions poll uses the Companion's ID — creating two entries.
+    mockExecSync.mockImplementation(() => {
+      throw new Error("not a git repo");
+    });
+
+    const cli = makeCliSocket("s1");
+    const browser = makeBrowserSocket("s1");
+    bridge.handleCLIOpen(cli, "s1");
+    bridge.handleBrowserOpen(browser, "s1");
+    browser.send.mockClear();
+
+    // CLI reports a different session_id than the Companion's "s1"
+    await bridge.handleCLIMessage(cli, makeInitMsg({ session_id: "cli-internal-uuid-abc123" }));
+
+    const session = bridge.getSession("s1")!;
+    // session.state.session_id must remain the Companion's ID
+    expect(session.state.session_id).toBe("s1");
+
+    // The broadcast to the browser must also use the Companion's ID
+    const calls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    const initCall = calls.find((c: any) => c.type === "session_init");
+    expect(initCall).toBeDefined();
+    expect(initCall.session.session_id).toBe("s1");
+  });
+
+  it("handleCLIMessage: session_update preserves Companion session_id (does not overwrite with CLI internal ID)", async () => {
+    // Regression test: after session_init lands, a subsequent session_update
+    // from the adapter must NOT overwrite session.state.session_id with the
+    // CLI's internal ID.  This mirrors the session_init regression test above.
+    mockExecSync.mockImplementation(() => {
+      throw new Error("not a git repo");
+    });
+
+    const cli = makeCliSocket("s1");
+    bridge.handleCLIOpen(cli, "s1");
+
+    // First, send session_init to get the session into ready state
+    await bridge.handleCLIMessage(cli, makeInitMsg({ session_id: "cli-internal-uuid-abc123" }));
+
+    const session = bridge.getSession("s1")!;
+    expect(session.state.session_id).toBe("s1"); // sanity check after init
+
+    // Now simulate a session_update with a different session_id coming through
+    // the adapter pipeline.  We invoke the adapter's browserMessageCb directly
+    // because the Claude adapter does not natively emit session_update — this
+    // path is exercised by the Codex adapter in production.
+    const adapter = session.backendAdapter as any;
+    adapter.browserMessageCb({
+      type: "session_update",
+      session: {
+        session_id: "cli-internal-uuid-abc123",
+        model: "claude-opus-4-6",
+      },
+    });
+
+    // session.state.session_id must still be the Companion's ID
+    expect(session.state.session_id).toBe("s1");
+    // The model update should still have been applied
+    expect(session.state.model).toBe("claude-opus-4-6");
+  });
+
   it("handleCLIMessage: updates state from init (model, cwd, tools, permissionMode)", async () => {
     mockExecSync.mockImplementation(() => {
       throw new Error("not a git repo");
@@ -1200,6 +1267,94 @@ describe("Browser handlers", () => {
     expect(replay.events[1].message.type).toBe("stream_event");
   });
 
+  it("session_subscribe: sends full message_history on first subscribe even without a replay gap", async () => {
+    // A brand-new browser tab starts with last_seq=0 and needs the persisted
+    // message history, including user messages that are never sequenced in the
+    // event buffer. Without this bootstrap payload, Codex sessions can reopen
+    // without their first user prompt in chat.
+    const session = bridge.getOrCreateSession("s1", "codex");
+    session.messageHistory.push({
+      type: "user_message",
+      id: "user-1",
+      content: "first prompt",
+      timestamp: 1000,
+    });
+    session.messageHistory.push({
+      type: "assistant",
+      message: {
+        id: "assistant-1",
+        type: "message",
+        role: "assistant",
+        model: "gpt-5.4",
+        content: [{ type: "text", text: "reply" }],
+        stop_reason: "end_turn",
+        usage: {
+          input_tokens: 1,
+          output_tokens: 1,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+      parent_tool_use_id: null,
+      timestamp: 2000,
+    });
+    session.eventBuffer.push({
+      seq: 1,
+      message: {
+        type: "assistant",
+        message: {
+          id: "assistant-1",
+          type: "message",
+          role: "assistant",
+          model: "gpt-5.4",
+          content: [{ type: "text", text: "reply" }],
+          stop_reason: "end_turn",
+          usage: {
+            input_tokens: 1,
+            output_tokens: 1,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          },
+        },
+        parent_tool_use_id: null,
+        timestamp: 2000,
+      },
+    });
+    session.eventBuffer.push({
+      seq: 2,
+      message: {
+        type: "stream_event",
+        event: {
+          type: "content_block_delta",
+          delta: { type: "text_delta", text: "stream-only" },
+        },
+        parent_tool_use_id: null,
+      },
+    });
+    session.nextEventSeq = 3;
+
+    const browser = makeBrowserSocket("s1");
+    bridge.handleBrowserOpen(browser, "s1");
+    browser.send.mockClear();
+
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "session_subscribe",
+      last_seq: 0,
+    }));
+
+    const calls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    const historyMsg = calls.find((c: any) => c.type === "message_history");
+    expect(historyMsg).toBeDefined();
+    expect(historyMsg.messages).toHaveLength(2);
+    expect(historyMsg.messages.some((m: any) => m.type === "user_message")).toBe(true);
+    expect(historyMsg.messages.some((m: any) => m.type === "assistant")).toBe(true);
+
+    const replayMsg = calls.find((c: any) => c.type === "event_replay");
+    expect(replayMsg).toBeDefined();
+    expect(replayMsg.events).toHaveLength(1);
+    expect(replayMsg.events[0].message.type).toBe("stream_event");
+  });
+
   it("session_subscribe: falls back to message_history when last_seq is older than buffer window", async () => {
     const cli = makeCliSocket("s1");
     bridge.handleCLIOpen(cli, "s1");
@@ -1753,8 +1908,15 @@ describe("CLI message routing", () => {
 
     // Should not throw (async — just await it directly)
     await bridge.handleCLIMessage(cli, raw);
-    // keep_alive is silently consumed, so no broadcast
-    expect(browser.send).not.toHaveBeenCalled();
+    // Parse errors now surface as error messages to the browser,
+    // but keep_alive is still silently consumed. Only the parse error
+    // should reach the browser.
+    const calls = browser.send.mock.calls.map(([arg]: [string]) => JSON.parse(arg));
+    const errorMsgs = calls.filter((c: any) => c.type === "error");
+    expect(errorMsgs.length).toBe(1);
+    expect(errorMsgs[0].message).toContain("parse_error");
+    // No keep_alive should have been broadcast
+    expect(calls.filter((c: any) => c.type === "keep_alive").length).toBe(0);
   });
 });
 
@@ -1813,6 +1975,240 @@ describe("Browser message routing", () => {
     const queued = JSON.parse(session.pendingMessages[0]);
     expect(queued.type).toBe("user");
     expect(queued.message.content).toBe("queued message");
+  });
+
+  it("user_message: sends via adapter even when send returns false (no re-queue)", () => {
+    // After the adapter refactor, sendToCLI delegates to the adapter without
+    // checking the return value. Messages are NOT re-queued on send failure;
+    // the adapter is responsible for its own retry/buffering.
+    const session = bridge.getSession("s1")!;
+    const mockSend = vi.fn(() => false);
+    session.backendAdapter = {
+      isConnected: () => true,
+      send: mockSend,
+      disconnect: async () => {},
+      onBrowserMessage: () => {},
+      onSessionMeta: () => {},
+      onDisconnect: () => {},
+    } as any;
+
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "user_message",
+      content: "retry this",
+    }));
+
+    // The message was attempted via the adapter (not queued at bridge level)
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    expect(session.pendingMessages).toHaveLength(0);
+  });
+
+  it("flushes bridge-queued messages once backend becomes connected via onSessionMeta", () => {
+    // Pre-create session as codex type so the browser message takes the codex
+    // path (which queues to pendingMessages when adapter is absent).
+    bridge.getOrCreateSession("codex-s1", "codex");
+    const codexBrowser = makeBrowserSocket("codex-s1");
+    bridge.handleBrowserOpen(codexBrowser, "codex-s1");
+
+    bridge.handleBrowserMessage(codexBrowser, JSON.stringify({
+      type: "user_message",
+      content: "hello queued before connect",
+    }));
+
+    const session = bridge.getSession("codex-s1")!;
+    expect(session.pendingMessages).toHaveLength(1);
+
+    let connected = false;
+    const send = vi.fn((msg: any) => connected);
+    let onSessionMetaCb: ((meta: any) => void) | undefined;
+    const adapter = {
+      isConnected: () => connected,
+      send,
+      disconnect: async () => {},
+      onBrowserMessage: () => {},
+      onSessionMeta: (cb: (meta: any) => void) => { onSessionMetaCb = cb; },
+      onDisconnect: () => {},
+      onInitError: () => {},
+    };
+
+    bridge.attachBackendAdapter("codex-s1", adapter as any, "codex");
+
+    // Initial attach flush is attempted but backend still disconnected,
+    // so the queued message must remain pending.
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(session.pendingMessages).toHaveLength(1);
+
+    // Once backend reports itself as connected (via onSessionMeta),
+    // the bridge flushes queued messages.
+    connected = true;
+    onSessionMetaCb?.({ cliSessionId: "thr_codex_s1", model: "o4-mini", cwd: "/tmp" });
+
+    expect(session.pendingMessages).toHaveLength(0);
+    expect(send).toHaveBeenCalledTimes(2);
+    const flushedMsg = send.mock.calls[1][0];
+    expect(flushedMsg).toMatchObject({ type: "user_message", content: "hello queued before connect" });
+  });
+
+  it("flushes bridge-queued messages when codex session init marks the adapter connected", () => {
+    // Pre-create session as codex type so the browser message takes the codex
+    // path (which queues to pendingMessages when adapter is absent).
+    bridge.getOrCreateSession("codex-init-flush", "codex");
+    const browser = makeBrowserSocket("codex-init-flush");
+    bridge.handleBrowserOpen(browser, "codex-init-flush");
+
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "user_message",
+      content: "flush me after codex init",
+    }));
+
+    const session = bridge.getSession("codex-init-flush")!;
+    expect(session.pendingMessages).toHaveLength(1);
+
+    let onBrowserMessage: ((msg: any) => void) | undefined;
+    let onSessionMeta: ((meta: any) => void) | undefined;
+    const send = vi.fn(() => connected);
+    let connected = false;
+    const adapter = {
+      isConnected: () => connected,
+      send,
+      disconnect: async () => {},
+      onBrowserMessage: (cb: (msg: any) => void) => {
+        onBrowserMessage = cb;
+      },
+      onSessionMeta: (cb: (meta: any) => void) => {
+        onSessionMeta = cb;
+      },
+      onDisconnect: () => {},
+      onInitError: () => {},
+    };
+
+    bridge.attachBackendAdapter("codex-init-flush", adapter as any, "codex");
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(session.pendingMessages).toHaveLength(1);
+
+    connected = true;
+    onSessionMeta?.({
+      cliSessionId: "thr-codex-init-flush",
+      model: "gpt-5.4",
+      cwd: "/test",
+    });
+    onBrowserMessage?.({
+      type: "session_init",
+      session: {
+        session_id: "codex-init-flush",
+        backend_type: "codex",
+        model: "gpt-5.4",
+        cwd: "/test",
+        tools: [],
+        permissionMode: "bypassPermissions",
+        claude_code_version: "",
+        mcp_servers: [],
+        agents: [],
+        slash_commands: [],
+        skills: [],
+        total_cost_usd: 0,
+        num_turns: 0,
+        context_used_percent: 0,
+        is_compacting: false,
+        git_branch: "",
+        is_worktree: false,
+        is_containerized: false,
+        repo_root: "",
+        git_ahead: 0,
+        git_behind: 0,
+        total_lines_added: 0,
+        total_lines_removed: 0,
+      },
+    });
+
+    expect(send).toHaveBeenCalledTimes(2);
+    const flushedCall = (send.mock.calls as any[][])[1];
+    const flushedArg = flushedCall?.[0];
+    expect(flushedCall).toBeDefined();
+    expect(flushedArg).toMatchObject({
+      type: "user_message",
+      content: "flush me after codex init",
+    });
+    expect(session.pendingMessages).toHaveLength(0);
+  });
+
+  it("preserves FIFO when queued flush is interrupted by a failed send", () => {
+    // Tests the flushQueuedBrowserMessages logic: when a retryable message
+    // fails to send, remaining queued messages are re-queued in order.
+    bridge.getOrCreateSession("codex-fifo", "codex");
+    const codexBrowser = makeBrowserSocket("codex-fifo");
+    bridge.handleBrowserOpen(codexBrowser, "codex-fifo");
+
+    const session = bridge.getSession("codex-fifo")!;
+    // Manually queue two messages that will be flushed on adapter attach
+    session.pendingMessages.push(
+      JSON.stringify({ type: "user_message", content: "older queued" }),
+      JSON.stringify({ type: "mcp_get_status" }),
+    );
+
+    const send = vi.fn((msg: any) => {
+      // First send (older user_message) fails
+      if (msg.type === "user_message" && msg.content === "older queued") {
+        return false;
+      }
+      return true;
+    });
+
+    const adapter = {
+      isConnected: () => true,
+      send,
+      disconnect: async () => {},
+      onBrowserMessage: () => {},
+      onSessionMeta: () => {},
+      onDisconnect: () => {},
+      onInitError: () => {},
+    };
+
+    // attachBackendAdapter triggers flushQueuedBrowserMessages which tries
+    // to send queued messages. The first (user_message) fails and is retryable,
+    // so all remaining messages are re-queued.
+    bridge.attachBackendAdapter("codex-fifo", adapter as any, "codex");
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][0]).toMatchObject({ type: "user_message", content: "older queued" });
+    // Both messages re-queued because the first retryable message failed
+    expect(session.pendingMessages).toHaveLength(2);
+    expect(JSON.parse(session.pendingMessages[0])).toMatchObject({ type: "user_message", content: "older queued" });
+    expect(JSON.parse(session.pendingMessages[1])).toMatchObject({ type: "mcp_get_status" });
+  });
+
+  it("permission_response: does not re-queue when backend send fails", async () => {
+    await bridge.handleCLIMessage(cli, JSON.stringify({
+      type: "control_request",
+      request_id: "req-no-requeue",
+      request: {
+        subtype: "can_use_tool",
+        tool_name: "Bash",
+        input: { command: "echo hi" },
+        tool_use_id: "tu-no-requeue",
+      },
+    }));
+
+    const session = bridge.getSession("s1")!;
+    const send = vi.fn(() => false);
+    session.backendAdapter = {
+      isConnected: () => true,
+      send,
+      disconnect: async () => {},
+      onBrowserMessage: () => {},
+      onSessionMeta: () => {},
+      onDisconnect: () => {},
+    } as any;
+
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "permission_response",
+      request_id: "req-no-requeue",
+      behavior: "allow",
+    }));
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(session.pendingPermissions.has("req-no-requeue")).toBe(false);
+    expect(session.pendingMessages).toHaveLength(0);
   });
 
   it("user_message: deduplicates repeated client_msg_id", () => {
@@ -1885,8 +2281,9 @@ describe("Browser message routing", () => {
     expect(sent.response.subtype).toBe("success");
     expect(sent.response.request_id).toBe("req-allow");
     expect(sent.response.response.behavior).toBe("allow");
-    // updatedInput defaults to {} when the browser doesn't send updated_input
-    expect(sent.response.response.updatedInput).toEqual({});
+    // When the browser sends allow without updated_input, the bridge fills it
+    // from the pending permission's original tool input as a fallback.
+    expect(sent.response.response.updatedInput).toEqual({ command: "echo hi" });
 
     // Should remove from pending
     const session = bridge.getSession("s1")!;
@@ -4477,5 +4874,43 @@ describe("injectSystemPrompt", () => {
   it("is a no-op for nonexistent session", () => {
     // Should log an error but not throw.
     expect(() => bridge.injectSystemPrompt("nonexistent", "prompt")).not.toThrow();
+  });
+});
+
+// ─── User message during initialization ──────────────────────────────────────
+
+describe("User message during initializing phase", () => {
+  it("forwards user_message to CLI adapter while session is initializing", () => {
+    // Simulate a session where the CLI socket has connected (initializing)
+    // but the system.init message hasn't arrived yet (so not "ready").
+    // The message should still be forwarded to the adapter's internal queue
+    // rather than being dropped, so the user doesn't have to resend.
+    const cli = makeCliSocket("s1");
+    const browser = makeBrowserSocket("s1");
+    bridge.handleCLIOpen(cli, "s1");
+    bridge.handleBrowserOpen(browser, "s1");
+
+    // Session should be in "initializing" phase after CLI connects
+    const session = bridge.getSession("s1")!;
+    expect(session.stateMachine.phase).toBe("initializing");
+
+    // Send a user message while still initializing
+    cli.send.mockClear();
+    bridge.handleBrowserMessage(browser, JSON.stringify({
+      type: "user_message",
+      content: "Hello while initializing",
+    }));
+
+    // The message IS forwarded to the CLI adapter (which queues internally)
+    expect(cli.send).toHaveBeenCalledTimes(1);
+
+    // The message should be in the history (user typed it)
+    const userMsgs = session.messageHistory.filter((m) => m.type === "user_message");
+    expect(userMsgs.length).toBe(1);
+
+    // State machine stays in "initializing" — the transition to streaming
+    // is driven by CLI-side events (stream_event), not by user messages.
+    // The adapter queues the message internally until the backend is ready.
+    expect(session.stateMachine.phase).toBe("initializing");
   });
 });
