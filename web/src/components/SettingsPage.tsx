@@ -736,7 +736,30 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
               <div className="space-y-3">
                 <p className="text-xs text-cc-muted">
                   Expose this instance to the internet via{" "}
-                  <a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/" target="_blank" rel="noopener noreferrer" className="text-cc-primary hover:underline">cloudflared</a>,{" "}
+                  <button type="button" onClick={async () => {
+                    if (tunnelState === "running") return;
+                    setTunnelLoading(true);
+                    setTunnelError(null);
+                    try {
+                      setTunnelState("starting");
+                      const res = await api.startTunnel();
+                      setTunnelState("running");
+                      setTunnelUrl(res.url);
+                      setTunnelProvider(res.provider);
+                      if (!publicUrl && res.url) {
+                        setPublicUrl(res.url);
+                        api.updateSettings({ publicUrl: res.url }).then((s) => {
+                          useStore.getState().setPublicUrl(s.publicUrl);
+                        }).catch(() => {});
+                      }
+                      api.getTunnelQr().then(setTunnelQr).catch(() => {});
+                    } catch (err) {
+                      setTunnelState("error");
+                      setTunnelError(err instanceof Error ? err.message : String(err));
+                    } finally {
+                      setTunnelLoading(false);
+                    }
+                  }} className="text-cc-primary hover:underline cursor-pointer bg-transparent border-none p-0 text-xs inline font-inherit">cloudflared</button>,{" "}
                   <a href="#/integrations/tailscale" className="text-cc-primary hover:underline">Tailscale</a>{" "}
                   or ngrok. Auth is automatically enabled when a tunnel is active.
                 </p>
