@@ -614,9 +614,14 @@ export class CliLauncher {
       "--verbose",
     ];
 
-    if (options.model && options.model !== "default") {
-      args.push("--model", options.model);
-    }
+    // Always pass --model to override global settings that may include
+    // unsupported suffixes like [1m] (fast mode), which triggers CLI warnings
+    // in SDK mode. Strip any bracket suffixes (e.g. "opus[1m]" → "opus").
+    const rawModel = (options.model && options.model !== "default")
+      ? options.model
+      : "claude-opus-4-6";
+    const cleanModel = rawModel.replace(/\[.*\]$/, "");
+    args.push("--model", cleanModel);
     if (effectivePermissionMode) {
       args.push("--permission-mode", effectivePermissionMode);
     }
