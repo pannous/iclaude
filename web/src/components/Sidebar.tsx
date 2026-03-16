@@ -658,6 +658,32 @@ export function Sidebar() {
     }
   }, [projectGroups]);
 
+  const handleArchiveAgentSessions = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (agentSessions.length === 0) return;
+    const store = useStore.getState();
+    const ids = agentSessions.map((s) => s.id);
+    store.setSdkSessions(
+      store.sdkSessions.map((s) =>
+        ids.includes(s.sessionId) ? { ...s, archived: true } : s
+      )
+    );
+    for (const id of ids) {
+      if (store.sessions.has(id)) store.removeSession(id);
+      disconnectSession(id);
+    }
+    if (store.currentSessionId && ids.includes(store.currentSessionId)) {
+      store.newSession();
+    }
+    await Promise.allSettled(ids.map((id) => api.archiveSession(id)));
+    try {
+      const list = await api.listSessions();
+      useStore.getState().setSdkSessions(list);
+    } catch {
+      // best-effort
+    }
+  }, [agentSessions]);
+
   function handleNewSessionInFolder(cwd: string) {
     useStore.getState().closeTerminal();
     navigateHome();
@@ -873,16 +899,27 @@ export function Sidebar() {
 
             {agentSessions.length > 0 && (
               <div className="mt-3 pt-3 border-t border-cc-separator">
-                <button
-                  onClick={() => setShowAgentSessions(!showAgentSessions)}
-                  aria-expanded={showAgentSessions}
-                  className="w-full px-2 py-1 text-[11px] font-semibold text-cc-muted uppercase tracking-wide flex items-center gap-1.5 hover:bg-cc-hover rounded-md transition-colors cursor-pointer"
-                >
-                  <svg viewBox="0 0 16 16" fill="currentColor" className={`w-2 h-2 text-cc-muted/50 transition-transform duration-150 ${showAgentSessions ? "rotate-90" : ""}`}>
-                    <path d="M6 4l4 4-4 4" />
-                  </svg>
-                  Agent Runs ({agentSessions.length})
-                </button>
+                <div className="flex items-center">
+                  <button
+                    onClick={() => setShowAgentSessions(!showAgentSessions)}
+                    aria-expanded={showAgentSessions}
+                    className="flex-1 px-2 py-1 text-[11px] font-semibold text-cc-muted uppercase tracking-wide flex items-center gap-1.5 hover:bg-cc-hover rounded-md transition-colors cursor-pointer"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className={`w-2 h-2 text-cc-muted/50 transition-transform duration-150 ${showAgentSessions ? "rotate-90" : ""}`}>
+                      <path d="M6 4l4 4-4 4" />
+                    </svg>
+                    Agent Runs ({agentSessions.length})
+                  </button>
+                  <button
+                    onClick={handleArchiveAgentSessions}
+                    title={`Archive all ${agentSessions.length} agent runs`}
+                    className="p-1 mr-1 rounded hover:bg-cc-hover text-cc-muted/50 hover:text-cc-fg transition-colors cursor-pointer"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                      <path d="M2 3h12a1 1 0 011 1v1H1V4a1 1 0 011-1zm0 3h12v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6zm4 2a.5.5 0 000 1h4a.5.5 0 000-1H6z" />
+                    </svg>
+                  </button>
+                </div>
                 {showAgentSessions && (
                   <div className="mt-0.5">
                     {agentSessions.map((s) => (
