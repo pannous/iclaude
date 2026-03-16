@@ -21,6 +21,8 @@ import { discoverCommandsAndSkills } from "./commands-discovery.js";
 import { getSettings } from "./settings-manager.js";
 import { generateSessionTitle } from "./auto-namer.js";
 import { companionBus } from "./event-bus.js";
+import { metricsCollector } from "./metrics-collector.js";
+import { log } from "./logger.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -123,6 +125,9 @@ export class SessionOrchestrator {
   // Auto-relaunch state
   private relaunchingSet = new Set<string>();
   private autoRelaunchCounts = new Map<string, number>();
+  // Sessions that have already been notified about relaunch exhaustion.
+  // Prevents repeated "keeps crashing" warnings for dead sessions.
+  private relaunchExhaustedNotified = new Set<string>();
 
   // Idempotency guard for initialize()
   private _initialized = false;
@@ -155,24 +160,26 @@ export class SessionOrchestrator {
       this.wsBridge.attachBackendAdapter(sessionId, adapter, "codex");
     });
 
-    // When a CLI/Codex process exits, notify agent executor and external listeners
-    // separately so a throw in one doesn't skip the other (bus isolates each handler).
-    companionBus.on("session:exited", ({ sessionId, exitCode }) => {
+    // When a CLI/Codex process exits, handle all exit-related tasks.
+    companionBus.on("session:exited", ({ sessionId, exitCode, stderr }) => {
       this.agentExecutor.handleSessionExited(sessionId, exitCode);
-    });
-    companionBus.on("session:exited", ({ sessionId, exitCode }) => {
-      for (const cb of this.exitCallbacks) {
-        try {
-          cb(sessionId, exitCode);
-        } catch (err) {
-          console.error("[orchestrator] exitCallback error:", err);
-        }
+
+      // Surface non-zero exits to browsers (e.g. consent not accepted)
+      if (exitCode !== 0 && exitCode !== null) {
+        this.wsBridge.handleSessionStartupError(sessionId, exitCode, stderr);
       }
-    });
-    companionBus.on("session:exited", ({ sessionId }) => {
+
+      // Transition state machine
       const session = this.wsBridge.getSession(sessionId);
       if (session?.stateMachine) {
         session.stateMachine.transition("terminated", "process_exited");
+      }
+
+      // Notify external listeners
+      for (const cb of this.exitCallbacks) {
+        try { cb(sessionId, exitCode); } catch (err) {
+          console.error("[orchestrator] exitCallback error:", err);
+        }
       }
     });
 
@@ -190,9 +197,7 @@ export class SessionOrchestrator {
     companionBus.on("session:idle-kill", async ({ sessionId }) => {
       const info = this.launcher.getSession(sessionId);
       if (!info || info.archived) return;
-      console.log(
-        `[orchestrator] Idle-killing CLI for session ${sessionId} (no browsers, no activity)`,
-      );
+      log.info("orchestrator", "Idle-killing session", { sessionId, reason: "no browsers, no activity" });
       await this.killSession(sessionId);
     });
 
@@ -580,10 +585,13 @@ export class SessionOrchestrator {
 
       if (onProgress) await onProgress("launching_cli", "Session started", "done");
 
+      metricsCollector.recordSessionCreated(backend);
+      metricsCollector.recordSessionSpawned(session.sessionId);
+
       return { ok: true, session };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error("[orchestrator] Failed to create session:", msg);
+      log.error("orchestrator", "Failed to create session", { error: msg });
       return { ok: false, error: msg, status: 500 };
     }
   }
@@ -674,6 +682,7 @@ export class SessionOrchestrator {
     this.launcher.removeSession(sessionId);
     this.wsBridge.closeSession(sessionId);
     this.autoRelaunchCounts.delete(sessionId);
+    this.relaunchExhaustedNotified.delete(sessionId);
     this.relaunchingSet.delete(sessionId);
     return { ok: true, worktree: worktreeResult };
   }
@@ -690,6 +699,7 @@ export class SessionOrchestrator {
 
   clearAutoRelaunchCount(sessionId: string): void {
     this.autoRelaunchCounts.delete(sessionId);
+    this.relaunchExhaustedNotified.delete(sessionId);
   }
 
   // ── Event registration ─────────────────────────────────────────────────────
@@ -722,6 +732,11 @@ export class SessionOrchestrator {
     const info = this.launcher.getSession(sessionId);
     if (info?.archived) return;
 
+    // If we've already notified the user about relaunch exhaustion, bail out
+    // silently. Without this, every reconnect event from a dead session
+    // (e.g. deleted container) re-logs the "limit reached" warning endlessly.
+    if (this.relaunchExhaustedNotified.has(sessionId)) return;
+
     this.relaunchingSet.add(sessionId);
 
     await new Promise((r) => setTimeout(r, RELAUNCH_GRACE_MS));
@@ -736,18 +751,21 @@ export class SessionOrchestrator {
 
     const count = this.autoRelaunchCounts.get(sessionId) ?? 0;
     if (count >= MAX_AUTO_RELAUNCHES) {
-      console.warn(`[orchestrator] Auto-relaunch limit (${MAX_AUTO_RELAUNCHES}) reached for session ${sessionId}, giving up`);
+      metricsCollector.recordRelaunchExhausted();
+      log.warn("orchestrator", "Auto-relaunch limit reached", { sessionId, maxAttempts: MAX_AUTO_RELAUNCHES });
       this.wsBridge.broadcastToSession(sessionId, {
         type: "error",
         message: "Session keeps crashing. Please relaunch manually.",
       });
+      this.relaunchExhaustedNotified.add(sessionId);
       this.relaunchingSet.delete(sessionId);
       return;
     }
 
     if (freshInfo && freshInfo.state !== "starting") {
       this.autoRelaunchCounts.set(sessionId, count + 1);
-      console.log(`[orchestrator] Auto-relaunching CLI for session ${sessionId} (attempt ${count + 1}/${MAX_AUTO_RELAUNCHES})`);
+      metricsCollector.recordRelaunchAttempted();
+      log.info("orchestrator", "Auto-relaunching CLI", { sessionId, attempt: count + 1, maxAttempts: MAX_AUTO_RELAUNCHES });
       const session = this.wsBridge.getSession(sessionId);
       if (session?.stateMachine) {
         session.stateMachine.transition("starting", "relaunch_initiated");
@@ -757,7 +775,9 @@ export class SessionOrchestrator {
         if (!result.ok && result.error) {
           this.wsBridge.broadcastToSession(sessionId, { type: "error", message: result.error });
         } else if (result.ok) {
+          metricsCollector.recordRelaunchSucceeded();
           this.autoRelaunchCounts.delete(sessionId);
+          this.relaunchExhaustedNotified.delete(sessionId);
         }
         // ok=false without error: keep count to preserve the retry budget
       } finally {

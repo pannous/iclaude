@@ -23,6 +23,7 @@ import { COMPANION_HOME } from "./paths.js";
 import { TerminalManager } from "./terminal-manager.js";
 import { PRPoller } from "./pr-poller.js";
 import { RecorderManager } from "./recorder.js";
+import { initLogFile, closeLogFile } from "./logger.js";
 import { CronScheduler } from "./cron-scheduler.js";
 import { AgentExecutor } from "./agent-executor.js";
 import { SessionOrchestrator } from "./session-orchestrator.js";
@@ -34,8 +35,6 @@ import { NoVncProxy } from "./novnc-proxy.js";
 
 import { TunnelManager, getTunnelPort } from "./tunnel-manager.js";
 import { getSettings } from "./settings-manager.js";
-import * as sessionNames from "./session-names.js";
-import { generateSessionTitle } from "./auto-namer.js";
 import QRCode from "qrcode";
 import { startPeriodicCheck, setServiceMode } from "./update-checker.js";
 import { imagePullManager } from "./image-pull-manager.js";
@@ -100,169 +99,34 @@ containerManager.restoreState(CONTAINER_STATE_PATH);
 orchestrator.initialize();
 
 // ── Fork-specific lifecycle wiring (not covered by orchestrator) ─────────────
-// Auto-relaunch CLI when a browser connects to a session with no CLI.
-// Uses exponential backoff to prevent rapid relaunch loops when a CLI keeps crashing.
-const relaunchCooldowns = new Map<string, { until: number; attempts: number }>();
-const MAX_RELAUNCH_COOLDOWN = 60_000;
-const MAX_AUTO_RELAUNCHES = 3;
-const autoRelaunchCounts = new Map<string, number>();
-const relaunchingSet = new Set<string>();
-
-// When the CLI reports its internal session_id, store it for --resume on relaunch
-// and reset any relaunch backoff since the CLI is now healthy
-wsBridge.onCLISessionIdReceived((sessionId, cliSessionId) => {
-  launcher.setCLISessionId(sessionId, cliSessionId);
-  relaunchCooldowns.delete(sessionId);
-});
-
-// When a title is auto-generated from the first user message, update the session
-wsBridge.onTitleGeneratedCallback((sessionId, title) => {
-  launcher.setTitle(sessionId, title);
-  wsBridge.setTitle(sessionId, title);
-});
-
-// When a Codex adapter is created, attach it to the WsBridge
-launcher.onCodexAdapterCreated((sessionId, adapter) => {
-  wsBridge.attachCodexAdapter(sessionId, adapter);
-});
-
-// When a CLI/Codex process exits, mark the corresponding agent execution as completed
-// and surface startup errors (e.g. consent not accepted) to the browser.
-launcher.onSessionExited((sessionId, exitCode, stderr) => {
-  agentExecutor.handleSessionExited(sessionId, exitCode);
-  // Surface non-zero exits to browsers so users see why their session failed to start
-  if (exitCode !== 0 && exitCode !== null) {
-    wsBridge.handleSessionStartupError(sessionId, exitCode, stderr);
-  }
-});
-
-// Start watching PRs when git info is resolved for a session
-wsBridge.onSessionGitInfoReadyCallback((sessionId, cwd, branch) => {
-  prPoller.watch(sessionId, cwd, branch);
-});
 
 // Provide session info from the launcher so WsBridge can load CLI history
 // for sessions that lost their messageHistory (e.g. after server restart with unflushed writes)
 wsBridge.onSessionInfoLookupCallback((sessionId) => {
   const info = launcher.getSession(sessionId);
   if (!info) return null;
-  // Fall back to resumeSessionAt: for resumed sessions, cliSessionId isn't set until
-  // system.init arrives (which requires user input), but we need the ID now to load history.
   return { cliSessionId: info.cliSessionId || info.resumeSessionAt, cwd: info.cwd };
-});
-
-// Auto-relaunch CLI when a browser connects to a session with no CLI
-wsBridge.onCLIRelaunchNeededCallback(async (sessionId) => {
-  const now = Date.now();
-  const cooldown = relaunchCooldowns.get(sessionId);
-  if (cooldown && now < cooldown.until) return;
-  let info = launcher.getSession(sessionId);
-  if (info?.archived) return;
-
-  // Session exists in ws-bridge but launcher lost track of it (e.g. launcher.json deleted).
-  // Adopt it so the relaunch below can proceed.
-  if (!info) {
-    const bridgeSession = wsBridge.getSession(sessionId);
-    if (bridgeSession) {
-      launcher.adoptOrphan(sessionId, {
-        backendType: bridgeSession.backendType,
-        model: bridgeSession.state.model || undefined,
-        cwd: bridgeSession.state.cwd || undefined,
-        permissionMode: bridgeSession.state.permissionMode || undefined,
-        cliSessionId: bridgeSession.cliSessionId,
-      });
-      info = launcher.getSession(sessionId);
-    }
-  }
-
-  // Add to set BEFORE the grace period to block concurrent browser connections
-  relaunchingSet.add(sessionId);
-
-  // Grace period: CLI does normal code-1000 WS reconnection cycles (~30s).
-  // Wait 10s, then check if CLI reconnected or process is still alive.
-  await new Promise(r => setTimeout(r, 10000));
-  if (wsBridge.isCliConnected(sessionId)) { relaunchingSet.delete(sessionId); return; }
-  const freshInfo = launcher.getSession(sessionId);
-  if (freshInfo && (freshInfo.state === "connected" || freshInfo.state === "running")) {
-    relaunchingSet.delete(sessionId); return;
-  }
-  // PID liveness check — session state/WS can be stale, but signal 0 is definitive
-  if (freshInfo?.pid) {
-    try { process.kill(freshInfo.pid, 0); relaunchingSet.delete(sessionId); return; } catch {}
-  }
-  const count = autoRelaunchCounts.get(sessionId) ?? 0;
-  if (count >= MAX_AUTO_RELAUNCHES) {
-    console.warn(`[server] Auto-relaunch limit (${MAX_AUTO_RELAUNCHES}) reached for session ${sessionId}, giving up`);
-    wsBridge.broadcastToSession(sessionId, {
-      type: "error",
-      message: "Session keeps crashing. Please relaunch manually.",
-    });
-    relaunchingSet.delete(sessionId);
-    return;
-  }
-
-  if (freshInfo && freshInfo.state !== "starting") {
-    const attempts = (cooldown?.attempts ?? 0) + 1;
-    const backoff = Math.min(5_000 * 2 ** (attempts - 1), MAX_RELAUNCH_COOLDOWN);
-    relaunchCooldowns.set(sessionId, { until: now + backoff, attempts });
-    autoRelaunchCounts.set(sessionId, count + 1);
-    console.log(`[server] Auto-relaunching CLI for session ${sessionId} (attempt ${attempts}, cooldown ${backoff}ms)`);
-
-    try {
-      const result = await launcher.relaunch(sessionId);
-      if (!result.ok && result.error) {
-        wsBridge.broadcastToSession(sessionId, { type: "error", message: result.error });
-      } else {
-        autoRelaunchCounts.delete(sessionId);
-      }
-    } catch (err) {
-      console.error(`[server] Relaunch failed for session ${sessionId}:`, err);
-    }
-  } else {
-    relaunchingSet.delete(sessionId);
-  }
 });
 
 // Kill orphaned CLI processes (idle + no browsers for ORPHAN_KILL_MS)
 wsBridge.onSessionOrphanedCallback(async (sessionId) => {
   const info = launcher.getSession(sessionId);
-  if (info?.archived) return; // already archived
-  console.log(`[server] Killing orphaned session ${sessionId}`);
+  if (info?.archived) return;
+  log.info("server", "Killing orphaned session", { sessionId });
   await launcher.kill(sessionId);
   launcher.setArchived(sessionId, true);
   sessionStore.setArchived(sessionId, true);
 });
 
-// Kill CLI when idle with no browsers for 20 minutes
-wsBridge.onIdleKillCallback(async (sessionId) => {
-  const info = launcher.getSession(sessionId);
-  if (!info || info.archived) return;
-  console.log(`[server] Idle-killing CLI for session ${sessionId} (no browsers, no activity)`);
-  await launcher.kill(sessionId);
-});
-
-// Auto-generate session title after first turn completes
-wsBridge.onFirstTurnCompletedCallback(async (sessionId, firstUserMessage) => {
-  // Don't overwrite a name that was already set via manual rename
-  if (sessionNames.getName(sessionId)) return;
-  const s = getSettings();
-  if (!s.anthropicApiKey.trim() && !s.openaiApiKey.trim() && !s.openrouterApiKey.trim()) return;
-  console.log(`[server] Auto-naming session ${sessionId}...`);
-  const title = await generateSessionTitle(firstUserMessage);
-  // Re-check: a manual rename may have occurred while we were generating
-  if (title && !sessionNames.getName(sessionId)) {
-    console.log(`[server] Auto-named session ${sessionId}: "${title}"`);
-    sessionNames.setName(sessionId, title);
-    // Use setTitle (not broadcastNameUpdate) so the browser updates sdkSessions[i].title,
-    // which takes priority over sessionName in SessionItem rendering.
-    launcher.setTitle(sessionId, title);
-    wsBridge.setTitle(sessionId, title);
-  }
-});
-
 console.log(`[server] Session persistence: ${sessionStore.directory}`);
 if (recorder.isGloballyEnabled()) {
   console.log(`[server] Recording enabled (dir: ${recorder.getRecordingsDir()}, max: ${recorder.getMaxLines()} lines)`);
+}
+
+// ── Log file persistence — writes all log output to ~/.companion/logs/ ───────
+const logFileWriter = initLogFile();
+if (logFileWriter) {
+  console.log(`[server] Log file enabled (dir: ${logFileWriter.getLogsDir()}, max: ${logFileWriter.getMaxLines()} lines, file: ${logFileWriter.filePath})`);
 }
 
 const app = new Hono();
@@ -656,23 +520,35 @@ if (isRunningAsService()) {
   console.log("[server] Running as background service (auto-update available)");
 }
 
-// ── Memory diagnostics ───────────────────────────────────────────────────────
-const MEMORY_LOG_INTERVAL_MS = 5 * 60_000; // every 5 minutes
+// ── Runtime diagnostics ──────────────────────────────────────────────────────
+import { log } from "./logger.js";
+import { metricsCollector } from "./metrics-collector.js";
+
+const DIAGNOSTICS_INTERVAL_MS = 5 * 60_000; // every 5 minutes
 setInterval(() => {
-  const mem = process.memoryUsage();
+  const snap = metricsCollector.getSnapshot(wsBridge);
+  const mem = snap.gauges.memory;
   const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
   const sessionStats = wsBridge.getSessionMemoryStats();
-  const totalHistory = sessionStats.reduce((sum, s) => sum + s.historyLen, 0);
   const topSessions = sessionStats
     .sort((a, b) => b.historyLen - a.historyLen)
     .slice(0, 3)
     .map((s) => `${s.id.slice(0, 8)}(h=${s.historyLen},b=${s.browsers})`)
     .join(", ");
-  console.log(
-    `[mem] rss=${mb(mem.rss)}MB heap=${mb(mem.heapUsed)}/${mb(mem.heapTotal)}MB ` +
-    `ext=${mb(mem.external)}MB | ${sessionStats.length} sessions, ${totalHistory} history msgs | top: ${topSessions || "none"}`,
-  );
-}, MEMORY_LOG_INTERVAL_MS);
+
+  log.info("diagnostics", "Runtime snapshot", {
+    rss: `${mb(mem.rss)}MB`,
+    heap: `${mb(mem.heapUsed)}/${mb(mem.heapTotal)}MB`,
+    external: `${mb(mem.external)}MB`,
+    sessions: snap.gauges.totalActiveSessions,
+    browsers: snap.gauges.connectedBrowsers,
+    historyMsgs: snap.gauges.totalHistoryMessages,
+    pendingMsgs: snap.gauges.totalPendingMessages,
+    eventBuffer: snap.gauges.totalEventBufferSize,
+    errors: Object.values(snap.counters.errors).reduce((a, b) => a + b, 0),
+    topSessions: topSessions || "none",
+  });
+}, DIAGNOSTICS_INTERVAL_MS);
 
 // ── Graceful shutdown — persist container state ──────────────────────────────
 function gracefulShutdown() {
@@ -680,6 +556,7 @@ function gracefulShutdown() {
   console.log("[server] Persisting container state before shutdown...");
   containerManager.persistState(CONTAINER_STATE_PATH);
   cleanupTailscaleFunnel(port);
+  closeLogFile();
   process.exit(0);
 }
 process.on("SIGTERM", gracefulShutdown);

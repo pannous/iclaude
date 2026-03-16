@@ -490,6 +490,22 @@ export interface CronJobExecution {
   costUsd?: number;
 }
 
+export interface SystemCronEntry {
+  index: number;
+  raw: string;
+  comment: string;
+  schedule: string;
+  command: string;
+  isComment: boolean;
+  isEmpty: boolean;
+}
+
+export interface SystemCronResponse {
+  entries: SystemCronEntry[];
+  raw: string;
+  removed?: string;
+}
+
 export interface McpServerConfigAgent {
   type: "stdio" | "sse" | "http";
   command?: string;
@@ -1141,6 +1157,14 @@ export const api = {
   runCronJob: (id: string) => post(`/cron/jobs/${encodeURIComponent(id)}/run`),
   getCronJobExecutions: (id: string) =>
     get<CronJobExecution[]>(`/cron/jobs/${encodeURIComponent(id)}/executions`),
+
+  // System crontab
+  listSystemCron: () => get<SystemCronResponse>("/system-cron"),
+  addSystemCron: (data: { schedule: string; command: string; comment?: string }) =>
+    post<SystemCronResponse>("/system-cron", data),
+  updateSystemCron: (index: number, data: { schedule?: string; command?: string; enabled?: boolean }) =>
+    put<SystemCronResponse>(`/system-cron/${index}`, data),
+  deleteSystemCron: (index: number) => del<SystemCronResponse>(`/system-cron/${index}`),
 
   // Background process management
   killProcess: (sessionId: string, taskId: string) =>

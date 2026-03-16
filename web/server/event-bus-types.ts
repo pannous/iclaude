@@ -12,7 +12,7 @@ export interface CompanionEventMap {
   "session:cli-id-received": { sessionId: string; cliSessionId: string };
 
   /** CLI/Codex process exited. */
-  "session:exited": { sessionId: string; exitCode: number | null };
+  "session:exited": { sessionId: string; exitCode: number | null; stderr?: string };
 
   /** CLI WebSocket disconnected and a browser needs a relaunch. */
   "session:relaunch-needed": { sessionId: string };

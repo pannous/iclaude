@@ -15,10 +15,33 @@ const lastSeqBySession = new Map<string, number>();
 const taskCounters = new Map<string, number>();
 const streamingPhaseBySession = new Map<string, "thinking" | "text">();
 const streamingDraftMessageIdBySession = new Map<string, string>();
+const pendingOutgoingBySession = new Map<string, BrowserOutgoingMessage[]>();
 /** Track processed tool_use IDs to prevent duplicate task creation */
 const processedToolUseIds = new Map<string, Set<string>>();
 /** Whether an assistant message was finalized this turn (used to preserve post-thinking text) */
 const hadAssistantThisTurn = new Set<string>();
+
+function isSocketUsable(ws: WebSocket | undefined): boolean {
+  return !!ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING);
+}
+
+function shouldReconnectSession(sessionId: string): boolean {
+  const store = useStore.getState();
+  const sdkSession = store.sdkSessions.find((s) => s.sessionId === sessionId);
+  if (sdkSession) return !sdkSession.archived;
+  // Fallback for freshly-created sessions that may not be in sdkSessions yet.
+  return store.currentSessionId === sessionId;
+}
+
+function getReconnectCandidates(): string[] {
+  const store = useStore.getState();
+  const ids = new Set<string>();
+  for (const s of store.sdkSessions) {
+    if (!s.archived) ids.add(s.sessionId);
+  }
+  if (store.currentSessionId) ids.add(store.currentSessionId);
+  return Array.from(ids);
+}
 
 // ── Page visibility handling ─────────────────────────────────────────────────
 // Mobile browsers (Android Chrome, iOS Safari) aggressively kill WebSocket
@@ -41,11 +64,17 @@ if (typeof document !== "undefined") {
       }
     } else {
       pageHidden = false;
-      // Page is visible again — reconnect all active sessions
-      const store = useStore.getState();
-      for (const s of store.sdkSessions) {
-        if (!s.archived && !sockets.has(s.sessionId)) {
-          connectSession(s.sessionId);
+      // Page is visible again — reconnect all known active sessions.
+      for (const sessionId of getReconnectCandidates()) {
+        // Re-check in case sdkSessions changed after candidate collection.
+        if (!shouldReconnectSession(sessionId)) continue;
+        const ws = sockets.get(sessionId);
+        if (!isSocketUsable(ws)) {
+          if (ws) {
+            try { ws.close(); } catch {}
+            sockets.delete(sessionId);
+          }
+          connectSession(sessionId);
         }
       }
     }
@@ -317,6 +346,22 @@ function notifySessionDone(sessionId: string, isError: boolean, resultText?: str
   }
 }
 
+function enqueueOutgoing(sessionId: string, msg: BrowserOutgoingMessage) {
+  const queued = pendingOutgoingBySession.get(sessionId) || [];
+  queued.push(msg);
+  pendingOutgoingBySession.set(sessionId, queued);
+}
+
+function flushQueuedOutgoing(sessionId: string, ws: WebSocket) {
+  const queued = pendingOutgoingBySession.get(sessionId);
+  if (!queued?.length || ws.readyState !== WebSocket.OPEN) return;
+  pendingOutgoingBySession.delete(sessionId);
+  for (const msg of queued) {
+    ws.send(JSON.stringify(msg));
+  }
+}
+
+
 function setStreamingDraftMessage(sessionId: string, content: string) {
   const store = useStore.getState();
   const existing = store.messages.get(sessionId) || [];
@@ -435,6 +480,10 @@ function finalizeOrClearStreamingDraft(sessionId: string) {
 
 function nextClientMsgId(): string {
   return `cmsg-${Date.now()}-${++clientMsgCounter}`;
+}
+
+export function createClientMessageId(): string {
+  return nextClientMsgId();
 }
 
 const IDEMPOTENT_OUTGOING_TYPES = new Set<BrowserOutgoingMessage["type"]>([
@@ -592,6 +641,7 @@ function handleMessage(sessionId: string, event: MessageEvent) {
   try {
     data = JSON.parse(event.data);
   } catch {
+    console.warn(`[ws] Failed to parse incoming message for session ${sessionId}:`, event.data?.substring?.(0, 120));
     return;
   }
 
@@ -855,6 +905,16 @@ function handleParsedMessage(
       break;
     }
 
+    case "user_message": {
+      store.appendMessage(sessionId, {
+        id: data.id || nextId(),
+        role: "user",
+        content: data.content,
+        timestamp: data.timestamp || Date.now(),
+      });
+      break;
+    }
+
     case "system_event": {
       // Update structured process state from task_notification
       if (data.event?.subtype === "task_notification") {
@@ -923,9 +983,10 @@ function handleParsedMessage(
       if (phase === "terminated" || phase === "reconnecting") {
         store.setCliConnected(sessionId, false);
         store.setSessionStatus(sessionId, null);
-      } else if (phase === "starting" || phase === "initializing") {
+      } else if (phase === "starting") {
         store.setCliConnected(sessionId, false);
       } else {
+        // initializing = CLI WS open, waiting for system_init → connected
         store.setCliConnected(sessionId, true);
         if (phase === "ready") store.setSessionStatus(sessionId, "idle");
         else if (phase === "streaming") store.setSessionStatus(sessionId, "running");
@@ -1178,7 +1239,12 @@ function handleParsedMessage(
 }
 
 export function connectSession(sessionId: string) {
-  if (sockets.has(sessionId)) return;
+  const existing = sockets.get(sessionId);
+  if (isSocketUsable(existing)) return;
+  if (existing) {
+    try { existing.close(); } catch {}
+    sockets.delete(sessionId);
+  }
 
   const store = useStore.getState();
   store.setConnectionStatus(sessionId, "connecting");
@@ -1192,6 +1258,8 @@ export function connectSession(sessionId: string) {
     reconnectAttempts.delete(sessionId);
     const lastSeq = getLastSeq(sessionId);
     ws.send(JSON.stringify({ type: "session_subscribe", last_seq: lastSeq }));
+    flushQueuedOutgoing(sessionId, ws);
+    // Clear any reconnect timer
     const timer = reconnectTimers.get(sessionId);
     if (timer) {
       clearTimeout(timer);
@@ -1202,6 +1270,8 @@ export function connectSession(sessionId: string) {
   ws.onmessage = (event) => handleMessage(sessionId, event);
 
   ws.onclose = () => {
+    // Guard against stale close events from a replaced socket.
+    if (sockets.get(sessionId) !== ws) return;
     sockets.delete(sessionId);
     useStore.getState().setConnectionStatus(sessionId, "disconnected");
     scheduleReconnect(sessionId);
@@ -1225,13 +1295,7 @@ function scheduleReconnect(sessionId: string) {
     reconnectTimers.delete(sessionId);
     // Re-check visibility — page may have been hidden during the delay
     if (pageHidden) return;
-    const store = useStore.getState();
-    // Only reconnect if this is still the active session and not archived
-    if (store.currentSessionId !== sessionId) return;
-    const sdkSession = store.sdkSessions.find((s) => s.sessionId === sessionId);
-    if (sdkSession && !sdkSession.archived) {
-      connectSession(sessionId);
-    }
+    if (shouldReconnectSession(sessionId)) connectSession(sessionId);
   }, delay);
   reconnectTimers.set(sessionId, timer);
 }
@@ -1248,6 +1312,7 @@ export function disconnectSession(sessionId: string) {
     ws.close();
     sockets.delete(sessionId);
   }
+  useStore.getState().setConnectionStatus(sessionId, "disconnected");
   processedToolUseIds.delete(sessionId);
   pendingBackgroundBash.delete(sessionId);
   taskCounters.delete(sessionId);
@@ -1255,6 +1320,7 @@ export function disconnectSession(sessionId: string) {
   streamingDraftMessageIdBySession.delete(sessionId);
   lastSeqBySession.delete(sessionId);
   hadAssistantThisTurn.delete(sessionId);
+  pendingOutgoingBySession.delete(sessionId);
 }
 
 export function disconnectAll() {
@@ -1303,7 +1369,8 @@ export function waitForConnection(sessionId: string): Promise<void> {
 export function sendToSession(sessionId: string, msg: BrowserOutgoingMessage) {
   const ws = sockets.get(sessionId);
   let outgoing: BrowserOutgoingMessage = msg;
-  if (IDEMPOTENT_OUTGOING_TYPES.has(msg.type)) {
+  const isIdempotent = IDEMPOTENT_OUTGOING_TYPES.has(msg.type);
+  if (isIdempotent) {
     switch (msg.type) {
       case "user_message":
       case "permission_response":
@@ -1321,8 +1388,14 @@ export function sendToSession(sessionId: string, msg: BrowserOutgoingMessage) {
         break;
     }
   }
+
   if (ws?.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(outgoing));
+    return;
+  }
+
+  if (isIdempotent) {
+    enqueueOutgoing(sessionId, outgoing);
   }
 }
 

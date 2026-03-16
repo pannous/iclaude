@@ -15,6 +15,7 @@ import { AgentCard, getWebhookUrl } from "./AgentCard.js";
 import { AgentEditor, type AgentFormData, EMPTY_FORM } from "./AgentEditor.js";
 import { LinearAgentEditor } from "./LinearAgentEditor.js";
 import { LinearAgentSection } from "./LinearAgentSection.js";
+import { SystemCronSection } from "./SystemCronSection.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -583,6 +584,9 @@ export function AgentsPage({ route }: Props) {
         )}
 
         <PublicUrlBanner publicUrl={publicUrl} />
+
+        {/* System Crontab section */}
+        <SystemCronSection />
 
         {/* Linear Agents section */}
         {linearOAuthConfigured && !loading && (() => {
