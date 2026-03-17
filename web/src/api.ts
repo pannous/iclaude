@@ -1312,4 +1312,10 @@ export const api = {
     post<{ tunnelId: string; hostname: string }>("/tunnel/named/setup", { name, hostname }),
   deleteNamedTunnel: () =>
     post<{ ok: boolean }>("/tunnel/named/delete"),
+
+  // Proxy forwards
+  getProxyForwards: () =>
+    get<Array<{ prefix: string; port: number; name: string }>>("/proxy-forwards"),
+  updateProxyForwards: (forwards: Array<{ prefix: string; port: number; name: string }>) =>
+    put<Array<{ prefix: string; port: number; name: string }>>("/proxy-forwards", forwards),
 };

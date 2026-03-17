@@ -46,6 +46,7 @@ const DEFAULT_MOCK_SETTINGS = {
   tunnelId: "",
   tunnelHostname: "",
   tunnelCredentialsPath: "",
+  proxyForwards: [],
   aiProvider: "anthropic" as const,
   publicUrl: "",
   updateChannel: "stable" as const,

@@ -13,6 +13,12 @@ export type UpdateChannel = "stable" | "prerelease";
 
 export type AiProvider = "anthropic" | "openai" | "openrouter";
 
+export interface ProxyForward {
+  prefix: string;
+  port: number;
+  name: string;
+}
+
 export interface CompanionSettings {
   authEnabled: boolean;
   anthropicApiKey: string;
@@ -45,6 +51,7 @@ export interface CompanionSettings {
   tunnelId: string;
   tunnelHostname: string;
   tunnelCredentialsPath: string;
+  proxyForwards: ProxyForward[];
   aiProvider: AiProvider;
   publicUrl: string;
   updateChannel: UpdateChannel;
@@ -80,6 +87,7 @@ let settings: CompanionSettings = {
   tunnelId: "",
   tunnelHostname: "",
   tunnelCredentialsPath: "",
+  proxyForwards: [],
   aiValidationEnabled: false,
   aiValidationAutoApprove: true,
   aiValidationAutoDeny: true,
@@ -118,6 +126,15 @@ function normalize(raw: Partial<CompanionSettings> | null | undefined): Companio
     tunnelId: typeof raw?.tunnelId === "string" ? raw.tunnelId : "",
     tunnelHostname: typeof raw?.tunnelHostname === "string" ? raw.tunnelHostname : "",
     tunnelCredentialsPath: typeof raw?.tunnelCredentialsPath === "string" ? raw.tunnelCredentialsPath : "",
+    proxyForwards: Array.isArray(raw?.proxyForwards)
+      ? raw.proxyForwards.filter(
+          (f: unknown): f is ProxyForward =>
+            typeof f === "object" && f !== null &&
+            typeof (f as ProxyForward).prefix === "string" &&
+            typeof (f as ProxyForward).port === "number" &&
+            typeof (f as ProxyForward).name === "string",
+        )
+      : [],
     aiValidationEnabled: typeof raw?.aiValidationEnabled === "boolean" ? raw.aiValidationEnabled : false,
     aiValidationAutoApprove: typeof raw?.aiValidationAutoApprove === "boolean" ? raw.aiValidationAutoApprove : true,
     aiValidationAutoDeny: typeof raw?.aiValidationAutoDeny === "boolean" ? raw.aiValidationAutoDeny : true,
@@ -155,7 +172,7 @@ export function getSettings(): CompanionSettings {
 }
 
 export function updateSettings(
-  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "openrouterApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "linearOAuthClientId" | "linearOAuthClientSecret" | "linearOAuthWebhookSecret" | "linearOAuthAccessToken" | "linearOAuthRefreshToken" | "editorTabEnabled" | "tunnelEnabled" | "tunnelMode" | "tunnelId" | "tunnelHostname" | "tunnelCredentialsPath" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "publicUrl" | "updateChannel" | "dockerAutoUpdate">>,
+  patch: Partial<Pick<CompanionSettings, "authEnabled" | "anthropicApiKey" | "anthropicModel" | "openaiApiKey" | "openrouterApiKey" | "linearApiKey" | "linearAutoTransition" | "linearAutoTransitionStateId" | "linearAutoTransitionStateName" | "linearArchiveTransition" | "linearArchiveTransitionStateId" | "linearArchiveTransitionStateName" | "linearOAuthClientId" | "linearOAuthClientSecret" | "linearOAuthWebhookSecret" | "linearOAuthAccessToken" | "linearOAuthRefreshToken" | "editorTabEnabled" | "tunnelEnabled" | "tunnelMode" | "tunnelId" | "tunnelHostname" | "tunnelCredentialsPath" | "proxyForwards" | "aiValidationEnabled" | "aiValidationAutoApprove" | "aiValidationAutoDeny" | "aiProvider" | "publicUrl" | "updateChannel" | "dockerAutoUpdate">>,
 ): CompanionSettings {
   ensureLoaded();
   settings = normalize({
@@ -182,6 +199,7 @@ export function updateSettings(
     tunnelId: patch.tunnelId ?? settings.tunnelId,
     tunnelHostname: patch.tunnelHostname ?? settings.tunnelHostname,
     tunnelCredentialsPath: patch.tunnelCredentialsPath ?? settings.tunnelCredentialsPath,
+    proxyForwards: patch.proxyForwards ?? settings.proxyForwards,
     aiValidationEnabled: patch.aiValidationEnabled ?? settings.aiValidationEnabled,
     aiValidationAutoApprove: patch.aiValidationAutoApprove ?? settings.aiValidationAutoApprove,
     aiValidationAutoDeny: patch.aiValidationAutoDeny ?? settings.aiValidationAutoDeny,

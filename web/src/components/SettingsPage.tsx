@@ -110,6 +110,12 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [namedSetupName, setNamedSetupName] = useState("iclaude");
   const [namedSetupHostname, setNamedSetupHostname] = useState("");
   const [namedSetupLoading, setNamedSetupLoading] = useState(false);
+
+  // Proxy forwards state
+  const [proxyForwards, setProxyForwards] = useState<Array<{ prefix: string; port: number; name: string }>>([]);
+  const [newProxyPrefix, setNewProxyPrefix] = useState("");
+  const [newProxyPort, setNewProxyPort] = useState("");
+  const [newProxyName, setNewProxyName] = useState("");
   const [namedSetupError, setNamedSetupError] = useState<string | null>(null);
 
   const contentRef = useRef<HTMLDivElement>(null);
@@ -201,6 +207,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       setNamedInfo(info);
       if (info.hostname) setNamedSetupHostname(info.hostname);
     }).catch(() => {});
+    api.getProxyForwards().then(setProxyForwards).catch(() => {});
   }, []);
 
   async function onSave(e: React.FormEvent) {
@@ -1072,6 +1079,88 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 {tunnelError && (
                   <p className="text-xs text-red-500 px-3">{tunnelError}</p>
                 )}
+
+                {/* Proxy Forwards */}
+                <div className="border-t border-cc-border pt-3 mt-3">
+                  <p className="text-xs font-medium text-cc-fg mb-1">Port Forwards</p>
+                  <p className="text-[11px] text-cc-muted mb-2">
+                    Forward local services through the tunnel. Access at <code className="bg-cc-hover px-1 rounded">/api/proxy/&lt;prefix&gt;/</code>
+                  </p>
+
+                  {proxyForwards.map((fwd) => (
+                    <div key={fwd.prefix} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cc-hover mb-1">
+                      <span className="text-xs font-mono text-cc-fg flex-1">/{fwd.prefix}</span>
+                      <span className="text-[11px] text-cc-muted">:{fwd.port}</span>
+                      {fwd.name !== fwd.prefix && (
+                        <span className="text-[11px] text-cc-muted truncate max-w-[100px]">{fwd.name}</span>
+                      )}
+                      {tunnelUrl && (
+                        <a
+                          href={`${tunnelUrl}/api/proxy/${fwd.prefix}/`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-cc-primary hover:underline"
+                        >
+                          open
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        className="text-[11px] text-red-400 hover:text-red-300 cursor-pointer bg-transparent border-none p-0"
+                        onClick={async () => {
+                          const updated = proxyForwards.filter((f) => f.prefix !== fwd.prefix);
+                          try {
+                            setProxyForwards(await api.updateProxyForwards(updated));
+                          } catch {}
+                        }}
+                      >
+                        remove
+                      </button>
+                    </div>
+                  ))}
+
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <input
+                      type="text"
+                      placeholder="prefix"
+                      value={newProxyPrefix}
+                      onChange={(e) => setNewProxyPrefix(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ""))}
+                      className="w-20 px-2 py-1.5 rounded bg-cc-bg border border-cc-border text-xs text-cc-fg placeholder:text-cc-muted/50"
+                    />
+                    <input
+                      type="number"
+                      placeholder="port"
+                      value={newProxyPort}
+                      onChange={(e) => setNewProxyPort(e.target.value)}
+                      className="w-16 px-2 py-1.5 rounded bg-cc-bg border border-cc-border text-xs text-cc-fg placeholder:text-cc-muted/50"
+                    />
+                    <input
+                      type="text"
+                      placeholder="name (optional)"
+                      value={newProxyName}
+                      onChange={(e) => setNewProxyName(e.target.value)}
+                      className="flex-1 px-2 py-1.5 rounded bg-cc-bg border border-cc-border text-xs text-cc-fg placeholder:text-cc-muted/50"
+                    />
+                    <button
+                      type="button"
+                      disabled={!newProxyPrefix || !newProxyPort}
+                      className="px-2 py-1.5 rounded bg-cc-primary text-white text-xs cursor-pointer disabled:opacity-40 border-none"
+                      onClick={async () => {
+                        const port = parseInt(newProxyPort, 10);
+                        if (!newProxyPrefix || !port || port < 1 || port > 65535) return;
+                        const updated = [...proxyForwards.filter((f) => f.prefix !== newProxyPrefix), { prefix: newProxyPrefix, port, name: newProxyName.trim() || newProxyPrefix }];
+                        try {
+                          setProxyForwards(await api.updateProxyForwards(updated));
+                          setNewProxyPrefix("");
+                          setNewProxyPort("");
+                          setNewProxyName("");
+                        } catch {}
+                      }}
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
               </div>
             </section>
 

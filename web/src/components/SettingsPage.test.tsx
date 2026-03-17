@@ -77,6 +77,8 @@ const mockApi = {
   getNamedTunnelInfo: vi.fn(),
   setupNamedTunnel: vi.fn(),
   deleteNamedTunnel: vi.fn(),
+  getProxyForwards: vi.fn(),
+  updateProxyForwards: vi.fn(),
 };
 
 const mockTelemetry = {
@@ -103,6 +105,8 @@ vi.mock("../api.js", () => ({
     getNamedTunnelInfo: (...args: unknown[]) => mockApi.getNamedTunnelInfo(...args),
     setupNamedTunnel: (...args: unknown[]) => mockApi.setupNamedTunnel(...args),
     deleteNamedTunnel: (...args: unknown[]) => mockApi.deleteNamedTunnel(...args),
+    getProxyForwards: (...args: unknown[]) => mockApi.getProxyForwards(...args),
+    updateProxyForwards: (...args: unknown[]) => mockApi.updateProxyForwards(...args),
   },
 }));
 
@@ -190,6 +194,7 @@ beforeEach(() => {
     url: "https://test-tunnel.trycloudflare.com",
     qrDataUrl: "data:image/png;base64,TUNNEL_QR",
   });
+  mockApi.getProxyForwards.mockResolvedValue([]);
   mockTelemetry.getTelemetryPreferenceEnabled.mockReturnValue(true);
 });
 

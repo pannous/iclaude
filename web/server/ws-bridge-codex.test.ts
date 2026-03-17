@@ -136,6 +136,7 @@ describe("attachCodexAdapterHandlers", () => {
       tunnelId: "",
       tunnelHostname: "",
       tunnelCredentialsPath: "",
+      proxyForwards: [],
       aiValidationEnabled: false,
       aiValidationAutoApprove: true,
       aiValidationAutoDeny: true,
@@ -1129,6 +1130,7 @@ describe("attachCodexAdapterHandlers", () => {
       tunnelId: "",
       tunnelHostname: "",
       tunnelCredentialsPath: "",
+      proxyForwards: [],
         aiValidationEnabled: true,
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
@@ -1312,6 +1314,7 @@ describe("attachCodexAdapterHandlers", () => {
       tunnelId: "",
       tunnelHostname: "",
       tunnelCredentialsPath: "",
+      proxyForwards: [],
         aiValidationEnabled: false,  // disabled
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
@@ -1365,6 +1368,7 @@ describe("attachCodexAdapterHandlers", () => {
       tunnelId: "",
       tunnelHostname: "",
       tunnelCredentialsPath: "",
+      proxyForwards: [],
         aiValidationEnabled: true,
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: true,
@@ -1483,6 +1487,7 @@ describe("attachCodexAdapterHandlers", () => {
       tunnelId: "",
       tunnelHostname: "",
       tunnelCredentialsPath: "",
+      proxyForwards: [],
         aiValidationEnabled: true,
         aiValidationAutoApprove: false,  // disabled
         aiValidationAutoDeny: true,
@@ -1620,6 +1625,7 @@ describe("attachCodexAdapterHandlers", () => {
       tunnelId: "",
       tunnelHostname: "",
       tunnelCredentialsPath: "",
+      proxyForwards: [],
         aiValidationEnabled: true,
         aiValidationAutoApprove: true,
         aiValidationAutoDeny: false,  // disabled

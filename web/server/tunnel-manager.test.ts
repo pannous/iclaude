@@ -8,6 +8,7 @@ vi.mock("./settings-manager.js", () => ({
     tunnelId: "",
     tunnelHostname: "",
     tunnelCredentialsPath: "",
+    proxyForwards: [],
     tunnelEnabled: false,
   }),
   updateSettings: vi.fn(),
