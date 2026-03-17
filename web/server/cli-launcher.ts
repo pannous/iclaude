@@ -702,12 +702,22 @@ export class CliLauncher {
       sanitizeSpawnArgsForLog(spawnCmd),
     );
 
-    const proc = Bun.spawn(spawnCmd, {
-      cwd: spawnCwd,
-      env: spawnEnv,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    let proc: ReturnType<typeof Bun.spawn>;
+    try {
+      proc = Bun.spawn(spawnCmd, {
+        cwd: spawnCwd,
+        env: spawnEnv,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[cli-launcher] Failed to spawn session ${sessionId}: ${msg}`);
+      info.state = "exited";
+      info.exitCode = 127;
+      this.persistState();
+      return;
+    }
 
     info.pid = proc.pid;
     this.processes.set(sessionId, proc);
@@ -929,13 +939,23 @@ export class CliLauncher {
       sanitizeSpawnArgsForLog(spawnCmd),
     );
 
-    const proc = Bun.spawn(spawnCmd, {
-      cwd: spawnCwd,
-      env: spawnEnv,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    let proc: ReturnType<typeof Bun.spawn>;
+    try {
+      proc = Bun.spawn(spawnCmd, {
+        cwd: spawnCwd,
+        env: spawnEnv,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[cli-launcher] Failed to spawn Codex WS session ${sessionId}: ${msg}`);
+      info.state = "exited";
+      info.exitCode = 127;
+      this.persistState();
+      return;
+    }
 
     info.pid = proc.pid;
     this.processes.set(sessionId, proc);
@@ -1173,13 +1193,23 @@ export class CliLauncher {
       sanitizeSpawnArgsForLog(spawnCmd),
     );
 
-    const proc = Bun.spawn(spawnCmd, {
-      cwd: spawnCwd,
-      env: spawnEnv,
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    let proc: ReturnType<typeof Bun.spawn>;
+    try {
+      proc = Bun.spawn(spawnCmd, {
+        cwd: spawnCwd,
+        env: spawnEnv,
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[cli-launcher] Failed to spawn Codex session ${sessionId}: ${msg}`);
+      info.state = "exited";
+      info.exitCode = 127;
+      this.persistState();
+      return;
+    }
 
     info.pid = proc.pid;
     this.processes.set(sessionId, proc);

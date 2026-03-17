@@ -9,7 +9,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -144,7 +144,7 @@ export function _resetPathCache(): void {
  */
 export function resolveBinary(name: string): string | null {
   if (name.startsWith("/")) {
-    return existsSync(name) ? name : null;
+    return existsSync(name) ? resolveRealPath(name) : null;
   }
   // On Windows, also accept absolute paths like C:\... or D:\...
   if (process.platform === "win32" && /^[a-zA-Z]:[/\\]/.test(name)) {
@@ -169,12 +169,23 @@ export function resolveBinary(name: string): string | null {
         const lines = result.split(/\r?\n/).filter(Boolean);
         return lines.find(l => l.endsWith(".cmd")) || lines[0];
       }
-      return result;
+      // Resolve symlinks so Bun.spawn gets the real path — avoids ENOENT
+      // when intermediate symlinks are briefly invalid (e.g. during CLI updates)
+      return resolveRealPath(result);
     } catch {
       continue;
     }
   }
   return null;
+}
+
+/** Follow symlinks to the final target; return the input unchanged on error. */
+function resolveRealPath(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
 }
 
 /**
