@@ -92,6 +92,8 @@ export function registerGitRoutes(api: Hono, prPoller?: PRPoller): void {
     }
 
     const pr = await fetchPRInfoAsync(cwd, branch);
-    return c.json({ available: true, pr });
+    const { getRepoSlugCached } = await import("../github-pr.js");
+    const repoSlug = await getRepoSlugCached(cwd);
+    return c.json({ available: true, pr, repoSlug });
   });
 }

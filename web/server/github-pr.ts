@@ -84,6 +84,9 @@ function getRepoSlug(cwd: string): string | null {
   }
 }
 
+/** Public alias — used by routes to include repoSlug in the PR-status response. */
+export const getRepoSlugCached = getRepoSlugAsync;
+
 async function getRepoSlugAsync(cwd: string): Promise<string | null> {
   const cached = repoSlugCache.get(cwd);
   if (cached && Date.now() - cached.timestamp < REPO_SLUG_TTL) {

@@ -456,6 +456,7 @@ export interface GitHubPRInfo {
 export interface PRStatusResponse {
   available: boolean;
   pr: GitHubPRInfo | null;
+  repoSlug?: string | null;
 }
 
 export interface CronJobInfo {

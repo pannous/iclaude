@@ -26,6 +26,7 @@ vi.mock("node:child_process", () => ({
 vi.mock("../github-pr.js", () => ({
   isGhAvailable: vi.fn(() => false),
   fetchPRInfoAsync: vi.fn(async () => null),
+  getRepoSlugCached: vi.fn(async () => null),
 }));
 
 import { Hono } from "hono";
