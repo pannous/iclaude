@@ -19,8 +19,28 @@ async function proxyRequest(c: Context, fwd: ProxyForward): Promise<Response> {
       duplex: "half",
     });
 
+    const contentType = resp.headers.get("content-type") || "";
     const respHeaders = new Headers(resp.headers);
     respHeaders.delete("transfer-encoding");
+
+    // For HTML responses, rewrite absolute paths so the proxied app's
+    // requests (e.g. fetch('/api/data')) route through our proxy prefix
+    if (contentType.includes("text/html")) {
+      let html = await resp.text();
+      const proxyBase = `/api/proxy/${fwd.prefix}`;
+      // Rewrite '/path' and "/path" references to go through the proxy
+      // but skip protocol-relative URLs (//...) and already-proxied paths
+      html = html.replace(
+        /(["'])(\/(?!\/|api\/proxy\/))/g,
+        `$1${proxyBase}$2`,
+      );
+      respHeaders.delete("content-length");
+      return new Response(html, {
+        status: resp.status,
+        statusText: resp.statusText,
+        headers: respHeaders,
+      });
+    }
 
     return new Response(resp.body, {
       status: resp.status,

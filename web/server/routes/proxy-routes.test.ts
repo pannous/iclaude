@@ -88,6 +88,48 @@ describe("proxy-routes", () => {
     });
   });
 
+  describe("HTML path rewriting", () => {
+    it("rewrites absolute paths in HTML responses", async () => {
+      const html = `<html><head></head><body><script>fetch('/api/data')</script></body></html>`;
+      mockForwards = [{ prefix: "test", port: 19876, name: "Test" }];
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        new Response(html, { headers: { "content-type": "text/html" } }),
+      );
+
+      const res = await app.request("/api/proxy/test/");
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).toContain("fetch('/api/proxy/test/api/data')");
+      expect(body).not.toContain("fetch('/api/data')");
+      fetchSpy.mockRestore();
+    });
+
+    it("does not rewrite protocol-relative URLs", async () => {
+      const html = `<html><head></head><body><a href="//cdn.example.com/file.js"></a></body></html>`;
+      mockForwards = [{ prefix: "test", port: 19876, name: "Test" }];
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        new Response(html, { headers: { "content-type": "text/html" } }),
+      );
+
+      const res = await app.request("/api/proxy/test/");
+      const body = await res.text();
+      expect(body).toContain("//cdn.example.com/file.js");
+      fetchSpy.mockRestore();
+    });
+
+    it("does not rewrite JSON responses", async () => {
+      mockForwards = [{ prefix: "test", port: 19876, name: "Test" }];
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        Response.json({ path: "/api/data" }),
+      );
+
+      const res = await app.request("/api/proxy/test/data");
+      const body = await res.json();
+      expect(body.path).toBe("/api/data");
+      fetchSpy.mockRestore();
+    });
+  });
+
   describe("proxy forwarding", () => {
     it("returns 404 for unconfigured prefix", async () => {
       const res = await app.request("/api/proxy/unknown/path");
