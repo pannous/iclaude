@@ -177,7 +177,8 @@ export function createRoutes(
     const authHeader = c.req.header("Authorization");
     const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
     const cookieToken = getCookie(c, "companion_auth") ?? null;
-    if (!verifyToken(bearer) && !verifyToken(cookieToken)) {
+    const queryToken = new URL(c.req.url).searchParams.get("token") ?? null;
+    if (!verifyToken(bearer) && !verifyToken(cookieToken) && !verifyToken(queryToken)) {
       return c.json({ error: "unauthorized" }, 401);
     }
     return next();
