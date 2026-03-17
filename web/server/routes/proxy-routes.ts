@@ -1,10 +1,15 @@
 import type { Hono, Context } from "hono";
+import { setCookie, getCookie } from "hono/cookie";
 import { getSettings, updateSettings, type ProxyForward } from "../settings-manager.js";
+import { verifyToken } from "../auth-manager.js";
 
 async function proxyRequest(c: Context, fwd: ProxyForward): Promise<Response> {
   const rest = c.req.path.replace(`/api/proxy/${fwd.prefix}`, "") || "/";
-  const query = c.req.query();
-  const qs = new URLSearchParams(query).toString();
+  // Strip the auth token from query params forwarded to the target app
+  const params = new URLSearchParams(c.req.query());
+  const queryToken = params.get("token");
+  params.delete("token");
+  const qs = params.toString();
   const target = `http://localhost:${fwd.port}${rest}${qs ? `?${qs}` : ""}`;
 
   try {
@@ -35,6 +40,21 @@ async function proxyRequest(c: Context, fwd: ProxyForward): Promise<Response> {
         `$1${proxyBase}$2`,
       );
       respHeaders.delete("content-length");
+
+      // If the page was loaded with ?token=, set the auth cookie so
+      // subsequent XHR/fetch requests from this page are authenticated
+      if (queryToken && verifyToken(queryToken) && !getCookie(c, "companion_auth")) {
+        setCookie(c, "companion_auth", queryToken, {
+          path: "/",
+          httpOnly: true,
+          sameSite: "Lax",
+          maxAge: 365 * 24 * 60 * 60,
+        });
+        // Merge the Set-Cookie from Hono's cookie helper into our response
+        const setCookieHeader = c.res.headers.get("set-cookie");
+        if (setCookieHeader) respHeaders.set("set-cookie", setCookieHeader);
+      }
+
       return new Response(html, {
         status: resp.status,
         statusText: resp.statusText,
