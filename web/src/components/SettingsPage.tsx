@@ -1289,13 +1289,22 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      disabled={verifying || !anthropicApiKey.trim()}
+                      disabled={verifying}
                       onClick={async () => {
                         setVerifying(true);
                         setVerifyResult(null);
                         try {
-                          const result = await api.verifyAnthropicKey(anthropicApiKey.trim());
+                          // Verify the currently selected provider, using typed key or saved key
+                          const localKey = aiProvider === "anthropic" ? anthropicApiKey.trim()
+                            : aiProvider === "openai" ? openaiApiKey.trim()
+                            : openrouterApiKey.trim();
+                          const result = await api.verifyAiProvider(aiProvider, localKey || undefined);
                           setVerifyResult(result);
+                          if (result.valid) {
+                            // Refresh key health display
+                            const s = await api.getSettings();
+                            if (s.keyHealth) setKeyHealth(s.keyHealth);
+                          }
                           setTimeout(() => setVerifyResult(null), 5000);
                         } catch (err: unknown) {
                           setVerifyResult({ valid: false, error: err instanceof Error ? err.message : String(err) });
@@ -1305,7 +1314,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                         }
                       }}
                       className={`px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-                        verifying || !anthropicApiKey.trim()
+                        verifying
                           ? "bg-cc-hover text-cc-muted cursor-not-allowed"
                           : "bg-cc-hover hover:bg-cc-active text-cc-fg cursor-pointer"
                       }`}

@@ -936,6 +936,8 @@ export const api = {
   }) => put<AppSettings>("/settings", data),
   verifyAnthropicKey: (apiKey: string) =>
     post<{ valid: boolean; error?: string }>("/settings/anthropic/verify", { apiKey }),
+  verifyAiProvider: (provider: "anthropic" | "openai" | "openrouter", apiKey?: string) =>
+    post<{ valid: boolean; error?: string }>("/settings/ai/verify", { provider, apiKey: apiKey || "" }),
 
   // Tailscale
   getTailscaleStatus: () => get<TailscaleStatus>("/tailscale/status"),

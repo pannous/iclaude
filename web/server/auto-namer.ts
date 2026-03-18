@@ -17,7 +17,7 @@ const keyHealth: Record<ProviderId, KeyHealthEntry | null> = {
   openrouter: null,
 };
 
-function recordKeyHealth(provider: ProviderId, status: ProviderKeyStatus, error?: string) {
+export function recordKeyHealth(provider: ProviderId, status: ProviderKeyStatus, error?: string) {
   keyHealth[provider] = { status, error, at: Date.now() };
 }
 
@@ -35,6 +35,25 @@ function sanitizeTitle(raw: string): string | null {
   const title = raw.replace(/^"|"$/g, "").replace(/^'|'$/g, "").trim();
   if (!title || title.length >= 100) return null;
   return title;
+}
+
+/**
+ * Local fallback: abbreviate the first user message into a short title.
+ * No AI needed — just take first few meaningful words.
+ */
+function abbreviateMessage(message: string): string {
+  // Strip system tags, markdown fences, URLs
+  const cleaned = message
+    .replace(/<[^>]+>/g, " ")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = cleaned.split(" ").filter(Boolean);
+  const title = words.slice(0, 6).join(" ");
+  if (title.length > 60) return title.slice(0, 57) + "...";
+  if (words.length > 6) return title + "...";
+  return title || "New session";
 }
 
 function buildPrompt(firstUserMessage: string): string {
@@ -168,7 +187,7 @@ export async function generateSessionTitle(
   const openrouterKey = settings.openrouterApiKey.trim();
 
   if (!anthropicKey && !openaiKey && !openrouterKey) {
-    return null;
+    return abbreviateMessage(firstUserMessage);
   }
 
   const prompt = buildPrompt(firstUserMessage);
@@ -201,10 +220,12 @@ export async function generateSessionTitle(
       const title = await gen(controller.signal);
       if (title) return title;
     }
-    return null;
+    // All AI providers failed — use local abbreviation as fallback
+    console.log("[auto-namer] All AI providers failed, using local abbreviation");
+    return abbreviateMessage(firstUserMessage);
   } catch (err) {
     console.warn("[auto-namer] Failed to generate session title:", err);
-    return null;
+    return abbreviateMessage(firstUserMessage);
   } finally {
     clearTimeout(timer);
   }

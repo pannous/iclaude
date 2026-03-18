@@ -68,6 +68,7 @@ const mockApi = {
   regenerateAuthToken: vi.fn(),
   getAuthQr: vi.fn(),
   verifyAnthropicKey: vi.fn(),
+  verifyAiProvider: vi.fn(),
   getNetworkInfo: vi.fn(),
   getTunnelStatus: vi.fn(),
   startTunnel: vi.fn(),
@@ -96,6 +97,7 @@ vi.mock("../api.js", () => ({
     regenerateAuthToken: (...args: unknown[]) => mockApi.regenerateAuthToken(...args),
     getAuthQr: (...args: unknown[]) => mockApi.getAuthQr(...args),
     verifyAnthropicKey: (...args: unknown[]) => mockApi.verifyAnthropicKey(...args),
+    verifyAiProvider: (...args: unknown[]) => mockApi.verifyAiProvider(...args),
     getNetworkInfo: (...args: unknown[]) => mockApi.getNetworkInfo(...args),
     getTunnelStatus: (...args: unknown[]) => mockApi.getTunnelStatus(...args),
     startTunnel: (...args: unknown[]) => mockApi.startTunnel(...args),
@@ -622,12 +624,12 @@ describe("SettingsPage", () => {
   // ─── Verify button tests ──────────────────────────────────
 
   // The Verify button is disabled when the API key input is empty.
-  it("disables Verify button when anthropic key input is empty", async () => {
+  it("Verify button is always enabled (can verify saved keys)", async () => {
     render(<SettingsPage />);
     await screen.findByText("Preferred: OpenRouter");
 
     const verifyBtn = screen.getByRole("button", { name: "Verify" });
-    expect(verifyBtn).toBeDisabled();
+    expect(verifyBtn).toBeEnabled();
   });
 
   // The Verify button is enabled when the user types a new key.
@@ -643,58 +645,52 @@ describe("SettingsPage", () => {
     expect(verifyBtn).toBeEnabled();
   });
 
-  // Clicking Verify calls verifyAnthropicKey and shows success state.
+  // Clicking Verify calls verifyAiProvider for the selected provider.
   it("shows success message when verify succeeds", async () => {
-    mockApi.verifyAnthropicKey.mockResolvedValueOnce({ valid: true });
+    mockApi.verifyAiProvider.mockResolvedValueOnce({ valid: true });
+    // After verify succeeds, it refetches settings to update keyHealth
+    mockApi.getSettings.mockResolvedValueOnce({
+      anthropicApiKeyConfigured: true,
+      anthropicModel: "claude-sonnet-4-6",
+      keyHealth: { anthropic: null, openai: null, openrouter: { status: "ok", at: Date.now() } },
+    });
 
     render(<SettingsPage />);
     await screen.findByText("Preferred: OpenRouter");
 
-    const keyInput = document.getElementById("key-anthropic")!;
-    fireEvent.focus(keyInput);
-    fireEvent.change(keyInput, { target: { value: "sk-ant-test-key" } });
-
     const verifyBtn = screen.getByRole("button", { name: "Verify" });
     fireEvent.click(verifyBtn);
 
-    expect(mockApi.verifyAnthropicKey).toHaveBeenCalledWith("sk-ant-test-key");
-    await screen.findByText("Anthropic API key is valid.");
+    // Default provider is openrouter, so verify should be called with that
+    expect(mockApi.verifyAiProvider).toHaveBeenCalledWith("openrouter", undefined);
   });
 
   // Clicking Verify shows error state when verification fails.
   it("shows error message when verify fails", async () => {
-    mockApi.verifyAnthropicKey.mockResolvedValueOnce({ valid: false, error: "API returned 401" });
+    mockApi.verifyAiProvider.mockResolvedValueOnce({ valid: false, error: "API returned 401" });
 
     render(<SettingsPage />);
     await screen.findByText("Preferred: OpenRouter");
 
-    const keyInput = document.getElementById("key-anthropic")!;
-    fireEvent.focus(keyInput);
-    fireEvent.change(keyInput, { target: { value: "sk-ant-bad-key" } });
-
     const verifyBtn = screen.getByRole("button", { name: "Verify" });
     fireEvent.click(verifyBtn);
 
-    expect(mockApi.verifyAnthropicKey).toHaveBeenCalledWith("sk-ant-bad-key");
+    expect(mockApi.verifyAiProvider).toHaveBeenCalledWith("openrouter", undefined);
     await screen.findByText("Invalid API key: API returned 401");
   });
 
   // Verify result auto-dismisses after 5 seconds.
   it("auto-dismisses verify result after 5 seconds", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    mockApi.verifyAnthropicKey.mockResolvedValueOnce({ valid: true });
+    mockApi.verifyAiProvider.mockResolvedValueOnce({ valid: false, error: "timeout" });
 
     render(<SettingsPage />);
     await screen.findByText("Preferred: OpenRouter");
 
-    const keyInput = document.getElementById("key-anthropic")!;
-    fireEvent.focus(keyInput);
-    fireEvent.change(keyInput, { target: { value: "sk-ant-test-key" } });
-
     const verifyBtn = screen.getByRole("button", { name: "Verify" });
     fireEvent.click(verifyBtn);
 
-    await screen.findByText("Anthropic API key is valid.");
+    await screen.findByText("Invalid API key: timeout");
 
     // Advance past the 5s auto-dismiss
     act(() => {
@@ -702,7 +698,7 @@ describe("SettingsPage", () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText("Anthropic API key is valid.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Invalid API key: timeout")).not.toBeInTheDocument();
     });
 
     vi.useRealTimers();
@@ -710,25 +706,23 @@ describe("SettingsPage", () => {
 
   // Verify result clears when the key input changes.
   it("clears verify result when key input changes", async () => {
-    mockApi.verifyAnthropicKey.mockResolvedValueOnce({ valid: true });
+    mockApi.verifyAiProvider.mockResolvedValueOnce({ valid: false, error: "bad key" });
 
     render(<SettingsPage />);
     await screen.findByText("Preferred: OpenRouter");
 
-    const keyInput = document.getElementById("key-anthropic")!;
-    fireEvent.focus(keyInput);
-    fireEvent.change(keyInput, { target: { value: "sk-ant-test-key" } });
-
     const verifyBtn = screen.getByRole("button", { name: "Verify" });
     fireEvent.click(verifyBtn);
 
-    await screen.findByText("Anthropic API key is valid.");
+    await screen.findByText("Invalid API key: bad key");
 
-    // Changing the key should clear the verify result
+    // Changing the anthropic key should clear the verify result
+    const keyInput = document.getElementById("key-anthropic")!;
+    fireEvent.focus(keyInput);
     fireEvent.change(keyInput, { target: { value: "sk-ant-test-key-changed" } });
 
     await waitFor(() => {
-      expect(screen.queryByText("Anthropic API key is valid.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Invalid API key: bad key")).not.toBeInTheDocument();
     });
   });
 

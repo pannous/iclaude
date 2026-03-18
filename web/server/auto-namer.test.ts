@@ -66,7 +66,7 @@ describe("generateSessionTitle", () => {
     expect(title).toBe("Fix Auth Flow");
   });
 
-  it("returns null when Anthropic key is not configured", async () => {
+  it("uses local abbreviation when no AI keys are configured", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
@@ -104,7 +104,7 @@ describe("generateSessionTitle", () => {
 
     const title = await generateSessionTitle("Fix login");
 
-    expect(title).toBeNull();
+    expect(title).toBe("Fix login");
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -174,20 +174,20 @@ describe("generateSessionTitle", () => {
     expect(body.model).toBe("claude-haiku-3");
   });
 
-  it("returns null when response is non-ok", async () => {
+  it("falls back to abbreviation when response is non-ok", async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 401, statusText: "Unauthorized" });
 
     const title = await generateSessionTitle("Fix login");
 
-    expect(title).toBeNull();
+    expect(title).toBe("Fix login");
   });
 
-  it("returns null when fetch throws", async () => {
+  it("falls back to abbreviation when fetch throws", async () => {
     mockFetch.mockRejectedValueOnce(new Error("network"));
 
     const title = await generateSessionTitle("Fix login");
 
-    expect(title).toBeNull();
+    expect(title).toBe("Fix login");
   });
 
   it("strips surrounding quotes from returned title", async () => {
@@ -202,7 +202,7 @@ describe("generateSessionTitle", () => {
     expect(title).toBe("Refactor API Layer");
   });
 
-  it("returns null for titles >= 100 chars", async () => {
+  it("falls back to abbreviation for titles >= 100 chars", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -211,7 +211,7 @@ describe("generateSessionTitle", () => {
     });
 
     const title = await generateSessionTitle("Do a thing");
-    expect(title).toBeNull();
+    expect(title).toBe("Do a thing");
   });
 
   it("uses default model when configured model is empty", async () => {
@@ -388,7 +388,7 @@ describe("generateSessionTitle", () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
-  it("returns null when both Anthropic and OpenAI keys are empty", async () => {
+  it("uses local abbreviation when all keys are empty", async () => {
     vi.mocked(settingsManager.getSettings).mockReturnValue({
       authEnabled: true,
       anthropicApiKey: "",
@@ -426,7 +426,49 @@ describe("generateSessionTitle", () => {
 
     const title = await generateSessionTitle("Fix login");
 
-    expect(title).toBeNull();
+    expect(title).toBe("Fix login");
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("abbreviates long messages to 6 words with ellipsis", async () => {
+    vi.mocked(settingsManager.getSettings).mockReturnValue({
+      authEnabled: true,
+      anthropicApiKey: "",
+      anthropicModel: "claude-sonnet-4-6",
+      openaiApiKey: "",
+      openrouterApiKey: "",
+      linearApiKey: "",
+      linearAutoTransition: false,
+      linearAutoTransitionStateId: "",
+      linearAutoTransitionStateName: "",
+      linearArchiveTransition: false,
+      linearArchiveTransitionStateId: "",
+      linearArchiveTransitionStateName: "",
+      linearOAuthClientId: "",
+      linearOAuthClientSecret: "",
+      linearOAuthWebhookSecret: "",
+      linearOAuthAccessToken: "",
+      linearOAuthRefreshToken: "",
+      editorTabEnabled: false,
+      tunnelEnabled: false,
+      tunnelMode: "quick",
+      tunnelId: "",
+      tunnelHostname: "",
+      tunnelCredentialsPath: "",
+      proxyForwards: [],
+      aiValidationEnabled: false,
+      aiValidationAutoApprove: true,
+      aiValidationAutoDeny: true,
+      aiProvider: "openrouter",
+      publicUrl: "",
+      updateChannel: "stable",
+      dockerAutoUpdate: false,
+      updatedAt: 0,
+    });
+
+    const title = await generateSessionTitle("Please help me fix the authentication bug in our login page");
+
+    expect(title).toBe("Please help me fix the authentication...");
     expect(mockFetch).not.toHaveBeenCalled();
   });
 });

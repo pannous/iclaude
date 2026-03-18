@@ -792,8 +792,6 @@ export class SessionOrchestrator {
 
   private async handleAutoNaming(sessionId: string, firstUserMessage: string): Promise<void> {
     if (sessionNames.getName(sessionId)) return;
-    const s = getSettings();
-    if (!s.anthropicApiKey.trim() && !s.openaiApiKey?.trim() && !s.openrouterApiKey?.trim()) return;
     console.log(`[orchestrator] Auto-naming session ${sessionId}...`);
     const title = await generateSessionTitle(firstUserMessage);
     if (title && !sessionNames.getName(sessionId)) {

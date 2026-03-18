@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import { DEFAULT_ANTHROPIC_MODEL, getSettings, updateSettings, type UpdateChannel, type AiProvider } from "../settings-manager.js";
 import { linearCache } from "../linear-cache.js";
-import { getKeyHealth, clearKeyHealth } from "../auto-namer.js";
+import { getKeyHealth, clearKeyHealth, recordKeyHealth } from "../auto-namer.js";
 import { listConnections } from "../linear-connections.js";
 
 export function registerSettingsRoutes(api: Hono): void {
@@ -297,6 +297,65 @@ export function registerSettingsRoutes(api: Hono): void {
     } catch (err) {
       const isAbort = err instanceof Error && err.name === "AbortError";
       return c.json({ valid: false, error: isAbort ? "Request timed out" : "Request failed" });
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
+  // Generic verify endpoint for any AI provider
+  api.post("/settings/ai/verify", async (c) => {
+    const body = await c.req.json().catch(() => ({} as { provider?: string; apiKey?: string }));
+    const provider = typeof body.provider === "string" ? body.provider : "";
+    const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+
+    // If no explicit key, use the saved one
+    const settings = getSettings();
+    const key = apiKey
+      || (provider === "anthropic" ? settings.anthropicApiKey.trim() : "")
+      || (provider === "openai" ? settings.openaiApiKey.trim() : "")
+      || (provider === "openrouter" ? settings.openrouterApiKey.trim() : "");
+
+    if (!key) {
+      return c.json({ valid: false, error: "No API key configured for this provider" }, 400);
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
+
+    try {
+      let res: Response;
+      if (provider === "anthropic") {
+        res = await fetch("https://api.anthropic.com/v1/models", {
+          headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
+          signal: controller.signal,
+        });
+      } else if (provider === "openai") {
+        res = await fetch("https://api.openai.com/v1/models?limit=1", {
+          headers: { Authorization: `Bearer ${key}` },
+          signal: controller.signal,
+        });
+      } else if (provider === "openrouter") {
+        res = await fetch("https://openrouter.ai/api/v1/models?limit=1", {
+          headers: { Authorization: `Bearer ${key}` },
+          signal: controller.signal,
+        });
+      } else {
+        return c.json({ valid: false, error: `Unknown provider: ${provider}` }, 400);
+      }
+
+      if (res.ok) {
+        clearKeyHealth(provider as "anthropic" | "openai" | "openrouter");
+        recordKeyHealth(provider as "anthropic" | "openai" | "openrouter", "ok");
+        return c.json({ valid: true });
+      }
+      const status = `${res.status} ${res.statusText}`;
+      recordKeyHealth(provider as "anthropic" | "openai" | "openrouter", "error", status);
+      return c.json({ valid: false, error: `API returned ${status}` });
+    } catch (err) {
+      const isAbort = err instanceof Error && err.name === "AbortError";
+      const errMsg = isAbort ? "Request timed out" : "Request failed";
+      recordKeyHealth(provider as "anthropic" | "openai" | "openrouter", "error", errMsg);
+      return c.json({ valid: false, error: errMsg });
     } finally {
       clearTimeout(timer);
     }
