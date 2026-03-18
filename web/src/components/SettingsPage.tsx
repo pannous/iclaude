@@ -909,7 +909,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 {tunnelState === "running" && tunnelUrl && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cc-hover">
                     <a
-                      href={tunnelUrl}
+                      href={`${tunnelUrl}${authToken ? `/?token=${authToken}` : ""}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-xs text-cc-primary hover:underline truncate flex-1"
@@ -1096,7 +1096,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                       )}
                       {tunnelUrl && (
                         <a
-                          href={`${tunnelUrl}/api/proxy/${fwd.prefix}/`}
+                          href={`${tunnelUrl}/api/proxy/${fwd.prefix}/${authToken ? `?token=${authToken}` : ""}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-[11px] text-cc-primary hover:underline"
